@@ -430,6 +430,7 @@ fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
         );
         let started_at = std::time::Instant::now();
         migrations::migrate_legacy_schema(tx)?;
+        validate_foreign_keys(tx)?;
         logger::info(
             LogTag::Tokens,
             &format!(
@@ -452,25 +453,36 @@ fn create_schema(tx: &Transaction<'_>) -> Result<(), Error> {
             .map_err(|e| DatabaseError::classify_sqlite_failure("create index", e))?;
     }
 
-    if tx
-        .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
-        .optional()
-        .map_err(|error| {
-            DatabaseError::classify_sqlite_failure("validate tokens foreign keys", error)
-        })?
-        .is_some()
-    {
-        return Err(Error::MigrationIntegrity {
-            table: "tokens".to_owned(),
-            detail: "foreign-key validation failed".to_owned(),
-        });
-    }
-
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)
         .map_err(|error| {
             DatabaseError::classify_sqlite_failure("record tokens schema version", error)
         })?;
     Ok(())
+}
+
+/// Check every foreign key of the store after the chain rebuild copied its rows.
+///
+/// Only the rebuild needs it: the upgrade runs with foreign keys off, and the rebuild is
+/// the one step that rewrites the rows they relate. Column additions and index changes
+/// cannot break a relation, and every pool connection enforces foreign keys while the
+/// app runs. The check reads every child row and its parent, so it never runs on an
+/// open that rebuilt nothing: on 592k tokens it took 19 s from a cold page cache.
+fn validate_foreign_keys(tx: &Transaction<'_>) -> Result<(), Error> {
+    let violation = tx
+        .query_row("PRAGMA foreign_key_check", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .optional()
+        .map_err(|error| {
+            DatabaseError::classify_sqlite_failure("validate tokens foreign keys", error)
+        })?;
+    match violation {
+        Some(table) => Err(Error::MigrationIntegrity {
+            table,
+            detail: "foreign-key validation failed after the chain rebuild".to_owned(),
+        }),
+        None => Ok(()),
+    }
 }
 
 /// Check if database is initialized
@@ -611,5 +623,59 @@ mod tests {
         initialize_schema(&mut conn).unwrap();
 
         assert!(!index_exists(&conn, "idx_tracking_active_priority"));
+    }
+
+    /// A tracking row whose token is missing, written with foreign keys off as an older
+    /// core or a hand edit could have left it.
+    fn insert_orphan_tracking_row(conn: &Connection) {
+        conn.pragma_update(None, "foreign_keys", "OFF").unwrap();
+        conn.execute(
+            "INSERT INTO update_tracking (mint) VALUES ('orphan-mint')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn an_open_that_rebuilds_nothing_reads_no_rows() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        initialize_schema(&mut conn).unwrap();
+        insert_orphan_tracking_row(&conn);
+
+        // The orphan is visible only to a check that reads every row; an open of a store
+        // already at the current shape must not run one.
+        initialize_schema(&mut conn).unwrap();
+
+        let orphans: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM update_tracking WHERE mint = 'orphan-mint'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(orphans, 1);
+    }
+
+    #[test]
+    fn a_chain_rebuild_that_leaves_a_broken_relation_fails_the_open() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for statement in CREATE_TABLES {
+            conn.execute(&legacy_statement(statement), []).unwrap();
+        }
+        insert_orphan_tracking_row(&conn);
+
+        let error = initialize_schema(&mut conn).unwrap_err();
+
+        assert!(
+            error.to_string().contains("foreign-key validation failed"),
+            "unexpected error: {error}"
+        );
+        assert!(
+            !ddl::column_names(&conn, "tokens")
+                .unwrap()
+                .iter()
+                .any(|column| column == "chain_id"),
+            "a refused rebuild must leave the legacy schema in place"
+        );
     }
 }

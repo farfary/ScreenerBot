@@ -1234,6 +1234,12 @@ fn prune_unresolved_decimals(tokens_db: &Path) {
 /// including the committed pages still in the source's WAL. The source is opened
 /// read-only; a `-wal` without its `-shm` would make SQLite create the `-shm` beside the
 /// live store, so that store is skipped. Returns the bytes written.
+///
+/// The backup leaves every page it wrote in the page cache, which would let a test
+/// measure a warm launch only. The snapshot is therefore written to a staging file and
+/// copied into place: on APFS `fs::copy` is a clone, a new file whose first read goes to
+/// the disk, exactly as the first launch after a reboot does. Elsewhere it is a plain copy
+/// and the clone stays warm.
 fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
     let from = source.join(name);
     if !from.is_file() {
@@ -1244,8 +1250,12 @@ fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
         eprintln!("SKIP real-db: {name} has a -wal without its -shm");
         return 0;
     }
+    let staging = target.join(format!("{name}.snapshot"));
     let to = target.join(name);
-    backup_store(&from, &to);
+    backup_store(&from, &staging);
+    std::fs::copy(&staging, &to)
+        .unwrap_or_else(|e| panic!("copy the {name} snapshot into place: {e}"));
+    std::fs::remove_file(&staging).unwrap_or_else(|e| panic!("remove the {name} snapshot: {e}"));
     std::fs::metadata(&to).map(|meta| meta.len()).unwrap_or(0)
 }
 

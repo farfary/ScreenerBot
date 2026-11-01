@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Tests for the store opener: each class recovers a damaged, foreign or too-new file as the decision table declares, the vault is never moved without a verified snapshot, a refused open leaves the file byte-identical, and only ledger and vault stores are checked at open.
+//! Tests for the store opener: each class recovers a damaged, foreign or too-new file as the decision table declares, the vault is never moved without a verified snapshot, a refused open leaves the file byte-identical, only ledger and vault stores are checked at open, an open never merges the WAL the previous run left, and the storage phase names its slowest opens.
 
 use super::*;
 use crate::database::catalog::{SalvageRule, POSITIONS, RPC_STATS, TRANSACTIONS, WALLETS};
@@ -318,6 +318,40 @@ fn only_ledger_and_vault_stores_are_checked_at_open() {
     );
 }
 
+/// A store opens without merging the WAL its previous run left behind: the main file
+/// stays byte-identical, and the rows that only the WAL holds are read through the pool.
+#[test]
+fn an_open_leaves_the_wal_of_the_previous_run_unmerged() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = fixture(directory.path(), "source.db", &CACHE);
+    let writer = Connection::open(&source).unwrap();
+    configure_connection(&writer, CACHE.config).unwrap();
+    writer.pragma_update(None, "wal_autocheckpoint", 0).unwrap();
+    writer
+        .execute_batch(
+            "WITH RECURSIVE n(v) AS (SELECT 4 UNION ALL SELECT v + 1 FROM n WHERE v < 500)
+             INSERT INTO kept (v) SELECT v FROM n",
+        )
+        .unwrap();
+    let left = directory.path().join("left.db");
+    fs::copy(&source, &left).unwrap();
+    fs::copy(
+        source.with_extension("db-wal"),
+        left.with_extension("db-wal"),
+    )
+    .unwrap();
+    drop(writer);
+    let main_file = fs::read(&left).unwrap();
+
+    let pool = pool_at(&CACHE, &left, chains()).expect("the store opens");
+
+    assert_eq!(kept_rows(&pool), 500);
+    assert!(
+        fs::read(&left).unwrap() == main_file,
+        "the open merged the WAL into the main file"
+    );
+}
+
 /// A file another program holds locked, or one that cannot be written, is reported and
 /// never moved.
 #[test]
@@ -392,4 +426,22 @@ fn a_failed_store_open_is_attempted_once_per_process() {
     }
     assert_eq!(REFUSALS.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert_eq!(health_of(&path), state);
+}
+
+#[test]
+fn the_storage_phase_summary_names_only_its_three_slowest_slow_opens() {
+    let ms = Duration::from_millis;
+    let opens = vec![
+        ("tokens.db".to_owned(), ms(40)),
+        ("ohlcvs.db".to_owned(), ms(900)),
+        ("pools.db".to_owned(), ms(100)),
+        ("transactions.db".to_owned(), ms(2_400)),
+        ("wallets.db".to_owned(), ms(150)),
+    ];
+
+    assert_eq!(
+        slowest_opens(opens),
+        " (slowest: transactions.db 2400 ms, ohlcvs.db 900 ms, wallets.db 150 ms)"
+    );
+    assert_eq!(slowest_opens(vec![("tokens.db".to_owned(), ms(99))]), "");
 }

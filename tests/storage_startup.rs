@@ -17,7 +17,7 @@ use screenerbot::storage::types::Classification;
 const CHILD_ENV: &str = "SCREENERBOT_STORAGE_STARTUP_CHILD";
 const CACHE_CHILD_ENV: &str = "SCREENERBOT_CACHE_RECOVERY_CHILD";
 /// The longest the storage phase may take to open every store, the owner's real stores
-/// included.
+/// included, which the first launch on a clone reads from a cold page cache.
 const STORAGE_PHASE_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
 /// The cache stores whose owners open through the recovery path.
 /// Tables whose rows are still pruned on their owner's own schedule and therefore carry
@@ -129,7 +129,8 @@ fn startup_storage_matrix_survives_two_fresh_process_launches() {
 
 /// The owner's real stores, cloned through the backup API from read-only connections,
 /// open in two fresh processes with every row-level check clean. Whatever release created
-/// a store, the startup initializers must accept it.
+/// a store, the startup initializers must accept it, and the first launch must open them
+/// from a cold page cache inside the storage phase budget.
 #[test]
 #[ignore = "requires a local ScreenerBot data directory; runs only against a throwaway clone"]
 fn real_stores_survive_two_fresh_process_launches_on_a_clone() {

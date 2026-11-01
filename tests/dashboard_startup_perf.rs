@@ -21,6 +21,10 @@
 //!   taken with NO snapshot built. This is the one that produced the 30-second hang.
 //! * [`token_count_is_cheap_under_snapshot_load`] — a count served while a snapshot build
 //!   holds the token database, i.e. exactly the contention the launch sequence creates.
+//! * [`token_store_opens_and_preloads_from_a_cold_cache`] — the token half of the wait
+//!   before the window can load at all: opening the store and preloading the decimals the
+//!   pool decoders need, from a page cache as empty as after a reboot. Both must read what
+//!   they keep, never the whole store.
 //!
 //! # Safety
 //!
@@ -30,8 +34,9 @@
 //!
 //! # Tier
 //!
-//! `#[ignore]`, real-data. They self-skip when no real database exists. Run with:
-//! `cargo nextest run -E 'binary(dashboard_startup_perf)' --run-ignored all --success-output immediate`
+//! `#[ignore]`, real-data. They self-skip when no real database exists. Run one test per
+//! process, the clones are large:
+//! `cargo nextest run -E 'test(/^dashboard_startup_perf::/)' --run-ignored all -j1 --success-output immediate`
 #![allow(clippy::await_holding_lock)]
 
 use crate::common;
@@ -62,6 +67,17 @@ const HEADER_STATS_CEILING: Duration = Duration::from_millis(500);
 /// answering, it is queuing. Measured at ~0.16s pooled, against ~9.0s when every token
 /// read shared one connection.
 const CONTENDED_COUNT_CEILING: Duration = Duration::from_secs(2);
+
+/// Ceiling for opening the token store at the current schema from a cold page cache. The
+/// open runs the schema step, which must touch the schema, not the rows: measured 17 ms,
+/// against 19.0 s when every open checked every foreign key of a 592k-token store.
+const COLD_STORE_OPEN_CEILING: Duration = Duration::from_secs(1);
+
+/// Ceiling for the decimals preload from a cold page cache. It keeps at most
+/// `PRELOAD_CAPACITY` rows and must read about that many, so its cost follows the cap and
+/// not the store: measured 2.2 s for 80k of 592k tokens, against 3.9 s when it read and
+/// sorted every token. A store that grows only widens that gap.
+const COLD_PRELOAD_CEILING: Duration = Duration::from_millis(3_500);
 
 /// Shared setup: clone the real databases, register the token DB, warm the decimals cache.
 /// Returns `None` (already having printed a SKIP line) when there is no real database.
@@ -192,5 +208,46 @@ async fn token_count_is_cheap_under_snapshot_load() {
         "counting tokens during a snapshot build took {elapsed:?}, ceiling \
          {CONTENDED_COUNT_CEILING:?} — reads are serialising behind the build on the \
          single token-database connection",
+    );
+}
+
+/// The clone is written through the backup API and copied into place, so on APFS its page
+/// cache starts empty and every read below goes to the disk, as on the first launch after
+/// a reboot. Nothing warms it first: the cold cost is the measurement.
+#[test]
+#[ignore = "real-data tier"]
+fn token_store_opens_and_preloads_from_a_cold_cache() {
+    let Some(_env) = common::real_db_env() else {
+        return;
+    };
+    let path = screenerbot::chains::get_tokens_db_path();
+
+    let started = Instant::now();
+    let db = screenerbot::tokens::TokenDatabase::new(&path.to_string_lossy(), CHAIN)
+        .expect("open cloned tokens.db");
+    let opened = started.elapsed();
+
+    let started = Instant::now();
+    let decimals = db
+        .get_tokens_with_decimals_for_preload(screenerbot::tokens::decimals::PRELOAD_CAPACITY)
+        .expect("preload decimals");
+    let preloaded = started.elapsed();
+
+    let total = db.count_tokens().expect("count tokens");
+    eprintln!(
+        "cold token store: opened in {opened:?}, preloaded {} decimals of {total} tokens in {preloaded:?}",
+        decimals.len(),
+    );
+
+    assert!(
+        opened < COLD_STORE_OPEN_CEILING,
+        "opening the token store took {opened:?}, ceiling {COLD_STORE_OPEN_CEILING:?} — the \
+         schema step is reading the {total} token rows on every open",
+    );
+    assert!(
+        preloaded < COLD_PRELOAD_CEILING,
+        "the decimals preload took {preloaded:?}, ceiling {COLD_PRELOAD_CEILING:?} — it is \
+         reading every one of the {total} tokens to keep {}",
+        decimals.len(),
     );
 }

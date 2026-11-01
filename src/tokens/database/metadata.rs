@@ -157,31 +157,56 @@ impl TokenDatabase {
     /// the most recently used once the caller inserts in order: tokens with a pool first,
     /// then the most recently refreshed. Junk decimals (`> MAX_DECIMALS`, seen in
     /// production) and the `0` placeholder are excluded here rather than at every reader.
+    ///
+    /// The selection reads about `limit` rows, never the whole table: the tokens with a
+    /// pool enter through `token_pools`, and the rest walk `idx_tokens_metadata_fetched`
+    /// newest first and stop at the cap. One statement reads both under one snapshot, so a
+    /// pool written meanwhile cannot place a token in both lists or in neither. Reading and
+    /// sorting every token to keep 80k of 592k took 4.7 s at launch from a cold page cache.
     pub fn get_tokens_with_decimals_for_preload(
         &self,
         limit: usize,
     ) -> TokenResult<Vec<(String, u8)>> {
         let conn = self.conn()?;
-
-        let mut stmt = conn
+        let query_error = |operation: &str, e: rusqlite::Error| {
+            Error::Database(DatabaseError::Query {
+                operation: operation.to_owned(),
+                message: e.to_string(),
+            })
+        };
+        // The final order runs from the oldest token without a pool to the newest token
+        // with one, so the caller's in-order inserts leave the most important mints most
+        // recently used.
+        let mut statement = conn
             .prepare(
-                "SELECT mint, decimals FROM (
-                     SELECT t.mint AS mint,
-                            t.decimals AS decimals,
-                            EXISTS(SELECT 1 FROM token_pools p WHERE p.chain_id = t.chain_id AND p.mint = t.mint) AS pooled,
-                            t.metadata_last_fetched_at AS refreshed
-                     FROM tokens t
-                     WHERE t.chain_id = ?1 AND t.decimals IS NOT NULL AND t.decimals > 0 AND t.decimals <= ?2
-                     ORDER BY pooled DESC, refreshed DESC
+                "WITH pooled AS MATERIALIZED (
+                     SELECT t.mint, t.decimals, t.metadata_last_fetched_at AS refreshed
+                     FROM (SELECT DISTINCT mint FROM token_pools WHERE chain_id = ?1) p
+                     CROSS JOIN tokens t ON t.chain_id = ?1 AND t.mint = p.mint
+                     WHERE t.decimals > 0 AND t.decimals <= ?2
+                     ORDER BY t.metadata_last_fetched_at DESC
                      LIMIT ?3
+                 ),
+                 unpooled AS (
+                     SELECT t.mint, t.decimals, t.metadata_last_fetched_at AS refreshed
+                     FROM tokens t
+                     WHERE t.chain_id = ?1 AND t.decimals > 0 AND t.decimals <= ?2
+                       AND NOT EXISTS (
+                           SELECT 1 FROM token_pools p
+                           WHERE p.chain_id = t.chain_id AND p.mint = t.mint
+                       )
+                     ORDER BY t.metadata_last_fetched_at DESC
+                     LIMIT max(?3 - (SELECT count(*) FROM pooled), 0)
                  )
-                 ORDER BY pooled ASC, refreshed ASC",
+                 SELECT mint, decimals, 1 AS has_pool, refreshed FROM pooled
+                 UNION ALL
+                 SELECT mint, decimals, 0, refreshed FROM unpooled
+                 ORDER BY 3, 4",
             )
-            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
-
-        let rows = stmt
+            .map_err(|e| query_error("Failed to prepare the decimals preload read", e))?;
+        let result = statement
             .query_map(
-                rusqlite::params![
+                params![
                     self.chain_id(),
                     crate::tokens::MAX_DECIMALS as i64,
                     limit as i64
@@ -192,19 +217,9 @@ impl TokenDatabase {
                     Ok((mint, decimals as u8))
                 },
             )
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "Query failed".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
-
-        let result = rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
-            Error::Database(DatabaseError::Query {
-                operation: "Failed to collect".to_owned(),
-                message: e.to_string(),
-            })
-        })?;
+            .map_err(|e| query_error("Failed to run the decimals preload read", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| query_error("Failed to collect the decimals preload read", e))?;
 
         crate::logger::debug(
             crate::logger::LogTag::Tokens,

@@ -181,8 +181,9 @@ fn open(
     }
 }
 
-/// One open: the file is probed, a ledger or vault store is checked, and the upgrade
-/// runs inside one IMMEDIATE transaction before any pool connection exists.
+/// One open: the file is probed, a ledger or vault store is checked, the upgrade
+/// runs inside one IMMEDIATE transaction before any pool connection exists, and the
+/// pool opens before the probe's connection, which the upgrade ran on, closes.
 fn attempt(
     spec: &StoreSpec,
     path: &Path,
@@ -195,40 +196,46 @@ fn attempt(
             message: error.to_string(),
         })?;
     }
-    recovery::probe(path)?;
-    {
-        let mut connection = Connection::open(path)
-            .map_err(|error| DatabaseError::classify_sqlite_failure(&operation("open"), error))?;
-        configure_connection(&connection, spec.config).map_err(|error| {
-            DatabaseError::classify_sqlite_failure(&operation("configure"), error)
-        })?;
-        if matches!(spec.class, StoreClass::Vault | StoreClass::Ledger) {
-            check(&connection, &operation("check"))?;
-        }
-        // Foreign keys are off while the schema changes, so a table rebuilt by a step
-        // never cascades into the rows that reference it.
-        connection
-            .pragma_update(None, "foreign_keys", "OFF")
-            .map_err(|error| DatabaseError::classify_sqlite_failure(&operation("open"), error))?;
-        let transaction = connection.write_tx().map_err(|error| {
-            DatabaseError::classify_sqlite_failure(&operation("begin the upgrade of"), error)
-        })?;
-        let upgrade = upgrade::apply(&transaction, spec, path, context)?;
-        transaction.commit().map_err(|error| {
-            DatabaseError::classify_sqlite_failure(&operation("commit the upgrade of"), error)
-        })?;
-        if let Some(backup) = upgrade.backup {
-            logger::info(
-                LogTag::System,
-                &format!(
-                    "{}: copied to {} before its upgrade",
-                    spec.id,
-                    backup.display()
-                ),
-            );
-        }
+    let mut connection = match recovery::probe(path)? {
+        Some(connection) => connection,
+        None => Connection::open(path)
+            .map_err(|error| DatabaseError::classify_sqlite_failure(&operation("open"), error))?,
+    };
+    configure_connection(&connection, spec.config)
+        .map_err(|error| DatabaseError::classify_sqlite_failure(&operation("configure"), error))?;
+    if matches!(spec.class, StoreClass::Vault | StoreClass::Ledger) {
+        check(&connection, &operation("check"))?;
     }
-    build_pool(path, spec.config, spec.pool)
+    // Foreign keys are off while the schema changes, so a table rebuilt by a step
+    // never cascades into the rows that reference it.
+    connection
+        .pragma_update(None, "foreign_keys", "OFF")
+        .map_err(|error| DatabaseError::classify_sqlite_failure(&operation("open"), error))?;
+    let transaction = connection.write_tx().map_err(|error| {
+        DatabaseError::classify_sqlite_failure(&operation("begin the upgrade of"), error)
+    })?;
+    let upgrade = upgrade::apply(&transaction, spec, path, context)?;
+    transaction.commit().map_err(|error| {
+        DatabaseError::classify_sqlite_failure(&operation("commit the upgrade of"), error)
+    })?;
+    if let Some(backup) = upgrade.backup {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "{}: copied to {} before its upgrade",
+                spec.id,
+                backup.display()
+            ),
+        );
+    }
+    // One connection holds the store from the probe until the pool opens, so its close is
+    // never the store's last close. SQLite merges the whole WAL into the file and flushes
+    // it on a last close; a store keeps the WAL its previous run left behind (793 frames
+    // on the 870 MB token store, 2.2 s on the launch path), and the running app's
+    // automatic checkpoints merge it instead.
+    let pool = build_pool(path, spec.config, spec.pool)?;
+    drop(connection);
+    Ok(pool)
 }
 
 /// `quick_check` of the store: a store whose pages do not check out is damaged.
@@ -384,26 +391,50 @@ fn phase_targets(spec: &StoreSpec) -> Vec<(PathBuf, Vec<ChainId>)> {
 /// fails.
 pub fn open_all() -> Duration {
     let started = Instant::now();
+    let mut opens = Vec::new();
     for spec in catalog::STORES {
         for (path, chains) in phase_targets(spec) {
+            let store_started = Instant::now();
             if let Err(error) = pool_at(spec, &path, chains) {
                 logger::error(
                     LogTag::System,
                     &format!("{} could not be opened: {error}", spec.id),
                 );
             }
+            opens.push((upgrade::store_name(spec, &path), store_started.elapsed()));
         }
     }
     let elapsed = started.elapsed();
     logger::info(
         LogTag::System,
         &format!(
-            "Storage phase opened {} store files in {} ms",
+            "Storage phase opened {} store files in {} ms{}",
             handles::open_stores().len(),
-            elapsed.as_millis()
+            elapsed.as_millis(),
+            slowest_opens(opens)
         ),
     );
     elapsed
+}
+
+/// The open of a store that the storage phase summary names, so a launch that waits on
+/// one store says which.
+const SLOW_STORE_OPEN: Duration = Duration::from_millis(100);
+
+/// The summary suffix naming the three slowest store opens at or above
+/// [`SLOW_STORE_OPEN`], slowest first; empty when every store opened faster.
+fn slowest_opens(mut opens: Vec<(String, Duration)>) -> String {
+    opens.retain(|(_, elapsed)| *elapsed >= SLOW_STORE_OPEN);
+    if opens.is_empty() {
+        return String::new();
+    }
+    opens.sort_by(|a, b| b.1.cmp(&a.1));
+    let named: Vec<String> = opens
+        .iter()
+        .take(3)
+        .map(|(store, elapsed)| format!("{store} {} ms", elapsed.as_millis()))
+        .collect();
+    format!(" (slowest: {})", named.join(", "))
 }
 
 /// Whether the store file at `path` has a pool in this process.

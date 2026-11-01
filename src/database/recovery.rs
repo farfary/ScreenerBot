@@ -53,12 +53,16 @@ struct QuarantineManifest<'a> {
 /// not start with the SQLite header, or whose length is not a whole number of its pages,
 /// is not a database, and so is an empty file, which SQLite never leaves behind once it
 /// has created a store; a schema that cannot be read is classified by its SQLite failure.
-/// A missing file passes, since SQLite creates the store in its place.
-pub fn probe(path: &Path) -> Result<(), DatabaseError> {
+/// A missing file passes as `None`, since SQLite creates the store in its place.
+///
+/// The connection the schema was read through is returned for the opener to upgrade on.
+/// Closing it here would be the store's last close, which merges the WAL the previous
+/// run left into the file and flushes it before the store's pool exists.
+pub fn probe(path: &Path) -> Result<Option<Connection>, DatabaseError> {
     let operation = format!("probe {}", path.display());
     let length = match fs::metadata(path) {
         Ok(metadata) => metadata.len(),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
             return Err(DatabaseError::Io {
                 operation,
@@ -105,7 +109,7 @@ pub fn probe(path: &Path) -> Result<(), DatabaseError> {
             row.get::<_, i64>(0)
         })
         .map_err(|error| DatabaseError::classify_sqlite_failure(&operation, error))?;
-    Ok(())
+    Ok(Some(connection))
 }
 
 /// The first 100 bytes of the file, or `None` when it is shorter.

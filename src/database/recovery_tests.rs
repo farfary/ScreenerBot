@@ -16,7 +16,7 @@ fn store_with(path: &Path, sql: &str) {
 fn probe_classifies_foreign_truncated_and_healthy_files() {
     let directory = tempfile::tempdir().expect("temp dir");
     let missing = directory.path().join("missing.db");
-    assert!(probe(&missing).is_ok());
+    assert!(matches!(probe(&missing), Ok(None)));
 
     let empty = directory.path().join("empty.db");
     fs::write(&empty, b"").expect("write empty file");
@@ -44,7 +44,7 @@ fn probe_classifies_foreign_truncated_and_healthy_files() {
         &healthy,
         "CREATE TABLE t (v INTEGER); INSERT INTO t VALUES (1);",
     );
-    assert!(probe(&healthy).is_ok());
+    assert!(matches!(probe(&healthy), Ok(Some(_))));
 
     let truncated = directory.path().join("truncated.db");
     let mut bytes = fs::read(&healthy).expect("read healthy store");

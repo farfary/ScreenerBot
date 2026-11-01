@@ -35,6 +35,8 @@ mod authority_tests;
 #[cfg(test)]
 mod market_tests;
 #[cfg(test)]
+mod metadata_tests;
+#[cfg(test)]
 mod rejections_tests;
 #[cfg(test)]
 mod retention_tests;

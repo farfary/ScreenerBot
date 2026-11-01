@@ -198,6 +198,7 @@ fn migrate_schema(tx: &Transaction<'_>) -> Result<(), Error> {
             .map_err(|e| {
                 DatabaseError::classify_sqlite_failure("replace legacy pools tables", e)
             })?;
+            validate_foreign_keys(tx)?;
         }
     }
 
@@ -214,19 +215,26 @@ fn migrate_schema(tx: &Transaction<'_>) -> Result<(), Error> {
          CREATE INDEX IF NOT EXISTS idx_blacklist_pools_chain_token ON blacklist_pools(chain_id, token_mint);",
     )
     .map_err(|e| DatabaseError::classify_sqlite_failure("create chain-aware pools indexes", e))?;
-    let foreign_key_violation: Option<String> = tx
-        .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
-        .optional()
-        .map_err(|e| DatabaseError::classify_sqlite_failure("validate pools foreign keys", e))?;
-    if let Some(table) = foreign_key_violation {
-        return Err(Error::MigrationIntegrity {
-            table,
-            detail: "foreign-key validation failed".to_owned(),
-        });
-    }
     tx.pragma_update(None, "user_version", POOLS_SCHEMA_VERSION)
         .map_err(|e| DatabaseError::classify_sqlite_failure("record pools schema version", e))?;
     Ok(())
+}
+
+/// Check every foreign key of the store after the chain-scope rebuild replaced its tables.
+/// Only the rebuild rewrites rows with foreign keys off; an open that rebuilt nothing never
+/// reads the rows, and running connections enforce foreign keys themselves.
+fn validate_foreign_keys(tx: &Transaction<'_>) -> Result<(), Error> {
+    let violation: Option<String> = tx
+        .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+        .optional()
+        .map_err(|e| DatabaseError::classify_sqlite_failure("validate pools foreign keys", e))?;
+    match violation {
+        Some(table) => Err(Error::MigrationIntegrity {
+            table,
+            detail: "foreign-key validation failed after the chain-scope rebuild".to_owned(),
+        }),
+        None => Ok(()),
+    }
 }
 
 /// Seed the pre-migration single-chain schema plus one row per table. The
