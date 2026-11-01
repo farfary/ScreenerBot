@@ -111,7 +111,7 @@ pub async fn initialize_pool_components() -> Result<(), Error> {
 }
 
 /// Bring up one chain: open its database, load its open positions' price
-/// history, initialize its pricing driver, then warm its token pool cache.
+/// history and initialize its pricing driver.
 async fn initialize_chain(chain: ChainId) -> Result<(), Error> {
     if let Err(e) = db::initialize_database(chain).await {
         logger::error(
@@ -193,8 +193,6 @@ async fn initialize_chain(chain: ChainId) -> Result<(), Error> {
         }
     }
 
-    // Warm cache for open positions - ensures fresh price data at startup
-    warm_cache_for_open_positions(chain).await;
     Ok(())
 }
 
@@ -335,11 +333,27 @@ async fn open_mints_on(chain: ChainId) -> Vec<String> {
         .collect()
 }
 
-/// Warm cache for open positions by prefetching their pool data
-///
-/// This ensures that tokens with open positions have fresh price data
-/// immediately available when trading starts, rather than relying on
-/// stale cached data or waiting for the first discovery tick.
+/// Start the task that warms every chain's token pool cache for the held tokens, so
+/// they have fresh pool data as soon as pricing starts instead of at the first discovery
+/// tick. The cache refresh reads the token database, which the tokens service publishes
+/// after this service starts, so the task waits for the tokens system to be ready rather
+/// than relying on the start order; it ends on shutdown if that never happens.
+pub fn start_open_position_warm_up(
+    shutdown: Arc<Notify>,
+    monitor: tokio_metrics::TaskMonitor,
+) -> JoinHandle<()> {
+    tokio::spawn(monitor.instrument(async move {
+        tokio::select! {
+            _ = crate::global::wait_for_tokens_system_ready() => {}
+            _ = shutdown.notified() => return,
+        }
+        for &chain in enabled_chains() {
+            warm_cache_for_open_positions(chain).await;
+        }
+    }))
+}
+
+/// Queue a pool refresh of `chain`'s held tokens on the token pool cache workers.
 async fn warm_cache_for_open_positions(chain: ChainId) {
     let open_mints = open_mints_on(chain).await;
 
@@ -351,24 +365,51 @@ async fn warm_cache_for_open_positions(chain: ChainId) {
         return;
     }
 
-    logger::info(
-        LogTag::PoolService,
-        &format!(
-            "Warming pool cache for {} tokens with open positions on {}",
-            open_mints.len(),
-            chain
-        ),
-    );
-
-    // Use the tokens module prefetch to warm pool data cache
     crate::tokens::prefetch_token_pools(chain, &open_mints).await;
 
     logger::info(
         LogTag::PoolService,
         &format!(
-            "Pool cache warming completed for {} position tokens on {}",
+            "Queued a pool refresh for {} held tokens on {}",
             open_mints.len(),
             chain
         ),
     );
+}
+
+#[cfg(test)]
+mod warm_up_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn the_held_token_warm_up_waits_for_the_tokens_system_and_then_runs() {
+        let shutdown = Arc::new(Notify::new());
+        let warm_up = start_open_position_warm_up(shutdown, tokio_metrics::TaskMonitor::new());
+        tokio::task::yield_now().await;
+        assert!(
+            !warm_up.is_finished(),
+            "the warm-up must not read the token database before it is published"
+        );
+
+        crate::global::mark_tokens_system_ready();
+        tokio::time::timeout(Duration::from_secs(5), warm_up)
+            .await
+            .expect("a ready tokens system must start the warm-up")
+            .expect("warm-up task");
+    }
+
+    #[tokio::test]
+    async fn the_held_token_warm_up_ends_on_shutdown_while_it_waits() {
+        let shutdown = Arc::new(Notify::new());
+        let warm_up =
+            start_open_position_warm_up(shutdown.clone(), tokio_metrics::TaskMonitor::new());
+        tokio::task::yield_now().await;
+
+        shutdown.notify_waiters();
+        tokio::time::timeout(Duration::from_secs(5), warm_up)
+            .await
+            .expect("shutdown must end a waiting warm-up")
+            .expect("warm-up task");
+    }
 }

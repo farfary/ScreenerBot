@@ -138,6 +138,9 @@ pub static TRANSACTIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 /// Wakes the tasks waiting in [`wait_for_transactions_system_ready`].
 static TRANSACTIONS_READY_NOTIFY: LazyLock<Notify> = LazyLock::new(Notify::new);
 
+/// Wakes the tasks waiting in [`wait_for_tokens_system_ready`].
+static TOKENS_READY_NOTIFY: LazyLock<Notify> = LazyLock::new(Notify::new);
+
 /// Mark the transactions system ready: the wallet history load has finished. Wakes
 /// every task waiting for it.
 pub fn mark_transactions_system_ready() {
@@ -149,11 +152,29 @@ pub fn mark_transactions_system_ready() {
 /// service startup, so work that acts on that history waits here instead of relying
 /// on the order services start in.
 pub async fn wait_for_transactions_system_ready() {
+    wait_until_ready(&TRANSACTIONS_SYSTEM_READY, &TRANSACTIONS_READY_NOTIFY).await;
+}
+
+/// Mark the tokens system ready: every enabled chain's token database is published and
+/// its loops run. Wakes every task waiting for it.
+pub fn mark_tokens_system_ready() {
+    TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    TOKENS_READY_NOTIFY.notify_waiters();
+}
+
+/// Resolve once the tokens system is ready. Services that start before the tokens
+/// service and read the token database wait here instead of relying on the start order.
+pub async fn wait_for_tokens_system_ready() {
+    wait_until_ready(&TOKENS_SYSTEM_READY, &TOKENS_READY_NOTIFY).await;
+}
+
+/// Resolve once `flag` is set; `notify` is woken by whoever sets it.
+async fn wait_until_ready(flag: &AtomicBool, notify: &Notify) {
     loop {
         // Registered before the flag is read, so a mark between the read and the
         // await still wakes this waiter.
-        let notified = TRANSACTIONS_READY_NOTIFY.notified();
-        if TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
+        let notified = notify.notified();
+        if flag.load(std::sync::atomic::Ordering::SeqCst) {
             return;
         }
         notified.await;
@@ -416,6 +437,31 @@ mod transactions_ready_tests {
             .expect("marking the system ready must wake the waiter")
             .expect("waiter task");
         tokio::time::timeout(Duration::from_secs(5), wait_for_transactions_system_ready())
+            .await
+            .expect("a ready system must answer at once");
+    }
+}
+
+#[cfg(test)]
+mod tokens_ready_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn a_waiter_wakes_when_the_tokens_system_is_marked_ready() {
+        let waiter = tokio::spawn(wait_for_tokens_system_ready());
+        tokio::task::yield_now().await;
+        assert!(
+            !waiter.is_finished(),
+            "the waiter must wait while no token database is published"
+        );
+
+        mark_tokens_system_ready();
+        tokio::time::timeout(Duration::from_secs(5), waiter)
+            .await
+            .expect("marking the system ready must wake the waiter")
+            .expect("waiter task");
+        tokio::time::timeout(Duration::from_secs(5), wait_for_tokens_system_ready())
             .await
             .expect("a ready system must answer at once");
     }

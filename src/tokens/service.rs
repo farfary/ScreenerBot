@@ -261,7 +261,7 @@ impl Service for TokensServiceNew {
         );
 
         // Mark tokens system ready after every chain's loops are started
-        TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+        crate::global::mark_tokens_system_ready();
         Ok(handles)
     }
 

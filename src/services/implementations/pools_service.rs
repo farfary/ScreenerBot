@@ -64,15 +64,18 @@ impl Service for PoolsService {
 
         // Periodic cache and database upkeep for every chain runs in one task.
         // The pricing stage loops are started by the pool pricing service.
-        let handle = crate::pools::start_maintenance_task(shutdown, monitor);
+        let maintenance = crate::pools::start_maintenance_task(shutdown.clone(), monitor.clone());
+        // The held tokens' pool warm-up reads the token database, so it waits for the
+        // tokens service that starts after this one.
+        let warm_up = crate::pools::start_open_position_warm_up(shutdown, monitor);
 
         logger::info(
             LogTag::PoolService,
-            "Pool maintenance task started (1 instrumented handle)",
+            "Pool maintenance and held-token warm-up tasks started (2 instrumented handles)",
         );
 
-        // Return the handle so ServiceManager can wait for graceful shutdown
-        Ok(vec![handle])
+        // Return the handles so ServiceManager can wait for graceful shutdown
+        Ok(vec![maintenance, warm_up])
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
