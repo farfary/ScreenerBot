@@ -32,11 +32,13 @@ pub const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
 ///
 /// The security token is:
 /// - Generated at startup (random 64-char alphanumeric)
-/// - Injected into the HTML template by the server
-/// - Required in X-ScreenerBot-Token header for all API requests
+/// - Handed to the desktop shell on the `SCREENERBOT_READY` stdout line only;
+///   no served page carries it
+/// - Added by the desktop shell as the X-ScreenerBot-Token header to its own
+///   requests to this server, and required on all API requests
 ///
 /// Allowed without token (required for initial page load):
-/// - Root path (/) - returns HTML with embedded token
+/// - Root path (/) - returns the dashboard shell HTML, which carries no token
 /// - Static assets (/assets/*, /scripts/*, /styles/*, /i18n/*)
 /// - Page HTML (/api/pages/*)
 /// - SSE streams (/api/*/stream) - EventSource API doesn't support custom headers
@@ -92,9 +94,9 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
     let path = request.uri().path();
 
     // Allow initial page load and static assets without token
-    // These are needed for the browser to receive the HTML (which contains the token)
+    // These are needed for the browser to receive the dashboard HTML and its assets
     // Also allow SSE stream endpoints - EventSource API cannot send custom headers
-    // Page routes (non-API) are allowed - they return HTML with embedded token
+    // Page routes (non-API) are allowed - they return HTML that carries no token
     if is_security_token_exempt_path(path) {
         return next.run(request).await;
     }

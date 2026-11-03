@@ -203,7 +203,36 @@ pub fn ensure_all_directories() -> Result<(), IoError> {
         }
     }
 
+    // The base and data directories hold the wallet store and its snapshots, so
+    // they are owner-only on every start; that also fixes directories created
+    // before this rule existed. A failure never blocks startup.
+    #[cfg(unix)]
+    for (name, dir) in [
+        ("base", get_base_directory()),
+        ("data", get_data_directory()),
+    ] {
+        if let Err(e) = restrict_directory_to_owner(&dir) {
+            eprintln!("Warning: could not restrict the {name} directory to its owner: {e}");
+        }
+    }
+
     Ok(())
+}
+
+/// Sets `dir` to mode `0o700` whenever directories are ensured: at startup and
+/// through the paths endpoints.
+///
+/// `set_permissions` follows a symlink, so a `data` link to a profile directory
+/// restricts the profile directory itself.
+#[cfg(unix)]
+pub(crate) fn restrict_directory_to_owner(dir: &std::path::Path) -> Result<(), IoError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).map_err(|e| {
+        IoError::Generic {
+            message: format!("failed to set mode 0700 on {}: {e}", dir.display()),
+        }
+    })
 }
 
 // =============================================================================
@@ -230,6 +259,34 @@ mod tests {
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(unix)]
+    #[test]
+    fn restrict_directory_to_owner_sets_mode_0700() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("temp dir");
+        let dir = temp.path().join("data");
+        std::fs::create_dir(&dir).expect("create dir");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+        restrict_directory_to_owner(&dir).expect("restrict");
+
+        let mode = std::fs::metadata(&dir)
+            .expect("metadata")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o700);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn restrict_directory_to_owner_reports_a_missing_directory() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let missing = temp.path().join("missing");
+
+        assert!(restrict_directory_to_owner(&missing).is_err());
+    }
 
     #[test]
     fn test_base_directory_not_empty() {

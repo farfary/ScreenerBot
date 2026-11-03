@@ -6786,6 +6786,7 @@ dependencies = [
  "unicode-width",
  "url",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]

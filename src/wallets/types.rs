@@ -143,7 +143,7 @@ pub struct WalletsSummary {
 }
 
 /// Response after exporting a wallet
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct ExportWalletResponse {
     /// Wallet address
     pub address: String,
@@ -151,6 +151,16 @@ pub struct ExportWalletResponse {
     pub private_key: String,
     /// Warning message
     pub warning: String,
+}
+
+impl std::fmt::Debug for ExportWalletResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExportWalletResponse")
+            .field("address", &self.address)
+            .field("private_key", &"[redacted]")
+            .field("warning", &self.warning)
+            .finish()
+    }
 }
 
 #[cfg(test)]

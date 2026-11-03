@@ -12,6 +12,14 @@ function shouldRollbackStagedCore({ staged, firstRun, ready, recovering, recover
   return Boolean(staged && firstRun && !ready && !recovering && !recoveryScheduled);
 }
 
+/** Hide the backend session token from packaged shell logs. */
+function displayedBackendLine(line, isPackaged) {
+  if (!isPackaged || !line.startsWith('SCREENERBOT_READY:')) return line;
+  const fields = line.split(':');
+  if (fields.length >= 3) fields[2] = '<session-token>';
+  return fields.join(':');
+}
+
 /** Preserve complete lines across arbitrary stdout/stderr chunk boundaries. */
 function createLineDecoder(onLine) {
   const decoder = new StringDecoder('utf8');
@@ -40,4 +48,4 @@ function createLineDecoder(onLine) {
   };
 }
 
-module.exports = { createLineDecoder, shouldRollbackStagedCore };
+module.exports = { createLineDecoder, displayedBackendLine, shouldRollbackStagedCore };

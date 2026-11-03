@@ -104,16 +104,12 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
     html = html.replace("{{CONTENT}}", content);
 
-    // Inject security credentials for GUI mode
+    // The session token never enters a served page: `/` needs no token, so any
+    // local reader could fetch it. The desktop shell adds `X-ScreenerBot-Token`
+    // to its own requests instead.
     let is_gui = global::is_gui_mode();
-    let security_token = if is_gui {
-        global::get_security_token().unwrap_or_default()
-    } else {
-        String::new()
-    };
     let port = global::get_webserver_port();
 
-    html = html.replace("{{SECURITY_TOKEN}}", &security_token);
     html = html.replace("{{WEBSERVER_PORT}}", &port.to_string());
     html = html.replace("{{IS_GUI_MODE}}", if is_gui { "true" } else { "false" });
     html = html.replace("{{ASSET_VERSION}}", asset_version.as_str());
@@ -448,7 +444,7 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{nav_tab_html, page_styles};
+    use super::{base_template, nav_tab_html, page_styles};
     use crate::config::schemas::default_tabs;
     use crate::i18n::format_message;
 
@@ -488,6 +484,23 @@ mod tests {
             nav_tab_html("tokens", "icon-coins", "tokens", true),
             golden.trim_end()
         );
+    }
+
+    /// A served page is readable by any local program without the token, so the
+    /// GUI-mode session token must never appear in the rendered document.
+    #[test]
+    fn gui_base_page_never_carries_the_session_token() {
+        crate::global::set_gui_mode(true);
+        let token = crate::global::generate_security_token();
+
+        let html = base_template("home", "", &english());
+
+        assert!(
+            !html.contains(&token),
+            "the rendered base page contains the session token"
+        );
+        assert!(!html.contains("{{SECURITY_TOKEN}}"));
+        assert!(!html.contains("__SCREENERBOT_SECURITY_TOKEN"));
     }
 
     fn english() -> crate::i18n::LanguageIdentifier {

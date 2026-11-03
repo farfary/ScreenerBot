@@ -14,7 +14,8 @@ const appPaths = require('./paths');
 const { APP_ID } = require('./app_identity');
 const coreResolver = require('./core_resolver');
 const { createLocalizer } = require('./l10n');
-const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launch');
+const { createLineDecoder, displayedBackendLine, shouldRollbackStagedCore } = require('./backend_launch');
+const { installBackendTokenHeader, isBackendUrl } = require('./backend_token');
 const upgradeBackups = require('./upgrade_backups');
 const { clearShellCaches } = require('./shell_cache');
 const { TRAFFIC_LIGHT_POSITION, attachWindowControls, setWindowControlsDimmed } = require('./window_controls');
@@ -73,6 +74,8 @@ let isQuitting = false;
 let tray = null;
 let isExitDialogOpen = false; // Guard flag to prevent multiple exit dialogs
 let backendReadyResolve = null; // Promise resolver for SCREENERBOT_READY signal
+// Session token of the running backend, from SCREENERBOT_READY; null from each spawn until that backend's SCREENERBOT_READY.
+let backendToken = null;
 let backendReadySignal = false; // Latches readiness if stdout wins the waitForBackend race
 let startupError = null; // Structured fatal startup error (SCREENERBOT_ERROR payload), if any
 let bootErrorShown = false; // True once a boot-error screen has actually been rendered
@@ -229,15 +232,11 @@ function isSafeExternalUrl(rawUrl) {
 }
 
 function isDashboardUrl(rawUrl) {
-  if (!CONFIG.port) return false;
-  try {
-    const url = new URL(rawUrl);
-    return url.protocol === 'http:'
-      && url.hostname === CONFIG.host
-      && url.port === String(CONFIG.port);
-  } catch (_) {
-    return false;
-  }
+  return isBackendUrl(rawUrl, currentBackend());
+}
+
+function currentBackend() {
+  return { host: CONFIG.host, port: CONFIG.port, token: backendToken };
 }
 
 function currentDashboardRoute() {
@@ -665,6 +664,8 @@ function startBackend(extraArgs = [], core = null) {
   };
   const binaryPath = activeCore.path;
   backendReadySignal = false;
+  CONFIG.port = null;
+  backendToken = null;
   launchGeneration += 1;
   const generation = launchGeneration;
   const launchedCore = activeCore;
@@ -705,7 +706,7 @@ function startBackend(extraArgs = [], core = null) {
       if (generation !== launchGeneration) return;
       const line = rawLine.trim();
       if (line) {
-        console.log('[Backend]', line);
+        console.log('[Backend]', displayedBackendLine(line, app.isPackaged));
         // Parse SCREENERBOT_ERROR signal — a structured fatal startup failure.
         // Symmetric with SCREENERBOT_READY: base64-encoded JSON on one line.
         if (line.startsWith('SCREENERBOT_ERROR:')) {
@@ -742,9 +743,9 @@ function startBackend(extraArgs = [], core = null) {
           if (parts.length >= 3) {
             const port = parseInt(parts[1], 10);
             const token = parts[2];
-            console.log(`[Electron] Backend ready on port ${port} with token ${token.substring(0, 8)}...`);
+            console.log(`[Electron] Backend ready on port ${port}`);
             CONFIG.port = port;
-            global.SCREENERBOT_TOKEN = token;
+            backendToken = token;
             backendReadySignal = true;
 
             // Resolve the waitForBackend() Promise
@@ -1522,8 +1523,6 @@ async function restartBackendFromDashboard(targetRoute, statusOverride, coreOver
   const opening = statusOverride || { message: t('desktop-splash-restarting'), detail: null };
   updateLoadingStatus(opening.message, opening.detail);
 
-  CONFIG.port = null;
-  global.SCREENERBOT_TOKEN = null;
   if (backendReadyResolve) backendReadyResolve(false);
 
   // Resolving the core here is what actually applies a staged update: the
@@ -1630,6 +1629,9 @@ async function initialize() {
   // Before any page loads: the core this launch starts may not be the one that
   // served the cached assets.
   await clearShellCaches(session.defaultSession);
+  // Every backend request of the shell's windows carries the session token as a
+  // header; the dashboard pages themselves never contain it.
+  installBackendTokenHeader(session.defaultSession, currentBackend);
   
   // Create system tray (Windows/Linux only)
   createTray();

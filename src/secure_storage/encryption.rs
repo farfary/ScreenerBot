@@ -8,6 +8,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use zeroize::Zeroizing;
 
 use super::{Error, Result};
 
@@ -50,7 +51,9 @@ fn get_machine_id() -> Result<String> {
 }
 
 /// Derive a 256-bit encryption key from machine ID.
-fn derive_encryption_key() -> Result<[u8; 32]> {
+///
+/// The key is wiped from memory when the returned value is dropped.
+fn derive_encryption_key() -> Result<Zeroizing<[u8; 32]>> {
     let machine_id = get_machine_id()?;
 
     let mut hasher = blake3::Hasher::new();
@@ -58,20 +61,19 @@ fn derive_encryption_key() -> Result<[u8; 32]> {
     hasher.update(APP_SALT);
 
     let hash = hasher.finalize();
-    let key: [u8; 32] = *hash.as_bytes();
-
-    Ok(key)
+    Ok(Zeroizing::new(*hash.as_bytes()))
 }
 
 /// Encrypt a private key string using AES-256-GCM.
 pub fn encrypt_private_key(plaintext: &str) -> Result<EncryptedData> {
     let key = derive_encryption_key()?;
 
-    let cipher =
-        Aes256Gcm::new_from_slice(&key).map_err(|error| Error::CryptographicOperation {
+    let cipher = Aes256Gcm::new_from_slice(key.as_slice()).map_err(|error| {
+        Error::CryptographicOperation {
             operation: "cipher initialization",
             detail: error.to_string(),
-        })?;
+        }
+    })?;
 
     let nonce_bytes: [u8; 12] = rand::random();
     let nonce = Nonce::from_slice(&nonce_bytes);
@@ -90,7 +92,10 @@ pub fn encrypt_private_key(plaintext: &str) -> Result<EncryptedData> {
 }
 
 /// Decrypt a private key using AES-256-GCM.
-pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<String> {
+///
+/// The plaintext is wiped from memory when the returned value is dropped; a
+/// caller that needs an owned `String` converts at its own boundary.
+pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<Zeroizing<String>> {
     let key = derive_encryption_key()?;
 
     let ciphertext =
@@ -116,19 +121,23 @@ pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<String> {
 
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let cipher =
-        Aes256Gcm::new_from_slice(&key).map_err(|error| Error::CryptographicOperation {
+    let cipher = Aes256Gcm::new_from_slice(key.as_slice()).map_err(|error| {
+        Error::CryptographicOperation {
             operation: "cipher initialization",
             detail: error.to_string(),
-        })?;
+        }
+    })?;
 
-    let plaintext_bytes = cipher
-        .decrypt(nonce, ciphertext.as_ref())
-        .map_err(|_| Error::DecryptionFailed)?;
+    let plaintext_bytes = Zeroizing::new(
+        cipher
+            .decrypt(nonce, ciphertext.as_ref())
+            .map_err(|_| Error::DecryptionFailed)?,
+    );
 
-    String::from_utf8(plaintext_bytes).map_err(|error| Error::InvalidUtf8 {
+    let plaintext = std::str::from_utf8(&plaintext_bytes).map_err(|error| Error::InvalidUtf8 {
         detail: error.to_string(),
-    })
+    })?;
+    Ok(Zeroizing::new(plaintext.to_owned()))
 }
 
 /// Check if encrypted wallet data is present and valid.
@@ -152,6 +161,38 @@ mod tests {
 
         let decrypted = decrypt_private_key(&encrypted).expect("Decryption should succeed");
 
-        assert_eq!(decrypted, original);
+        assert_eq!(decrypted.as_str(), original);
+    }
+
+    /// A record written by any earlier build must still open: the key is
+    /// BLAKE3(machine id, APP_SALT), the cipher AES-256-GCM, and the stored form
+    /// standard base64 of the ciphertext with tag and of the 12-byte nonce.
+    #[test]
+    fn decrypts_a_record_in_the_stored_format() {
+        #[cfg(not(target_os = "android"))]
+        let machine_id = machine_uid::get().expect("machine id");
+        #[cfg(target_os = "android")]
+        let machine_id = get_machine_id().expect("machine id");
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(machine_id.as_bytes());
+        hasher.update(b"screenerbot-wallet-encryption-v1");
+        let expected_key = *hasher.finalize().as_bytes();
+
+        let key = derive_encryption_key().expect("derive key");
+        assert_eq!(*key, expected_key);
+
+        let original = "fixed_vector_private_key_base58";
+        let nonce_bytes = [7u8; 12];
+        let cipher = Aes256Gcm::new_from_slice(&expected_key).expect("cipher");
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&nonce_bytes), original.as_bytes())
+            .expect("encrypt");
+        let stored = EncryptedData {
+            ciphertext: BASE64.encode(&ciphertext),
+            nonce: BASE64.encode(nonce_bytes),
+        };
+
+        let decrypted = decrypt_private_key(&stored).expect("stored record decrypts");
+        assert_eq!(decrypted.as_str(), original);
     }
 }

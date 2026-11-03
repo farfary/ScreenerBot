@@ -426,7 +426,8 @@ pub(super) async fn generate_wallet() -> Response {
     );
     let mut response = success_response(GeneratedWalletResponse {
         address,
-        private_key,
+        // The response body is the one place the key leaves its wiped buffer.
+        private_key: private_key.as_str().to_owned(),
     });
     response.headers_mut().insert(
         axum::http::header::CACHE_CONTROL,

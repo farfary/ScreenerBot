@@ -4587,3 +4587,76 @@ fn chain_reads_go_through_the_chain_access_facade() {
         violations.join("\n")
     );
 }
+
+/// The session token has one process-local reader and one desktop announcer.
+#[test]
+fn session_token_has_one_reader_and_one_announcer() {
+    let mut readers = Vec::new();
+    let mut generation_callers = Vec::new();
+    let invocation = regex::Regex::new(r"\bgenerate_security_token\s*\(")
+        .expect("the security-token invocation pattern is valid");
+    let definition = regex::Regex::new(r"\bfn\s+generate_security_token\s*\(")
+        .expect("the security-token definition pattern is valid");
+    for (relative, contents) in walk_src() {
+        if is_test_support_file(&relative) {
+            continue;
+        }
+        let code = code_lines(&production_text(&contents));
+        let path = relative.to_string_lossy().replace('\\', "/");
+        if code.contains("get_security_token(") {
+            readers.push(path.clone());
+            if path == "webserver/server.rs" {
+                assert_eq!(
+                    code.matches("get_security_token(").count(),
+                    1,
+                    "the backend announces the session token only once"
+                );
+            }
+        }
+        if invocation.find_iter(&code).count() > definition.find_iter(&code).count() {
+            generation_callers.push(path);
+        }
+    }
+    readers.sort();
+    generation_callers.sort();
+    assert_eq!(
+        readers,
+        vec!["global/security.rs", "webserver/server.rs"],
+        "session-token reads belong only to the security owner and the backend announcer"
+    );
+    assert_eq!(
+        generation_callers,
+        vec!["webserver/server.rs"],
+        "session-token generation belongs only to the backend announcer"
+    );
+}
+
+/// Secret-bearing response structs never derive `Debug` over a key field.
+#[test]
+fn secret_bearing_structs_do_not_derive_debug() {
+    let secret_struct = regex::Regex::new(
+        r"(?s)#\[derive\(([^)]*)\)\](?:\s*#\[[^\]]*\]\s*)*\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+\w+\s*\{([^}]*)\}",
+    )
+    .expect("the secret-bearing struct pattern is valid");
+    let secret_field = regex::Regex::new(
+        r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?(?:private_key|wallet_private_key)\s*:",
+    )
+    .expect("the secret field pattern is valid");
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let code = strip_comment_text(&production_text(&contents));
+        for captures in secret_struct.captures_iter(&code) {
+            let derives_debug = captures[1]
+                .split(',')
+                .any(|derive| derive.trim() == "Debug");
+            if derives_debug && secret_field.is_match(&captures[2]) {
+                violations.push(format!("src/{}", relative.display()));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "secret-bearing structs must implement redacted Debug manually:\n{}",
+        violations.join("\n")
+    );
+}

@@ -11,8 +11,21 @@ import fs from "node:fs/promises";
 const require = createRequire(import.meta.url);
 const {
   createLineDecoder,
+  displayedBackendLine,
   shouldRollbackStagedCore,
 } = require("../../electron/src/backend_launch.js");
+
+test("packaged readiness logs redact the session token", () => {
+  assert.equal(
+    displayedBackendLine("SCREENERBOT_READY:49152:secret", true),
+    "SCREENERBOT_READY:49152:<session-token>",
+  );
+});
+
+test("unpackaged readiness and other backend lines remain unchanged", () => {
+  assert.equal(displayedBackendLine("SCREENERBOT_READY:49152:secret", false), "SCREENERBOT_READY:49152:secret");
+  assert.equal(displayedBackendLine("ordinary log", true), "ordinary log");
+});
 
 test("an OS spawn failure rolls back a staged core", () => {
   assert.equal(shouldRollbackStagedCore({

@@ -317,10 +317,10 @@ pub struct OAuthCallback {
 /// under one of the token-exempt prefixes: this is the only route that needs
 /// the exemption, and it is the only one that gets it.
 pub async fn oauth_callback(Query(params): Query<OAuthCallback>) -> Response {
-    if let Some(error) = params.error {
+    if params.error.is_some() {
         return callback_page(
             "Sign-in was cancelled",
-            &format!("You can close this window and try again from ScreenerBot. ({error})"),
+            "You can close this window and try again from ScreenerBot.",
         );
     }
 
@@ -401,5 +401,22 @@ mod tests {
             serde_json::to_value(started).unwrap(),
             serde_json::json!({ "opened": false, "url": URL })
         );
+    }
+
+    #[tokio::test]
+    async fn a_provider_error_is_never_echoed_into_the_page() {
+        let params = super::OAuthCallback {
+            code: None,
+            state: None,
+            error: Some("<b>injected-marker</b>".to_owned()),
+        };
+        let response = super::oauth_callback(axum::extract::Query(params)).await;
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf8");
+
+        assert!(!body.contains("injected-marker"));
+        assert!(body.contains("Sign-in was cancelled"));
     }
 }

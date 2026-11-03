@@ -15,50 +15,10 @@
       window.__ASSET_VERSION__ = "{{ASSET_VERSION}}";
     </script>
 
-    <!-- Security token injection for GUI mode (MUST run first) -->
+    <!-- Backend port and shell mode injected by server -->
     <script>
-      (function() {
-        // Security credentials injected by server (empty in CLI mode)
-        window.__SCREENERBOT_SECURITY_TOKEN = '{{SECURITY_TOKEN}}';
-        window.__SCREENERBOT_PORT = {{WEBSERVER_PORT}};
-        window.__SCREENERBOT_GUI_MODE = {{IS_GUI_MODE}};
-
-        // Only patch fetch/XHR if we have a security token (GUI mode)
-        if (window.__SCREENERBOT_SECURITY_TOKEN) {
-          const TOKEN_HEADER = 'X-ScreenerBot-Token';
-
-          // Patch fetch to include security header
-          const originalFetch = window.fetch;
-          window.fetch = function(url, options) {
-            options = options || {};
-            options.headers = options.headers || {};
-
-            if (options.headers instanceof Headers) {
-              options.headers.set(TOKEN_HEADER, window.__SCREENERBOT_SECURITY_TOKEN);
-            } else {
-              options.headers[TOKEN_HEADER] = window.__SCREENERBOT_SECURITY_TOKEN;
-            }
-
-            return originalFetch.call(this, url, options);
-          };
-
-          // Patch XMLHttpRequest
-          const originalXHROpen = XMLHttpRequest.prototype.open;
-          const originalXHRSend = XMLHttpRequest.prototype.send;
-
-          XMLHttpRequest.prototype.open = function() {
-            this._screenerBotUrl = arguments[1];
-            return originalXHROpen.apply(this, arguments);
-          };
-
-          XMLHttpRequest.prototype.send = function() {
-            this.setRequestHeader(TOKEN_HEADER, window.__SCREENERBOT_SECURITY_TOKEN);
-            return originalXHRSend.apply(this, arguments);
-          };
-
-          console.log('[ScreenerBot] Security token initialized for GUI mode');
-        }
-      })();
+      window.__SCREENERBOT_PORT = {{WEBSERVER_PORT}};
+      window.__SCREENERBOT_GUI_MODE = {{IS_GUI_MODE}};
     </script>
 
     <!-- Localization runtime: synchronous classic scripts so every later script can call I18n.t() -->

@@ -11,6 +11,7 @@ use crate::chains::solana::solana_sdk::signer::Signer;
 use crate::chains::solana::{Error, Result};
 
 use crate::secure_storage::{decrypt_private_key, EncryptedData};
+use zeroize::Zeroizing;
 
 use super::signing::refuse_in_paper_scope;
 
@@ -39,12 +40,18 @@ pub fn parse_private_key(private_key: &str) -> Result<Keypair> {
 fn parse_array_format(private_key: &str) -> Result<Keypair> {
     let inner = private_key.trim_start_matches('[').trim_end_matches(']');
 
-    let bytes: std::result::Result<Vec<u8>, _> =
-        inner.split(',').map(|s| s.trim().parse::<u8>()).collect();
-
-    let bytes = bytes.map_err(|e| Error::InvalidKeypair {
-        detail: format!("invalid array format: {e}"),
-    })?;
+    // Sized up front so the secret bytes are never copied by a reallocation,
+    // and wiped on every exit path, including a parse error midway.
+    let mut bytes = Zeroizing::new(Vec::with_capacity(inner.split(',').count()));
+    for part in inner.split(',') {
+        let byte = part
+            .trim()
+            .parse::<u8>()
+            .map_err(|e| Error::InvalidKeypair {
+                detail: format!("invalid array format: {e}"),
+            })?;
+        bytes.push(byte);
+    }
 
     if bytes.len() != 64 {
         return Err(Error::InvalidKeypair {
@@ -59,11 +66,11 @@ fn parse_array_format(private_key: &str) -> Result<Keypair> {
 
 /// Parse private key from base58 format
 fn parse_base58_format(private_key: &str) -> Result<Keypair> {
-    let decoded = bs58::decode(private_key)
-        .into_vec()
-        .map_err(|e| Error::InvalidKeypair {
+    let decoded = Zeroizing::new(bs58::decode(private_key).into_vec().map_err(|e| {
+        Error::InvalidKeypair {
             detail: format!("invalid base58 encoding: {e}"),
-        })?;
+        }
+    })?);
 
     if decoded.len() != 64 {
         return Err(Error::InvalidKeypair {
@@ -79,8 +86,10 @@ fn parse_base58_format(private_key: &str) -> Result<Keypair> {
     })
 }
 
-/// Export a wallet's private key in base58 format
-pub fn export_private_key(encrypted_key: &str, nonce: &str) -> Result<String> {
+/// Export a wallet's private key in base58 format.
+///
+/// The key is wiped from memory when the returned value is dropped.
+pub fn export_private_key(encrypted_key: &str, nonce: &str) -> Result<Zeroizing<String>> {
     refuse_in_paper_scope("export_private_key")?;
     let encrypted = EncryptedData {
         ciphertext: encrypted_key.to_string(),
@@ -142,11 +151,12 @@ pub fn address_from_encrypted_key(ciphertext: &str, nonce: &str) -> Result<Strin
 /// A fresh keypair from the operating system's secure random source, as its address and
 /// its base58 secret (the 64-byte keypair), the form the setup flow accepts. Nothing is
 /// stored: the secret reaches storage only through setup's encrypt-on-complete step.
-pub fn generate_key() -> (String, String) {
+pub fn generate_key() -> (String, Zeroizing<String>) {
     let keypair = Keypair::new();
+    let bytes = Zeroizing::new(keypair.to_bytes());
     (
         keypair_to_address(&keypair),
-        bs58::encode(keypair.to_bytes()).into_string(),
+        Zeroizing::new(bs58::encode(&bytes[..]).into_string()),
     )
 }
 
@@ -155,7 +165,8 @@ pub fn generate_key() -> (String, String) {
 /// `Keypair`.
 #[cfg(test)]
 pub(crate) fn new_test_key() -> (String, String) {
-    generate_key()
+    let (address, secret) = generate_key();
+    (address, secret.as_str().to_owned())
 }
 
 #[cfg(test)]

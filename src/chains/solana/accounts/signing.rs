@@ -21,6 +21,7 @@ use crate::chains::solana::solana_sdk::signature::{Keypair, Signer};
 use crate::chains::solana::{Error, Result};
 
 use super::keypair::decrypt_to_keypair;
+use zeroize::Zeroizing;
 
 struct CachedMainKeypair {
     wallet_id: i64,
@@ -39,8 +40,11 @@ pub(super) fn refuse_in_paper_scope(operation: &'static str) -> Result<()> {
     Ok(())
 }
 
+/// A second `Keypair` with the same secret. The transient byte copy is wiped
+/// when it goes out of scope; `Keypair` wipes its own secret on drop.
 fn clone_keypair(keypair: &Keypair) -> Result<Keypair> {
-    Keypair::try_from(&keypair.to_bytes()[..]).map_err(|e| Error::InvalidKeypair {
+    let bytes = Zeroizing::new(keypair.to_bytes());
+    Keypair::try_from(&bytes[..]).map_err(|e| Error::InvalidKeypair {
         detail: format!("failed to clone keypair: {e}"),
     })
 }

@@ -36,7 +36,8 @@ pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, Error
 
     Ok(ExportWalletResponse {
         address: wallet.address,
-        private_key,
+        // The response body is the one place the key leaves its wiped buffer.
+        private_key: private_key.as_str().to_owned(),
         warning: "NEVER share this private key. Anyone with access can steal your funds."
             .to_string(),
     })

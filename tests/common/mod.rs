@@ -172,7 +172,7 @@ pub fn app_main_wallet_keypair() -> screenerbot::chains::solana::solana_sdk::sig
 
     let secret = decrypt_private_key(&EncryptedData { ciphertext, nonce })
         .unwrap_or_else(|e| panic!("the main wallet key could not be decrypted: {e}"));
-    let bytes = bs58::decode(&secret)
+    let bytes = bs58::decode(secret.as_str())
         .into_vec()
         .unwrap_or_else(|e| panic!("the stored key is not base58: {e}"));
     screenerbot::chains::solana::solana_sdk::signature::Keypair::try_from(bytes.as_slice())

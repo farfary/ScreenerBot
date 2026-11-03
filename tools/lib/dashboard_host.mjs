@@ -187,7 +187,6 @@ export const renderShell = memoized((page, locale) => {
     "{{DIR}}": localeDirection(locale),
     "{{NAV_TABS}}": navTabs(page),
     "{{CONTENT}}": pageContent(page),
-    "{{SECURITY_TOKEN}}": "",
     "{{WEBSERVER_PORT}}": SHELL_PORT,
     "{{IS_GUI_MODE}}": "false",
     // The server appends the asset version to every static import as well
