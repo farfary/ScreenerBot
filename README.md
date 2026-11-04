@@ -120,9 +120,10 @@ is no subscription and no telemetry.
   switched on per task, only after readiness checks, and has budgets and a latency kill switch.
 - **Manual trading.** Buy, add to, partially sell or close any position from the dashboard, using
   the same swap and verification path as the auto trader.
-- **Swaps.** Jupiter by default. You can also turn on direct pool swaps for Raydium, Orca, Meteora,
-  Pump.fun, FluxBeam and Moonit, and Solana Tracker's Raptor router. A cost guard blocks routes that
-  would take SOL beyond the trade itself.
+- **Swaps.** Direct pool swaps for Raydium, Orca, Meteora, Pump.fun, FluxBeam and Moonit come
+  first, then Jupiter and Solana Tracker's Raptor router. All three are on by default and quoted on
+  every trade; the best net output wins. Each can be turned off in Settings. A cost guard blocks
+  routes that would take SOL beyond the trade itself.
 - **AI assistant.** Nine LLM providers for chat, scheduled tasks and optional AI scoring in filtering
   and exits. All model features are off by default.
 - **Built-in MCP server.** Connect Claude Code, Claude Desktop, Codex CLI or any stdio MCP client.
@@ -335,14 +336,15 @@ Guide: [Copy trading](https://screenerbot.io/docs/copy-trading).
 
 ## Swaps
 
-Enabled quote routers are queried at the same time. The best net output wins, and retryable failures
-fall back to the next router.
+Enabled quote routers are queried at the same time and the best net output wins. Routes are ranked
+in the order below: the rank settles an exact tie, and a swap that fails before it is sent falls back
+to the next route.
 
 | Router                | Default | What it does                                                                 |
 | --------------------- | ------- | ---------------------------------------------------------------------------- |
+| **Direct pool swaps** | On      | Builds the DEX instruction in-house, simulates it, and swaps against the same pool the live price comes from: Raydium CPMM, AMM v4 and CLMM; Orca Whirlpool; Meteora DAMM v2, DLMM and DBC; Pump.fun AMM and bonding curve; FluxBeam; Moonit. Needs the app's own RPC connection |
 | **Jupiter**           | On      | Aggregated routing across Solana DEXs                                        |
-| **Direct pool swaps** | Off     | Builds the DEX instruction in-house and swaps against the pool, with optional pre-simulation: Raydium CPMM, AMM v4 and CLMM; Orca Whirlpool; Meteora DAMM v2, DLMM and DBC; Pump.fun AMM and bonding curve; FluxBeam; Moonit |
-| **Raptor**            | Off     | Solana Tracker's aggregator                                                  |
+| **Raptor**            | On      | Solana Tracker's aggregator                                                  |
 
 **Swap cost guard.** Slippage protection covers only a swap's output. It misses SOL that a route
 leaves locked in another program's account. Before signing, the app simulates Jupiter and Raptor swaps
@@ -437,7 +439,7 @@ Settings live in `data/config.toml` inside the platform app-data directory. Edit
 | `[copy_trading]`  | Copy trading switch, global limits, slippage, filter policy     |
 | `[filtering]`     | Pipeline stages and thresholds                                  |
 | `[strategies]`    | Strategy engine                                                 |
-| `[swaps]`         | Jupiter, direct pool swaps, Raptor, slippage, cost guard        |
+| `[swaps]`         | Direct pool swaps, Jupiter, Raptor, slippage, cost guard        |
 | `[tokens]`        | Token database, discovery sources, update intervals             |
 | `[pools]`         | Pool discovery and caching                                      |
 | `[ohlcv]`         | Candle sources and cadence                                      |
