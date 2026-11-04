@@ -211,18 +211,20 @@ pub fn load_keypair(path: &str) -> screenerbot::chains::solana::solana_sdk::sign
 // wallets this way: a well-funded one to pay for a buy, and a real holder of the
 // token to sell it.
 
-/// A real Solana validator identity: a plain, System-Program-owned wallet with
-/// a large public SOL balance. Nothing here is signed or submitted -- this is
-/// only a fee-payer stand-in for a simulation, and only the wallet's real
-/// on-chain balance is used, so any well-funded public address works. It pays
-/// for buys larger than an ordinary wallet holds, such as one sized to move a
-/// deep pool's price across a whole initialised tick.
+/// An exchange hot wallet: a plain, System-Program-owned wallet holding millions
+/// of SOL. Nothing here is signed or submitted -- this is only a fee-payer
+/// stand-in for a simulation, and only the wallet's real on-chain balance is
+/// used, so any well-funded public address works. It pays for buys larger than
+/// an ordinary wallet holds, such as one sized to move a deep pool's price
+/// across a whole initialised tick. A stand-in that is emptied fails every
+/// SOL-input simulation with `AccountNotFound`; replace the address when that
+/// happens.
 pub fn deep_pockets_owner() -> screenerbot::chains::solana::solana_sdk::pubkey::Pubkey {
     use std::str::FromStr;
     screenerbot::chains::solana::solana_sdk::pubkey::Pubkey::from_str(
-        "JUPiTERrZqgf1jUyR7dSkhMx4Kn2qJyekWsg3LT1h4b",
+        "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
     )
-    .expect("validator identity constant must be a pubkey")
+    .expect("stand-in wallet constant must be a pubkey")
 }
 
 /// Real mainnet wallets whose ASSOCIATED token account for `mint` currently
