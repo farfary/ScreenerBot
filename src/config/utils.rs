@@ -482,14 +482,18 @@ fn validate_solana_chain(chain: &SolanaChainConfig) -> Result<()> {
     };
 
     match access {
-        // At least one router must remain available. Direct-only operation is
-        // a supported, deliberate configuration; the runtime has the same
-        // defense for a stale/externally-mutated config.
+        // At least one route must remain available; any one of the three can
+        // trade alone. The runtime has the same defense for a stale or
+        // externally mutated config.
         ChainAccessMode::OwnRpc => {
-            if !chain.swaps.jupiter.enabled && !chain.swaps.direct.enabled {
+            if !chain.swaps.direct.enabled
+                && !chain.swaps.jupiter.enabled
+                && !chain.swaps.raptor.enabled
+            {
                 return Err(ConfigurationError::Generic {
-                    message: "at least one swap router (Jupiter or Direct Pool) must be enabled"
-                        .to_owned(),
+                    message:
+                        "at least one swap router (Direct Pool, Jupiter or Raptor) must be enabled"
+                            .to_owned(),
                 }
                 .into());
             }
@@ -763,6 +767,38 @@ pub fn is_config_initialized() -> bool {
 #[cfg(test)]
 pub(crate) fn install_default_config() {
     let _ = CONFIG.get_or_init(|| RwLock::new(Config::default()));
+}
+
+#[cfg(test)]
+mod router_validation_tests {
+    use super::*;
+
+    /// With its own RPC an install can trade on any one route; in service mode
+    /// only an aggregator can, because the direct engine reads pool accounts the
+    /// service does not serve.
+    #[test]
+    fn a_config_is_valid_exactly_when_its_access_mode_keeps_a_route() {
+        for access in ["own_rpc", "service"] {
+            for bits in 0u8..8 {
+                let (direct, jupiter, raptor) = (bits & 1 != 0, bits & 2 != 0, bits & 4 != 0);
+                let mut config = Config::default();
+                config.chains.solana.access = access.to_owned();
+                let swaps = &mut config.chains.solana.swaps;
+                swaps.direct.enabled = direct;
+                swaps.jupiter.enabled = jupiter;
+                swaps.raptor.enabled = raptor;
+                let expected = match access {
+                    "own_rpc" => direct || jupiter || raptor,
+                    _ => jupiter || raptor,
+                };
+                assert_eq!(
+                    validate_config(&config).is_ok(),
+                    expected,
+                    "{access}: direct={direct} jupiter={jupiter} raptor={raptor}"
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
