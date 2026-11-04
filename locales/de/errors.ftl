@@ -343,6 +343,8 @@ errors-trade-quote-not-offered-exact-out = Kein aktivierter Swap-Router liefert 
     .hint = Die aktivierten Swap-Router berechnen einen Trade nur ausgehend vom eingesetzten Betrag. Geben Sie den einzusetzenden Betrag ein oder aktivieren Sie einen weiteren Swap-Router.
 errors-trade-quote-not-offered-unsupported-venue = Kein aktivierter Swap-Router handelt im Pool dieses Tokens
     .hint = Der Token wird an einer Börse gehandelt, die die aktivierten Swap-Router noch nicht unterstützen. Aktivieren Sie einen weiteren Swap-Router und versuchen Sie es erneut.
+errors-trade-quote-not-offered-suspended = Die direkte Pool-Route pausiert den Pool dieses Tokens
+    .hint = Mehrere Swaps in diesem Pool sind nacheinander fehlgeschlagen, daher überspringt die direkte Route ihn für bis zu 30 Minuten. Aktivieren Sie { -jupiter } oder { -raptor }, um jetzt zu handeln, oder versuchen Sie es später erneut.
 errors-trade-quote-unavailable = Kurs konnte nicht abgerufen werden
     .hint = Die Swap-Anbieter konnten für diesen Trade keinen Kurs liefern. Versuchen Sie es gleich noch einmal.
 

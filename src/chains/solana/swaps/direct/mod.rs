@@ -40,6 +40,7 @@
 //!   offline test tier can assert real numbers against real captured accounts.
 
 pub mod accounts;
+pub mod breaker;
 pub mod compute;
 pub mod error;
 pub mod execute;

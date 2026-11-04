@@ -374,6 +374,8 @@ errors-trade-quote-not-offered-exact-out = 정확한 출력 수량으로 견적�
     .hint = 활성화된 스왑 라우터는 지불 금액을 기준으로만 거래 견적을 냅니다. 지불할 금액을 입력하거나 다른 스왑 라우터를 활성화하세요.
 errors-trade-quote-not-offered-unsupported-venue = 이 토큰의 풀에서 거래하는 활성 스왑 라우터가 없습니다
     .hint = 이 토큰은 활성화된 스왑 라우터가 아직 지원하지 않는 거래소에서 거래됩니다. 다른 스왑 라우터를 활성화한 뒤 다시 시도하세요.
+errors-trade-quote-not-offered-suspended = 다이렉트 풀 경로가 이 토큰의 풀을 일시 중지했습니다
+    .hint = 이 풀에서 스왑이 연속으로 여러 번 실패하여 다이렉트 경로가 최대 30분 동안 이 풀을 건너뜁니다. 지금 거래하려면 { -jupiter } 또는 { -raptor }를 활성화하거나 나중에 다시 시도하세요.
 errors-trade-quote-unavailable = 견적을 가져올 수 없습니다
     .hint = 스왑 제공자가 이 거래의 견적을 제시하지 못했습니다. 잠시 후 다시 시도하세요.
 

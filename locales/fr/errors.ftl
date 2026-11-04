@@ -371,6 +371,8 @@ errors-trade-quote-not-offered-exact-out = Aucun routeur de swap activé ne cote
     .hint = Les routeurs de swap activés ne calculent une transaction qu'à partir du montant dépensé. Saisissez le montant à dépenser ou activez un autre routeur de swap.
 errors-trade-quote-not-offered-unsupported-venue = Aucun routeur de swap activé ne négocie dans le pool de ce token
     .hint = Ce token s'échange sur une plateforme que les routeurs de swap activés ne prennent pas encore en charge. Activez un autre routeur de swap, puis réessayez.
+errors-trade-quote-not-offered-suspended = La route de pool directe met en pause le pool de ce token
+    .hint = Plusieurs swaps ont échoué d'affilée dans ce pool, la route directe l'ignore donc pendant 30 minutes au plus. Activez { -jupiter } ou { -raptor } pour trader maintenant, ou réessayez plus tard.
 errors-trade-quote-unavailable = Impossible d'obtenir une cotation
     .hint = Les fournisseurs de swap n'ont pas pu coter ce trade. Réessayez dans un instant.
 

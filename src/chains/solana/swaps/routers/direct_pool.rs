@@ -28,6 +28,7 @@
 //! count against a mint. Our own RPC or build faults are `Unavailable`, which
 //! never does.
 
+use crate::chains::solana::swaps::direct::breaker::{self, Direction, Tripped};
 use crate::chains::solana::swaps::direct::{self, DirectSwapIntent, DirectSwapOutcome};
 use crate::chains::solana::swaps::revenue::fee_reference_for_mint;
 use crate::chains::{adapter_for, ChainId};
@@ -66,6 +67,9 @@ struct DirectExecutionData {
     /// The gross pool floor accepted by the caller.  Reusing a fresh quote's
     /// floor would apply slippage twice and can weaken the accepted trade.
     accepted_min_out: u64,
+    /// The pool's programme id, so a failure at execution is recorded against
+    /// the venue even when it happens before the pool is loaded again.
+    program: String,
 }
 
 /// Most pools one direct quote tries. Each costs an account batch, and a pair
@@ -208,6 +212,17 @@ impl DirectPoolRouter {
             .await
             .map_err(|e| e.into_quote_error(self.name()))?;
 
+        let direction = direction_of(&request.input_mint, &request.output_mint);
+        if let Some(until) =
+            breaker::global().venue_suspended_until(market.program(), direction, Instant::now())
+        {
+            log_suspended(&pool, until);
+            return Err(QuoteError::NotOffered {
+                router: self.name().to_owned(),
+                reason: NotOfferedReason::Suspended,
+            });
+        }
+
         // A caller that excluded a DEX excluded it from EVERY router. The
         // aggregator applies the exclusion while routing; here the pool is
         // already chosen, so the only correct answer is to decline it.
@@ -240,6 +255,7 @@ impl DirectPoolRouter {
             slippage_bps: intent.slippage_bps,
             accepted_min_net_out: quote.min_net_out,
             accepted_min_out: quote.min_out,
+            program: market.program().program_id().to_owned(),
         })
         .map_err(|e| QuoteError::RouterRejected {
             router: self.name().to_owned(),
@@ -299,6 +315,66 @@ impl DirectPoolRouter {
             amount_in: input_amount,
             slippage_bps: slippage_bps_for(request.slippage_pct),
         })
+    }
+
+    /// Tell the breaker how executing `quote` ended: a settled swap clears the
+    /// pool's and the venue's strikes, a failure that is evidence against the
+    /// pool adds one. Outcomes that say nothing about the pool are ignored.
+    fn record_outcome(&self, quote: &Quote, error: Option<&Error>) {
+        let Ok(data) = serde_json::from_slice::<DirectExecutionData>(&quote.execution_data) else {
+            return;
+        };
+        let (Ok(pool), Ok(program_id)) = (
+            Pubkey::from_str(&data.pool),
+            Pubkey::from_str(&data.program),
+        ) else {
+            return;
+        };
+        let program = ProgramKind::classify(&program_id);
+        let direction = direction_of(&quote.input_mint, &quote.output_mint);
+        let failure = match error {
+            None => {
+                breaker::global().record_success(pool, program, direction);
+                return;
+            }
+            Some(Error::Solana(crate::chains::solana::Error::DirectSwap(failure))) => failure,
+            Some(_) => return,
+        };
+        if !breaker::strikes(failure) {
+            return;
+        }
+        match breaker::global().record_failure(pool, program, direction, Instant::now()) {
+            Some(Tripped::Pool) => logger::warning(
+                LogTag::Swap,
+                &format!(
+                    "Direct pool {pool} ({}) suspended for {} min: it failed {} times in a row \
+                     before its swap settled, latest: {failure}",
+                    program.display_name(),
+                    breaker::SUSPENSION.as_secs() / 60,
+                    breaker::POOL_STRIKES_TO_SUSPEND,
+                ),
+            ),
+            Some(Tripped::Venue) => logger::warning(
+                LogTag::Swap,
+                &format!(
+                    "Direct {} {} suspended for {} min: {} different pools failed within {} \
+                     min, latest {pool}: {failure}",
+                    program.display_name(),
+                    direction.label(),
+                    breaker::SUSPENSION.as_secs() / 60,
+                    breaker::VENUE_POOLS_TO_SUSPEND,
+                    breaker::STRIKE_WINDOW.as_secs() / 60,
+                ),
+            ),
+            None => logger::info(
+                LogTag::Swap,
+                &format!(
+                    "Direct pool {pool} ({}) failed before its swap settled; one more failure \
+                     suspends it: {failure}",
+                    program.display_name()
+                ),
+            ),
+        }
     }
 
     /// Execute an accepted quote with a specific signer: the plan
@@ -447,7 +523,25 @@ impl SwapRouter for DirectPoolRouter {
             });
         }
 
-        let candidates = Self::candidate_pools(&request.input_mint, &request.output_mint);
+        let mut candidates = Self::candidate_pools(&request.input_mint, &request.output_mint);
+        let now = Instant::now();
+        let mut any_suspended = false;
+        candidates.retain(
+            |pool| match breaker::global().pool_suspended_until(pool, now) {
+                Some(until) => {
+                    log_suspended(pool, until);
+                    any_suspended = true;
+                    false
+                }
+                None => true,
+            },
+        );
+        if candidates.is_empty() && any_suspended {
+            return Err(QuoteError::NotOffered {
+                router: self.name().to_owned(),
+                reason: NotOfferedReason::Suspended,
+            });
+        }
         let no_pool = QuoteError::NoRoute {
             router: self.name().to_owned(),
             detail: "the pool service knows no pool for this pair yet".to_owned(),
@@ -459,6 +553,13 @@ impl SwapRouter for DirectPoolRouter {
             let Some(curve) = launch_curve_for(&request.input_mint, &request.output_mint) else {
                 return Err(no_pool);
             };
+            if let Some(until) = breaker::global().pool_suspended_until(&curve, now) {
+                log_suspended(&curve, until);
+                return Err(QuoteError::NotOffered {
+                    router: self.name().to_owned(),
+                    reason: NotOfferedReason::Suspended,
+                });
+            }
             return self.quote_pool(request, curve).await.map_err(|error| {
                 logger::debug(
                     LogTag::Swap,
@@ -489,7 +590,9 @@ impl SwapRouter for DirectPoolRouter {
         super::checked_quote_amounts(quote)?;
         let start = Instant::now();
         let keypair = super::signing_keypair(self.name())?;
-        let outcome = self.execute_with_keypair(quote, &keypair).await?;
+        let outcome = self.execute_with_keypair(quote, &keypair).await;
+        self.record_outcome(quote, outcome.as_ref().err());
+        let outcome = outcome?;
 
         logger::info(
             LogTag::Swap,
@@ -535,6 +638,27 @@ impl SwapRouter for DirectPoolRouter {
                 error: e.to_string(),
             })
         })
+    }
+}
+
+/// Log that the breaker kept `pool`, or its venue, out of this quote.
+fn log_suspended(pool: &Pubkey, until: Instant) {
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "Direct pool {pool} not offered: suspended for another {}s after repeated failures",
+            until.saturating_duration_since(Instant::now()).as_secs()
+        ),
+    );
+}
+
+/// Whether a swap buys or sells the pair's token: it buys when the token is
+/// the output.
+fn direction_of(input_mint: &str, output_mint: &str) -> Direction {
+    if pair_token(input_mint, output_mint) == output_mint {
+        Direction::Buy
+    } else {
+        Direction::Sell
     }
 }
 
@@ -985,6 +1109,7 @@ mod tests {
             slippage_bps: accepted.slippage_bps,
             accepted_min_net_out: accepted.min_net_out,
             accepted_min_out: accepted.min_out,
+            program: accepted.program.program_id().to_owned(),
         }
     }
 
@@ -1113,5 +1238,142 @@ mod tests {
     fn without_candidates_the_supplied_error_is_returned() {
         let error = best_quote(Vec::new(), no_route("no pool")).unwrap_err();
         assert!(error.to_string().contains("no pool"), "{error}");
+    }
+
+    fn executed_quote(pool: Pubkey, input_mint: &str, output_mint: &str) -> Quote {
+        Quote {
+            chain: ChainId::Solana,
+            router_id: "direct".to_owned(),
+            router_name: "Direct Pool".to_owned(),
+            input_mint: input_mint.to_owned(),
+            output_mint: output_mint.to_owned(),
+            input_amount: 1u64.into(),
+            output_amount: 1u64.into(),
+            minimum_output_amount: 1u64.into(),
+            price_impact_pct: 0.0,
+            platform_fee_lamports: None,
+            estimated_network_fee_lamports: None,
+            slippage_bps: 100,
+            route_plan: String::new(),
+            swap_mode: crate::swaps::types::SwapMode::ExactIn,
+            wallet_address: String::new(),
+            exclude_dexes: None,
+            execution_data: serde_json::to_vec(&DirectExecutionData {
+                pool: pool.to_string(),
+                amount_in: 1,
+                slippage_bps: 100,
+                accepted_min_net_out: 1,
+                accepted_min_out: 1,
+                program: ProgramKind::OrcaWhirlpool.program_id().to_owned(),
+            })
+            .expect("execution data serialises"),
+        }
+    }
+
+    fn rejected_simulation() -> Error {
+        DirectSwapError::SimulationRejected {
+            detail: "custom program error".to_owned(),
+            logs: Vec::new(),
+        }
+        .into()
+    }
+
+    /// A pool that fails before its swap settles, twice in a row, is not
+    /// offered again; a lost race through another pool never suspends it.
+    #[test]
+    fn repeated_pool_failures_suspend_only_that_pool() {
+        let router = DirectPoolRouter::new();
+        let sol = crate::chains::solana::constants::SOL_MINT;
+        let token = "AMmANDhpdoJiyqqzkHAC2c992WDR9DXbTw6AezTApump";
+        let failing = Pubkey::new_unique();
+        let raced = Pubkey::new_unique();
+
+        let quote = executed_quote(failing, sol, token);
+        router.record_outcome(&quote, Some(&rejected_simulation()));
+        assert!(breaker::global()
+            .pool_suspended_until(&failing, Instant::now())
+            .is_none());
+        router.record_outcome(&quote, Some(&rejected_simulation()));
+        assert!(breaker::global()
+            .pool_suspended_until(&failing, Instant::now())
+            .is_some());
+
+        let race: Error = DirectSwapError::MarketMoved {
+            pool: raced,
+            accepted_min_net_out: 2,
+            fresh_expected_net_out: 1,
+        }
+        .into();
+        let quote = executed_quote(raced, token, sol);
+        for _ in 0..3 {
+            router.record_outcome(&quote, Some(&race));
+        }
+        assert!(breaker::global()
+            .pool_suspended_until(&raced, Instant::now())
+            .is_none());
+    }
+
+    /// A settled swap clears the strike a single failure left behind.
+    #[test]
+    fn a_settled_swap_resets_the_pools_count() {
+        let router = DirectPoolRouter::new();
+        let sol = crate::chains::solana::constants::SOL_MINT;
+        let token = "AMmANDhpdoJiyqqzkHAC2c992WDR9DXbTw6AezTApump";
+        let pool = Pubkey::new_unique();
+        let quote = executed_quote(pool, token, sol);
+
+        router.record_outcome(&quote, Some(&rejected_simulation()));
+        router.record_outcome(&quote, None);
+        router.record_outcome(&quote, Some(&rejected_simulation()));
+        assert!(breaker::global()
+            .pool_suspended_until(&pool, Instant::now())
+            .is_none());
+    }
+
+    /// A suspended launch curve is an abstention, never a no-route verdict
+    /// that would count against the token.
+    #[tokio::test]
+    async fn a_suspended_pool_is_not_offered_rather_than_a_verdict_on_the_token() {
+        let sol = crate::chains::solana::constants::SOL_MINT;
+        let token = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
+        let curve = launch_curve_for(sol, token).expect("a SOL pair has a launch curve");
+        let now = Instant::now();
+        for _ in 0..breaker::POOL_STRIKES_TO_SUSPEND {
+            breaker::global().record_failure(
+                curve,
+                ProgramKind::PumpFunLegacy,
+                Direction::Buy,
+                now,
+            );
+        }
+        let request = QuoteRequest {
+            chain: ChainId::Solana,
+            input_mint: sol.to_owned(),
+            output_mint: token.to_owned(),
+            input_amount: 10_000_000u64.into(),
+            wallet_address: Pubkey::new_unique().to_string(),
+            slippage_pct: 1.0,
+            swap_mode: crate::swaps::types::SwapMode::ExactIn,
+            exclude_dexes: None,
+        };
+        assert!(matches!(
+            DirectPoolRouter::new().get_quote(&request).await,
+            Err(QuoteError::NotOffered {
+                reason: NotOfferedReason::Suspended,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_swap_buys_when_the_token_is_its_output() {
+        let sol = crate::chains::solana::constants::SOL_MINT;
+        let usdc = crate::chains::solana::constants::USDC_MINT;
+        let token = "AMmANDhpdoJiyqqzkHAC2c992WDR9DXbTw6AezTApump";
+        assert_eq!(direction_of(sol, token), Direction::Buy);
+        assert_eq!(direction_of(token, sol), Direction::Sell);
+        assert_eq!(direction_of(usdc, token), Direction::Buy);
+        assert_eq!(direction_of(sol, usdc), Direction::Buy, "SOL buys USDC");
+        assert_eq!(direction_of(usdc, sol), Direction::Sell);
     }
 }

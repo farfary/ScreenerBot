@@ -380,6 +380,8 @@ errors-trade-quote-not-offered-exact-out = No enabled swap route quotes an exact
     .hint = The enabled swap routes price a trade only from the amount spent. Enter the amount to spend, or enable another swap router.
 errors-trade-quote-not-offered-unsupported-venue = No enabled swap route trades this token's pool
     .hint = The token trades on an exchange the enabled swap routes do not support yet. Enable another swap router, then try again.
+errors-trade-quote-not-offered-suspended = The direct pool route is pausing this token's pool
+    .hint = This pool failed several swaps in a row, so the direct route skips it for up to 30 minutes. Enable { -jupiter } or { -raptor } to trade it now, or try again later.
 errors-trade-quote-unavailable = Couldn't fetch a quote
     .hint = The swap providers couldn't quote this trade. Try again in a moment.
 

@@ -371,6 +371,8 @@ errors-trade-quote-not-offered-exact-out = Etkin hiçbir takas yönlendiricisi k
     .hint = Etkin takas yönlendiricileri bir işlemi yalnızca harcanan tutardan fiyatlar. Harcanacak tutarı girin veya başka bir takas yönlendiricisini etkinleştirin.
 errors-trade-quote-not-offered-unsupported-venue = Etkin hiçbir takas yönlendiricisi bu tokenin havuzunda işlem yapmıyor
     .hint = Bu token, etkin takas yönlendiricilerinin henüz desteklemediği bir borsada işlem görüyor. Başka bir takas yönlendiricisini etkinleştirip tekrar deneyin.
+errors-trade-quote-not-offered-suspended = Doğrudan havuz rotası bu tokenin havuzunu duraklatıyor
+    .hint = Bu havuzda art arda birkaç takas başarısız oldu, bu yüzden doğrudan rota onu 30 dakikaya kadar atlıyor. Şimdi işlem yapmak için { -jupiter } veya { -raptor }'u etkinleştirin ya da daha sonra tekrar deneyin.
 errors-trade-quote-unavailable = Fiyat teklifi alınamadı
     .hint = Takas sağlayıcıları bu işlem için fiyat teklifi veremedi. Biraz sonra tekrar deneyin.
 

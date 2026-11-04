@@ -1584,6 +1584,11 @@ mod tests {
                 422,
                 "errors-trade-quote-not-offered-unsupported-venue",
             ),
+            (
+                not_offered("Direct Pool", NotOfferedReason::Suspended),
+                422,
+                "errors-trade-quote-not-offered-suspended",
+            ),
         ];
         let source: crate::i18n::LanguageIdentifier = crate::i18n::source_locale().parse().unwrap();
         for (err, status, id) in cases {

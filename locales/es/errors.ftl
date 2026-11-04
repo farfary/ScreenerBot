@@ -343,6 +343,8 @@ errors-trade-quote-not-offered-exact-out = Ningún enrutador de swap activado co
     .hint = Los enrutadores de swap activados solo calculan una operación a partir del importe gastado. Introduce el importe a gastar o activa otro enrutador de swap.
 errors-trade-quote-not-offered-unsupported-venue = Ningún enrutador de swap activado opera en el pool de este token
     .hint = El token se negocia en un exchange que los enrutadores de swap activados aún no admiten. Activa otro enrutador de swap y vuelve a intentarlo.
+errors-trade-quote-not-offered-suspended = La ruta directa de pool está pausando el pool de este token
+    .hint = Varios swaps seguidos fallaron en este pool, así que la ruta directa lo omite hasta 30 minutos. Activa { -jupiter } o { -raptor } para operar ahora, o vuelve a intentarlo más tarde.
 errors-trade-quote-unavailable = No se pudo obtener una cotización
     .hint = Los proveedores de swap no pudieron cotizar esta operación. Inténtalo de nuevo en un momento.
 

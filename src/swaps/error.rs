@@ -93,6 +93,9 @@ pub enum NotOfferedReason {
     ExactOut,
     /// The pool the router would trade sits on a programme it has no venue for.
     UnsupportedVenue,
+    /// The pool, or its venue in this direction, failed repeatedly before its
+    /// swaps settled and is skipped until its suspension ends.
+    Suspended,
 }
 
 impl std::fmt::Display for NotOfferedReason {
@@ -100,6 +103,7 @@ impl std::fmt::Display for NotOfferedReason {
         f.write_str(match self {
             NotOfferedReason::ExactOut => "it prices ExactIn only",
             NotOfferedReason::UnsupportedVenue => "the pool's programme has no venue",
+            NotOfferedReason::Suspended => "the pool is suspended after repeated failures",
         })
     }
 }
@@ -123,6 +127,7 @@ impl QuoteError {
                 NotOfferedReason::UnsupportedVenue => {
                     ids::ERRORS_TRADE_QUOTE_NOT_OFFERED_UNSUPPORTED_VENUE
                 }
+                NotOfferedReason::Suspended => ids::ERRORS_TRADE_QUOTE_NOT_OFFERED_SUSPENDED,
             },
             QuoteError::Unavailable { .. } => ids::ERRORS_TRADE_QUOTE_UNAVAILABLE,
         })

@@ -374,6 +374,8 @@ errors-trade-quote-not-offered-exact-out = 没有已启用的兑换路由支持�
     .hint = 已启用的兑换路由只按支付金额计算交易。请输入要支付的金额，或启用其他兑换路由。
 errors-trade-quote-not-offered-unsupported-venue = 没有已启用的兑换路由可在此代币的池中交易
     .hint = 该代币所在的交易所尚未被已启用的兑换路由支持。请启用其他兑换路由后重试。
+errors-trade-quote-not-offered-suspended = 直接池路由正在暂停此代币的池
+    .hint = 该池连续多次兑换失败，因此直接路由会在最多 30 分钟内跳过它。启用 { -jupiter } 或 { -raptor } 可立即交易，或稍后重试。
 errors-trade-quote-unavailable = 无法获取报价
     .hint = 兑换提供商无法为此交易报价。请稍后重试。
 

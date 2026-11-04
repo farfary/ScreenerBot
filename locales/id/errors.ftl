@@ -346,6 +346,8 @@ errors-trade-quote-not-offered-exact-out = Tidak ada router swap aktif yang meng
     .hint = Router swap yang aktif hanya menghitung transaksi dari jumlah yang dibelanjakan. Masukkan jumlah yang akan dibelanjakan, atau aktifkan router swap lain.
 errors-trade-quote-not-offered-unsupported-venue = Tidak ada router swap aktif yang bertransaksi di pool token ini
     .hint = Token ini diperdagangkan di bursa yang belum didukung oleh router swap yang aktif. Aktifkan router swap lain, lalu coba lagi.
+errors-trade-quote-not-offered-suspended = Rute pool langsung sedang menjeda pool token ini
+    .hint = Beberapa swap berturut-turut gagal di pool ini, jadi rute langsung melewatinya hingga 30 menit. Aktifkan { -jupiter } atau { -raptor } untuk bertransaksi sekarang, atau coba lagi nanti.
 errors-trade-quote-unavailable = Tidak dapat mengambil kuotasi
     .hint = Penyedia swap tidak dapat memberikan kuotasi untuk trade ini. Coba lagi sebentar lagi.
 

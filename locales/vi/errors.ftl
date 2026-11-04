@@ -343,6 +343,8 @@ errors-trade-quote-not-offered-exact-out = Không có router swap nào đang b�
     .hint = Các router swap đang bật chỉ tính giá giao dịch dựa trên số tiền chi ra. Hãy nhập số tiền muốn chi, hoặc bật một router swap khác.
 errors-trade-quote-not-offered-unsupported-venue = Không có router swap nào đang bật giao dịch trong pool của token này
     .hint = Token này được giao dịch trên một sàn mà các router swap đang bật chưa hỗ trợ. Hãy bật một router swap khác rồi thử lại.
+errors-trade-quote-not-offered-suspended = Tuyến pool trực tiếp đang tạm dừng pool của token này
+    .hint = Nhiều lệnh swap liên tiếp đã thất bại trong pool này, nên tuyến trực tiếp bỏ qua nó tối đa 30 phút. Hãy bật { -jupiter } hoặc { -raptor } để giao dịch ngay, hoặc thử lại sau.
 errors-trade-quote-unavailable = Không lấy được báo giá
     .hint = Các nhà cung cấp swap không báo giá được giao dịch này. Hãy thử lại sau giây lát.
 
