@@ -18,7 +18,12 @@
 //! 424 sqrt_min_price 440 sqrt_max_price 456 sqrt_price (all Q64.64)
 //! 472 activation_point  480 activation_type  481 pool_status
 //! 482 token_a_flag      483 token_b_flag     484 collect_fee_mode
+//! 485 pool_type         486 fee_version
 //! ```
+//!
+//! `fee_version` selects the programme's ceiling on the total trade fee
+//! (`get_max_fee_numerator`): 50% for version 0, 99% for version 1, the version
+//! new pools are created at.
 
 use crate::chains::solana::layout::{pubkey_at, u128_at, u16_at, u32_at, u64_at, u8_at};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
@@ -118,6 +123,7 @@ pub struct DammPoolState {
     pub activation_point: u64,
     pub activation_type: u8,
     pub pool_status: u8,
+    pub fee_version: u8,
 }
 
 impl DammPoolState {
@@ -142,6 +148,7 @@ impl DammPoolState {
             activation_type: u8_at(data, 480)?,
             pool_status: u8_at(data, 481)?,
             collect_fee_mode: u8_at(data, 484)?,
+            fee_version: u8_at(data, 486)?,
         })
     }
 }

@@ -23,6 +23,14 @@
 //!
 //! # The fee
 //!
+//! The programme adds the base fee and the dynamic fee and caps the sum at the
+//! ceiling the pool's `fee_version` selects: 50% for version 0, 99% for version
+//! 1, which new pools are created at (`get_max_fee_numerator` in cp-amm's
+//! `constants.rs`). Neither part is capped on its own, so a launch pool charging
+//! a 60% cliff pays 60%; capping at 50% over-stated its output and every swap
+//! through it failed `ExceededSlippage`. An unknown version is refused, as the
+//! programme itself refuses to swap it.
+//!
 //! `base_fee` is a 32-byte union tagged by `base_fee_mode` at its own offset 8.
 //! Mode 0/1 are a time scheduler that only ever REDUCES the fee from its cliff;
 //! mode 2 is a rate limiter that raises the fee with size for a bounded window
@@ -71,8 +79,21 @@ const EVENT_AUTHORITY_SEED: &[u8] = b"__event_authority";
 /// Denominator every cp-amm fee numerator is expressed over.
 const FEE_DENOMINATOR: u64 = 10_u64.pow(9);
 
-/// Highest fee numerator the programme will charge, i.e. 50%.
-const MAX_FEE_NUMERATOR: u64 = 500_000_000;
+/// Ceiling on the total fee numerator of a `fee_version` 0 pool: 50%.
+const MAX_FEE_NUMERATOR_V0: u64 = 500_000_000;
+
+/// Ceiling on the total fee numerator of a `fee_version` 1 pool: 99%.
+const MAX_FEE_NUMERATOR_V1: u64 = 990_000_000;
+
+/// The ceiling the programme applies to the total fee of a pool at
+/// `fee_version`, or `None` for a version it does not define.
+fn max_fee_numerator(fee_version: u8) -> Option<u64> {
+    match fee_version {
+        0 => Some(MAX_FEE_NUMERATOR_V0),
+        1 => Some(MAX_FEE_NUMERATOR_V1),
+        _ => None,
+    }
+}
 
 /// Basis-point denominator used by the fee schedulers.
 const BASIS_POINT_MAX: u64 = 10_000;
@@ -123,6 +144,15 @@ impl PoolVenue for MeteoraDammVenue {
                 detail: format!("pool_status {} is not enabled", state.pool_status),
             });
         }
+        if max_fee_numerator(state.fee_version).is_none() {
+            return Err(DirectSwapError::PoolNotTradable {
+                pool: *pool,
+                detail: format!(
+                    "fee_version {} has no fee ceiling this venue knows",
+                    state.fee_version
+                ),
+            });
+        }
         if state.liquidity == 0 {
             return Err(DirectSwapError::InsufficientLiquidity {
                 pool: *pool,
@@ -169,6 +199,7 @@ impl PoolVenue for MeteoraDammVenue {
             })?;
 
         refuse_transfer_hook(pool, &[mint_a, mint_b])?;
+
         // The fee schedulers measure against either the slot or the unix clock,
         // which is the loader's job to read so the market itself stays pure.
         let current_point = if state.activation_type == ACTIVATION_TYPE_SLOT {
@@ -291,7 +322,8 @@ fn rate_limited_numerator(
     if amount_in <= reference_amount {
         return cliff;
     }
-    let ceiling = ((max_fee_bps as u64) * FEE_DENOMINATOR / BASIS_POINT_MAX).min(MAX_FEE_NUMERATOR);
+    // The limiter's own ceiling; the pool-wide cap applies to the total later.
+    let ceiling = (max_fee_bps as u64) * FEE_DENOMINATOR / BASIS_POINT_MAX;
     let increment =
         (fee_increment_bps as u128) * (FEE_DENOMINATOR as u128) / (BASIS_POINT_MAX as u128);
     if increment == 0 || ceiling <= cliff {
@@ -337,7 +369,7 @@ impl DynamicFee {
         let square = scaled.saturating_mul(scaled);
         let raw = square.saturating_mul(self.variable_fee_control as u128);
         let fee = raw.saturating_add(99_999_999_999) / 100_000_000_000;
-        fee.min(MAX_FEE_NUMERATOR as u128) as u64
+        fee.min(u64::MAX as u128) as u64
     }
 }
 
@@ -426,7 +458,7 @@ impl DammMarket {
             !input_is_a,
         );
         base.saturating_add(self.state.dynamic_fee.numerator())
-            .min(MAX_FEE_NUMERATOR)
+            .min(max_fee_numerator(self.state.fee_version).unwrap_or(MAX_FEE_NUMERATOR_V0))
     }
 
     /// The fee charged on `amount`, rounded UP.
@@ -762,6 +794,7 @@ mod tests {
             activation_point: 0,
             activation_type: 1,
             pool_status: 0,
+            fee_version: 0,
         }
     }
 
@@ -922,6 +955,63 @@ mod tests {
     fn a_rate_limited_fee_never_exceeds_its_own_ceiling() {
         let numerator = rate_limited_numerator(u64::MAX / 2, 1_000_000, 100, 5_000, 1_000_000);
         assert!(numerator <= 500_000_000, "got {numerator}");
+        let numerator = rate_limited_numerator(u64::MAX / 2, 1_000_000, 100, 9_000, 1_000_000);
+        assert!(
+            numerator > 500_000_000 && numerator <= 900_000_000,
+            "a ceiling above 50% is the limiter's own, got {numerator}"
+        );
+    }
+
+    /// The total fee is capped at the ceiling of the pool's fee version, so a
+    /// version 1 launch pool charging a 60% cliff pays 60%, and the same cliff
+    /// on a version 0 pool pays the 50% that version allows.
+    #[test]
+    fn the_total_fee_is_capped_by_the_pools_fee_version() {
+        let cliff = 600_000_000;
+        let mut launch = state();
+        launch.base_fee = BaseFee::Cliff { cliff };
+        launch.fee_version = 1;
+        assert_eq!(market(launch).fee_numerator(1_000_000, true), cliff);
+
+        let mut legacy = launch;
+        legacy.fee_version = 0;
+        assert_eq!(
+            market(legacy).fee_numerator(1_000_000, true),
+            MAX_FEE_NUMERATOR_V0
+        );
+
+        let mut ceiling = launch;
+        ceiling.base_fee = BaseFee::Cliff { cliff: 999_000_000 };
+        assert_eq!(
+            market(ceiling).fee_numerator(1_000_000, true),
+            MAX_FEE_NUMERATOR_V1
+        );
+        assert_eq!(max_fee_numerator(2), None, "an unknown version is refused");
+    }
+
+    /// A 60% fee leaves the trader 40% of the curve's output: the quote must
+    /// say so rather than promise the 50% a version 0 cap would leave.
+    #[test]
+    fn a_fee_above_half_reduces_the_quote_accordingly() {
+        let mut low = state();
+        low.base_fee = BaseFee::Cliff { cliff: 100_000_000 };
+        low.fee_version = 1;
+        let mut high = low;
+        high.base_fee = BaseFee::Cliff { cliff: 600_000_000 };
+        let mint_a = low.mint_a;
+        let at_ten = market(low)
+            .quote(&mint_a, 1_000_000)
+            .expect("quote")
+            .expected_out;
+        let at_sixty = market(high)
+            .quote(&mint_a, 1_000_000)
+            .expect("quote")
+            .expected_out;
+        let ratio = at_sixty as f64 / at_ten as f64;
+        assert!(
+            (ratio - 0.4 / 0.9).abs() < 0.001,
+            "60% fee keeps 40% where 10% keeps 90%, got {ratio}"
+        );
     }
 
     #[test]

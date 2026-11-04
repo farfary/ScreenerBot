@@ -86,6 +86,14 @@ const DAMM_V2_ONLY_B_POOL: &str = "3CVNnECvuyPtUys2QpaLSNRrQMvbqArsNJqKvbp3zmt1"
 /// output leg. Together the two pools cover both branches of the fee side.
 const DAMM_V2_BOTH_TOKEN_POOL: &str = "6nA26rxJxWZicm5bFnTpjUcN6jCrybqLuRrApKVERSz3";
 
+/// Meteora DAMM v2 at `fee_version = 1` charging a flat 60% cliff, above the
+/// 50% ceiling of a version 0 pool. A venue that caps every pool at 50%
+/// over-states this pool's output by a quarter and fails `ExceededSlippage` in
+/// both directions; the version's own 99% ceiling quotes it exactly. A launch
+/// pool's fee is set by its creator and can change, so a failure here is first
+/// checked against the pool's current `base_fee` before the venue.
+const DAMM_V2_HIGH_FEE_POOL: &str = "2U6aUQSwoFt8LTeXXbezphKC6fb3rZVauifBafUWGyjQ";
+
 /// Meteora DLMM, SOL/USDC, bin step 4 (0.04% base fee). The deepest DLMM pool
 /// on mainnet -- also, per `venues.md`/module docs, one that trades often
 /// enough that the offline vault-delta replay could not be completed against
@@ -1527,6 +1535,17 @@ async fn an_orca_whirlpool_sell_is_exact_to_the_raw_unit() {
 async fn a_meteora_dlmm_sell_is_exact_to_the_raw_unit() {
     let _guard = common::isolated_env();
     simulate_sell_with_no_slippage_room(DLMM_SOL_USDC, "meteora dlmm").await;
+}
+
+/// A fee above 50% is charged in full on a `fee_version = 1` pool, both ways.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_damm_v2_fee_above_half_is_quoted_exactly_in_both_directions() {
+    let _guard = common::isolated_env();
+    let token = paired_token(DAMM_V2_HIGH_FEE_POOL).await;
+    simulate_with_no_slippage_room(DAMM_V2_HIGH_FEE_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS)
+        .await;
+    simulate_sell_with_no_slippage_room(DAMM_V2_HIGH_FEE_POOL, "damm v2 (60% fee)").await;
 }
 
 /// DAMM v2 has never had a real sell execute against it -- the venue is green on
