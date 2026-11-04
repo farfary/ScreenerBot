@@ -24,9 +24,11 @@ use crate::swaps::{NotSubmittedReason, SwapExecutionError};
 ///
 /// Note the shape: `DirectPoolRouter` is ONE router covering every DEX the direct
 /// engine has a venue for. Adding a venue does not add a router.
+///
+/// Registered in route order (direct, Jupiter, Raptor); the ranking itself is each
+/// router's `priority()`.
 pub fn build_routers() -> Vec<std::sync::Arc<dyn crate::swaps::router::SwapRouter>> {
-    let mut routers: Vec<std::sync::Arc<dyn crate::swaps::router::SwapRouter>> =
-        vec![std::sync::Arc::new(JupiterRouter::new())];
+    let mut routers: Vec<std::sync::Arc<dyn crate::swaps::router::SwapRouter>> = Vec::new();
     // The direct engine reads pools through the own RPC endpoints.
     if crate::chains::access::has(
         crate::chains::ChainId::Solana,
@@ -34,6 +36,7 @@ pub fn build_routers() -> Vec<std::sync::Arc<dyn crate::swaps::router::SwapRoute
     ) {
         routers.push(std::sync::Arc::new(DirectPoolRouter::new()));
     }
+    routers.push(std::sync::Arc::new(JupiterRouter::new()));
     routers.push(std::sync::Arc::new(RaptorRouter::new()));
     routers
 }
@@ -125,6 +128,19 @@ mod tests {
             }) => Some(detail),
             _ => None,
         }
+    }
+
+    /// The direct engine is the primary route, Jupiter the second and Raptor the
+    /// third. Every route is still quoted and the most fee-net output wins; the
+    /// order decides an exact tie and the fallback sequence.
+    #[test]
+    fn the_route_order_is_direct_then_jupiter_then_raptor() {
+        let mut routers = build_routers();
+        routers.sort_by_key(|router| router.priority());
+        let order: Vec<_> = routers.iter().map(|router| router.id()).collect();
+        assert_eq!(order, vec!["direct", "jupiter", "raptor"]);
+        let priorities: Vec<_> = routers.iter().map(|router| router.priority()).collect();
+        assert_eq!(priorities, vec![0, 1, 2], "each route has its own rank");
     }
 
     #[tokio::test]

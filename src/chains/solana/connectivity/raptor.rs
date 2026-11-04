@@ -29,15 +29,15 @@ impl EndpointMonitor for RaptorMonitor {
     }
 
     fn criticality(&self) -> EndpointCriticality {
-        // Raptor is the optional second aggregator and ships disabled. Losing it
-        // costs a price comparison, never the ability to trade, so it must never
-        // degrade the app the way the primary router does.
+        // Raptor ranks last of the three routes. Losing it costs a price
+        // comparison, never the ability to trade, so it must never degrade the
+        // app.
         EndpointCriticality::Important
     }
 
     fn fallback_strategy(&self) -> Option<FallbackStrategy> {
-        // Jupiter is the monitored alternative, but the routing layer already
-        // falls back by priority on its own — nothing here needs to redirect.
+        // The routing layer already falls back by priority on its own, so
+        // nothing here needs to redirect.
         None
     }
 

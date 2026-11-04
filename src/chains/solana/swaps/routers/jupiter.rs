@@ -352,7 +352,7 @@ impl SwapRouter for JupiterRouter {
     }
 
     fn priority(&self) -> u8 {
-        0 // Highest priority (primary router)
+        1 // Behind the direct engine; ahead of Raptor, which is served from a beta host.
     }
 
     fn chain(&self) -> crate::chains::ChainId {

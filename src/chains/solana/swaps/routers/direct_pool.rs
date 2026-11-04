@@ -420,7 +420,7 @@ impl SwapRouter for DirectPoolRouter {
     }
 
     fn priority(&self) -> u8 {
-        1 // Behind Jupiter, which can route through pools we have no venue for.
+        0 // The primary route: it trades the pool the live price is read from.
     }
 
     fn chain(&self) -> crate::chains::ChainId {
@@ -948,7 +948,6 @@ mod tests {
         let router = DirectPoolRouter::new();
         assert_eq!(router.id(), "direct");
         assert_eq!(router.chain(), ChainId::Solana);
-        assert!(router.priority() > 0, "Jupiter stays the primary router");
     }
 
     fn sell_quote(expected_out: u64, min_out: u64) -> direct::DirectQuote {

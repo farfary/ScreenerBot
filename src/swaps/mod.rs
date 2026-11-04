@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Swap routing, quoting and fallback orchestration — chain-neutral. The concrete
-//! DEX adapters implementing `SwapRouter` (Jupiter, Raydium) live under
+//! adapters implementing `SwapRouter` (direct pools, Jupiter, Raptor) live under
 //! `crate::chains::solana::swaps::routers`; this module owns only the
 //! `SwapRouter` contract, the registry that wires adapters up, and the
 //! router-agnostic quote/execute-with-fallback policy.

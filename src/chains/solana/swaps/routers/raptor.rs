@@ -7,9 +7,9 @@
 //! and no published rate limit. It is quoted alongside Jupiter and the direct
 //! pool engine, and the comparison layer takes whichever returns the most.
 //!
-//! It ships DISABLED. The hosted API is served from a beta host with no stated
-//! availability guarantee, so turning it on is the owner's decision, not a
-//! default.
+//! It is enabled by default. The hosted API is served from a beta host with no
+//! stated availability guarantee, so it ranks behind the direct engine and
+//! Jupiter on an exact tie, and a slow or failing Raptor never stops a trade.
 //!
 //! # The fee, and why the output convention matters
 //!
@@ -66,9 +66,9 @@ const RAPTOR_MAX_ATTEMPTS: u32 = 3;
 /// Ceiling on a SINGLE Raptor HTTP call (quote or swap-build).
 ///
 /// Both happen before anything is signed, so cutting one short can only fail a
-/// trade, never duplicate one. Tighter than Jupiter's because Raptor is the
-/// optional router: a slow second opinion must not hold up a decision the
-/// primary router could already serve.
+/// trade, never duplicate one. Tighter than Jupiter's because Raptor ranks last:
+/// a slow third opinion must not hold up a decision the direct engine or
+/// Jupiter could already serve.
 const RAPTOR_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Nominal compute-unit limit used to ESTIMATE the network fee at quote time.
@@ -428,7 +428,7 @@ impl SwapRouter for RaptorRouter {
     }
 
     fn priority(&self) -> u8 {
-        2 // Behind Jupiter and the direct engine: newest and on a beta host.
+        2 // Behind the direct engine and Jupiter: newest and on a beta host.
     }
 
     fn chain(&self) -> crate::chains::ChainId {
@@ -724,12 +724,11 @@ mod tests {
     const TOKEN: &str = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
 
     #[test]
-    fn the_router_identifies_itself_and_never_outranks_jupiter() {
+    fn the_router_identifies_itself() {
         let router = RaptorRouter::new();
         assert_eq!(router.id(), "raptor");
         assert_eq!(router.name(), "Raptor");
         assert_eq!(router.chain(), crate::chains::ChainId::Solana);
-        assert!(router.priority() > 0, "Jupiter stays the primary router");
     }
 
     /// A CDN refusal is a whole HTML page; the quote error carries its one-line summary,

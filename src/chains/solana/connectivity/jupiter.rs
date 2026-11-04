@@ -35,8 +35,8 @@ impl EndpointMonitor for JupiterMonitor {
     }
 
     fn fallback_strategy(&self) -> Option<FallbackStrategy> {
-        // No monitored alternative swap endpoint: the only other router
-        // (Raydium direct) talks to the RPC, which has its own monitor.
+        // The routing layer falls back by priority on its own; the direct
+        // engine talks to the RPC, which has its own monitor.
         None
     }
 
