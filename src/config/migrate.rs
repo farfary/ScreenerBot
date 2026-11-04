@@ -39,6 +39,11 @@
 //! default changes, [`ImpliedDefaults`] writes the earlier default into a
 //! document that omits the key, so an upgrade keeps the behaviour the file
 //! had; only a config created after the change starts from the new default.
+//!
+//! A default that changes for installs that already saved the old value is a row of
+//! [`DEFAULT_CHANGES`], applied once by [`apply_default_changes`]. The config stores the
+//! revision it was brought to (`defaults_revision`), so a value the user changes
+//! afterwards is never reset.
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -135,6 +140,80 @@ impl ImpliedDefaults {
         config.trader.stop_loss_enabled = enabled;
         true
     }
+}
+
+/// The revision a new config starts at. Every row of [`DEFAULT_CHANGES`] up to and
+/// including it is already reflected in a config carrying this revision.
+pub(crate) const CURRENT_DEFAULTS_REVISION: u32 = 1;
+
+/// A boolean default that changed from `old` to `new` in `revision`.
+///
+/// A saved config cannot tell a value the user chose from one the app wrote: every
+/// write serializes the whole `Config`. So a stored value equal to `old` is treated as
+/// untouched and takes `new`; a stored value that differs is a choice and is kept.
+struct DefaultChange {
+    revision: u32,
+    /// Dotted path, for the log line.
+    path: &'static str,
+    slot: fn(&mut Config) -> &mut bool,
+    old: bool,
+    new: bool,
+}
+
+/// Every default change that must also reach configs saved under the old default.
+const DEFAULT_CHANGES: &[DefaultChange] = &[
+    // Every swap route competes on every quote: direct pool swaps and Raptor were
+    // off by default before.
+    DefaultChange {
+        revision: 1,
+        path: "chains.solana.swaps.direct.enabled",
+        slot: |config| &mut config.chains.solana.swaps.direct.enabled,
+        old: false,
+        new: true,
+    },
+    DefaultChange {
+        revision: 1,
+        path: "chains.solana.swaps.raptor.enabled",
+        slot: |config| &mut config.chains.solana.swaps.raptor.enabled,
+        old: false,
+        new: true,
+    },
+];
+
+/// The revision `root` was written at, read from the document as written. A file
+/// without the key predates the ledger.
+pub(super) fn stored_defaults_revision(root: &toml::Table) -> u32 {
+    root.get("defaults_revision")
+        .and_then(toml::Value::as_integer)
+        .and_then(|revision| u32::try_from(revision).ok())
+        .unwrap_or(0)
+}
+
+/// Bring `config`, written at `stored` revision, up to [`CURRENT_DEFAULTS_REVISION`].
+/// Returns `true` when the revision moved (the caller must then persist `config`, which
+/// stamps the new revision so the rows never run twice).
+pub(super) fn apply_default_changes(stored: u32, config: &mut Config) -> bool {
+    if stored >= CURRENT_DEFAULTS_REVISION {
+        return false;
+    }
+    for change in DEFAULT_CHANGES
+        .iter()
+        .filter(|change| change.revision > stored)
+    {
+        let slot = (change.slot)(config);
+        if *slot == change.old {
+            *slot = change.new;
+            crate::logger::info(
+                crate::logger::LogTag::System,
+                &format!(
+                    "Default changed: {} is now {} (it was saved as {})",
+                    change.path, change.new, change.old
+                ),
+            );
+        }
+    }
+    config.defaults_revision = CURRENT_DEFAULTS_REVISION;
+    true
 }
 
 /// Resolve a dotted key path (e.g. `["llm", "providers", "openai", "api_key"]`)
@@ -1646,6 +1725,12 @@ api_key = "sk-ant-secret"
         toml::from_str(&toml::to_string(config).expect("serialize")).expect("reparse")
     }
 
+    /// `body` as a file written at the current defaults revision, so it holds no
+    /// pending default change.
+    fn at_current_revision(body: &str) -> String {
+        format!("defaults_revision = {CURRENT_DEFAULTS_REVISION}\n{body}")
+    }
+
     #[test]
     fn v0_2_13_layout_relocates_every_moved_value() {
         let parsed = parse(V0_2_13_CONFIG);
@@ -1966,7 +2051,8 @@ max_retries = 9
 
     #[test]
     fn canonical_document_parses_as_plain_toml() {
-        let raw = r#"
+        let raw = at_current_revision(
+            r#"
 [trader]
 max_open_positions = 3
 stop_loss_enabled = true
@@ -1976,10 +2062,11 @@ quote_default_pct = 1.5
 
 [chains.solana.rpc]
 urls = ["https://canonical.fixture.invalid/"]
-"#;
-        let parsed = parse(raw);
+"#,
+        );
+        let parsed = parse(&raw);
         assert!(!parsed.migrated);
-        let mut expected: Config = toml::from_str(raw).expect("typed parse");
+        let mut expected: Config = toml::from_str(&raw).expect("typed parse");
         expected.gui.dashboard.navigation.tabs =
             crate::config::schemas::ensure_all_tabs_present(expected.gui.dashboard.navigation.tabs);
         assert_eq!(json(&parsed.config), json(&expected));
@@ -2024,9 +2111,9 @@ urls = ["https://canonical.fixture.invalid/"]
     #[test]
     fn a_written_stop_loss_switch_is_kept_either_way() {
         for enabled in [true, false] {
-            let parsed = parse(&format!(
+            let parsed = parse(&at_current_revision(&format!(
                 "[trader]\nstop_loss_enabled = {enabled}\nstop_loss_threshold_pct = 30.0\n"
-            ));
+            )));
             assert!(!parsed.migrated, "stop_loss_enabled = {enabled}");
             assert_eq!(parsed.config.trader.stop_loss_enabled, enabled);
             assert_eq!(parsed.config.trader.stop_loss_threshold_pct, 30.0);
@@ -2052,6 +2139,135 @@ urls = ["https://canonical.fixture.invalid/"]
             assert!(!second.config.trader.stop_loss_enabled);
         }
         assert!(!parse(V0_2_13_CONFIG).config.trader.stop_loss_enabled);
+    }
+
+    // ------------------------------------------------------------------
+    // Default changes that reach saved configs
+    // ------------------------------------------------------------------
+
+    fn route_switches(config: &Config) -> [bool; 3] {
+        let swaps = &config.chains.solana.swaps;
+        [
+            swaps.jupiter.enabled,
+            swaps.direct.enabled,
+            swaps.raptor.enabled,
+        ]
+    }
+
+    #[test]
+    fn a_new_config_starts_with_every_route_on_at_the_current_revision() {
+        let config = Config::default();
+        assert_eq!(route_switches(&config), [true; 3]);
+        assert_eq!(config.defaults_revision, CURRENT_DEFAULTS_REVISION);
+    }
+
+    #[test]
+    fn every_default_change_names_the_schema_default_it_moved() {
+        let mut config = Config::default();
+        for change in DEFAULT_CHANGES {
+            assert!(
+                (1..=CURRENT_DEFAULTS_REVISION).contains(&change.revision),
+                "{}",
+                change.path
+            );
+            assert_ne!(change.old, change.new, "{}", change.path);
+            assert_eq!(
+                *(change.slot)(&mut config),
+                change.new,
+                "{} must hold the schema default",
+                change.path
+            );
+            let pointer = format!("/{}", change.path.replace('.', "/"));
+            let before = json(&config);
+            *(change.slot)(&mut config) = change.old;
+            assert_ne!(
+                json(&config).pointer(&pointer),
+                before.pointer(&pointer),
+                "{} must be the serialized path of its slot",
+                change.path
+            );
+            *(change.slot)(&mut config) = change.new;
+        }
+        assert_eq!(
+            DEFAULT_CHANGES.iter().map(|change| change.revision).max(),
+            Some(CURRENT_DEFAULTS_REVISION),
+            "the current revision is the newest row"
+        );
+    }
+
+    #[test]
+    fn a_config_saved_under_the_old_defaults_takes_every_changed_default_once() {
+        let mut config = Config::default();
+        for change in DEFAULT_CHANGES {
+            *(change.slot)(&mut config) = change.old;
+        }
+        config.defaults_revision = 0;
+
+        assert!(apply_default_changes(0, &mut config));
+        assert_eq!(route_switches(&config), [true; 3]);
+        assert_eq!(config.defaults_revision, CURRENT_DEFAULTS_REVISION);
+        assert!(!apply_default_changes(
+            CURRENT_DEFAULTS_REVISION,
+            &mut config
+        ));
+    }
+
+    #[test]
+    fn saved_routes_that_were_off_turn_on_and_a_later_choice_stays() {
+        for raw in [
+            "[chains.solana.swaps.direct]\nenabled = false\n\
+             [chains.solana.swaps.raptor]\nenabled = false\n",
+            "[swaps.direct]\nenabled = false\n[swaps.raptor]\nenabled = false\n",
+        ] {
+            let first = parse(raw);
+            assert!(first.migrated, "{raw:?}");
+            assert_eq!(route_switches(&first.config), [true; 3], "{raw:?}");
+            assert_eq!(first.config.defaults_revision, CURRENT_DEFAULTS_REVISION);
+
+            let mut chosen = first.config.clone();
+            chosen.chains.solana.swaps.direct.enabled = false;
+            chosen.chains.solana.swaps.raptor.enabled = false;
+            let second = parse(&toml::to_string(&chosen).expect("serialize"));
+            assert!(!second.migrated, "{raw:?} migrates once");
+            assert_eq!(route_switches(&second.config), [true, false, false]);
+        }
+    }
+
+    #[test]
+    fn a_route_the_user_switched_off_that_was_always_on_stays_off() {
+        let parsed = parse(
+            "[chains.solana.swaps.jupiter]\nenabled = false\n\
+             [chains.solana.swaps.direct]\nenabled = true\n",
+        );
+        assert!(parsed.migrated);
+        assert_eq!(route_switches(&parsed.config), [false, true, true]);
+    }
+
+    #[test]
+    fn a_file_without_route_keys_gets_the_new_defaults_and_is_stamped() {
+        for raw in ["", "[trader]\nmax_open_positions = 3\n"] {
+            let parsed = parse(raw);
+            assert!(parsed.migrated, "{raw:?}");
+            assert_eq!(route_switches(&parsed.config), [true; 3], "{raw:?}");
+            assert!(
+                table(&parsed.config).contains_key("defaults_revision"),
+                "{raw:?} is written with its revision"
+            );
+        }
+    }
+
+    #[test]
+    fn a_config_at_or_past_the_current_revision_is_left_as_written() {
+        for revision in [CURRENT_DEFAULTS_REVISION, CURRENT_DEFAULTS_REVISION + 1] {
+            let parsed = parse(&format!(
+                "defaults_revision = {revision}\n[trader]\nstop_loss_enabled = true\n\
+                 [chains.solana.swaps.direct]\nenabled = false\n\
+                 [chains.solana.swaps.raptor]\nenabled = false\n"
+            ));
+            assert!(!parsed.migrated, "revision {revision}");
+            assert_eq!(route_switches(&parsed.config), [true, false, false]);
+            assert_eq!(parsed.config.defaults_revision, revision);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -2255,8 +2471,9 @@ urls = ["https://canonical.fixture.invalid/"]
         }
         // The stop-loss switch is written out: a file without it implies an older default
         // and is migrated for that reason alone.
-        let canonical =
-            parse("[trader]\nstop_loss_enabled = true\ntime_override_unit = \"days\"\n");
+        let canonical = parse(&at_current_revision(
+            "[trader]\nstop_loss_enabled = true\ntime_override_unit = \"days\"\n",
+        ));
         assert!(!canonical.migrated, "a canonical name is no migration");
     }
 

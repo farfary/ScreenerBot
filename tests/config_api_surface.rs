@@ -48,6 +48,9 @@ const SECTIONS_WITHOUT_METADATA: &[&str] = &[
     "wallet_nonce",
     // Internal tuning with no user-facing controls.
     "connectivity",
+    // The revision of the default-change ledger the file was brought to; the
+    // load path owns it.
+    "defaults_revision",
     // Desktop shell settings, owned by the GUI's own preferences UI.
     "gui",
 ];

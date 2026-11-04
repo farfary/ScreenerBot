@@ -79,6 +79,11 @@ config_struct! {
         /// Nonce for wallet encryption (base64-encoded 12-byte nonce)
         wallet_nonce: String = String::new(),
 
+        /// Revision of the default changes this file has been brought to
+        /// (`config::migrate::DEFAULT_CHANGES`). A file without the key predates
+        /// them all; the first load applies them and writes the revision.
+        defaults_revision: u32 = crate::config::CURRENT_DEFAULTS_REVISION,
+
         /// Per-chain settings: enablement, RPC transport and swap routers
         /// (Solana is the only chain this build supports)
         chains: ChainsConfig = ChainsConfig::default(),

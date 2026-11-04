@@ -194,6 +194,66 @@ fn keys_set_while_a_migration_is_pending_leave_the_loaded_layout_on_disk() {
     );
 }
 
+/// A config saved while direct pool swaps and Raptor were off by default turns both on
+/// at the first start of the release that made them default, reaches disk only once
+/// startup completes, and never migrates again: a route switched off afterwards stays
+/// off through a save and a hot reload.
+#[test]
+fn saved_routes_turn_on_once_at_upgrade_and_a_later_off_is_kept() {
+    crate::common::run_isolated(
+        module_path!(),
+        "saved_routes_turn_on_once_at_upgrade_and_a_later_off_is_kept",
+        || async {
+            let routes = |cfg: &screenerbot::config::Config| {
+                let swaps = &cfg.chains.solana.swaps;
+                [
+                    swaps.direct.enabled,
+                    swaps.jupiter.enabled,
+                    swaps.raptor.enabled,
+                ]
+            };
+            let dir = tempfile::tempdir().expect("temp dir");
+            std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
+            screenerbot::paths::ensure_all_directories().expect("create data directories");
+            let path = screenerbot::paths::get_config_path();
+            let path_str = path.to_str().expect("utf-8 temp path").to_owned();
+            let saved = "[trader]\nstop_loss_enabled = true\n\n\
+                         [chains.solana.swaps.jupiter]\nenabled = true\n\n\
+                         [chains.solana.swaps.direct]\nenabled = false\n\n\
+                         [chains.solana.swaps.raptor]\nenabled = false\n";
+            std::fs::write(&path, saved).expect("write saved config");
+
+            load_config_from_path(&path_str).expect("saved config loads");
+            assert_eq!(
+                std::fs::read_to_string(&path).expect("read config"),
+                saved,
+                "the load itself must not rewrite the file"
+            );
+            with_config(|cfg| assert_eq!(routes(cfg), [true; 3]));
+
+            persist_pending_config_migration();
+            let written = std::fs::read_to_string(&path).expect("read migrated config");
+            assert!(top_level_tables(&written).contains_key("defaults_revision"));
+            let reparsed = parse_config_document(&written).expect("migrated file parses");
+            assert!(!reparsed.migrated, "a persisted migration must be final");
+            assert_eq!(routes(&reparsed.config), [true; 3]);
+
+            screenerbot::config::update_config_section(
+                |cfg| {
+                    cfg.chains.solana.swaps.direct.enabled = false;
+                    cfg.chains.solana.swaps.raptor.enabled = false;
+                },
+                true,
+            )
+            .expect("switch two routes off");
+            reload_config_from_path(&path_str).expect("hot reload");
+            with_config(|cfg| assert_eq!(routes(cfg), [false, true, false]));
+            let chosen = std::fs::read_to_string(&path).expect("read saved choice");
+            assert!(!parse_config_document(&chosen).expect("parses").migrated);
+        },
+    );
+}
+
 #[test]
 fn exit_rule_leaves_move_into_trader_on_load_and_on_hot_reload() {
     crate::common::run_isolated(

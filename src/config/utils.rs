@@ -118,7 +118,7 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(path.to_owned());
         logger::info(
             LogTag::System,
-            "Config uses a legacy layout; migrated in memory, written once startup completes",
+            "Config migrated in memory (legacy layout or changed defaults); written once startup completes",
         );
     }
 
@@ -157,11 +157,11 @@ pub fn persist_pending_config_migration() {
     match with_config(|cfg| write_config_atomic(cfg, &path)) {
         Ok(()) => logger::info(
             LogTag::System,
-            &format!("Migrated legacy config layout written to {path}"),
+            &format!("Migrated config written to {path}"),
         ),
         Err(e) => logger::error(
             LogTag::System,
-            &format!("Failed to write migrated config layout to {path}: {e}"),
+            &format!("Failed to write migrated config to {path}: {e}"),
         ),
     }
 }
@@ -221,9 +221,9 @@ pub(super) fn set_dotted_key(table: &mut toml::Table, key: &str, value: toml::Va
 /// A config document parsed into the canonical shape.
 pub struct ParsedConfig {
     pub config: Config,
-    /// True when a legacy layout was rewritten in memory or an omitted key's
-    /// earlier default was written in; persisting `config` makes the migration
-    /// permanent.
+    /// True when a legacy layout was rewritten in memory, an omitted key's
+    /// earlier default was written in, or a saved value took a changed default;
+    /// persisting `config` makes the migration permanent.
     pub migrated: bool,
     /// The retired auto-trader partial-exit switch as `raw` carried it, read
     /// before the migration drops it.
@@ -232,13 +232,15 @@ pub struct ParsedConfig {
 
 /// Parse `raw` TOML: relocate the legacy layout, typed parse, backfill
 /// legacy [ai]/[agents], keep the values implied by omitted keys whose default
-/// changed, normalize navigation tabs. The single parse used by load, reload
+/// changed, apply the default changes saved configs have not seen yet,
+/// normalize navigation tabs. The single parse used by load, reload
 /// and the disk/memory diff.
 pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
     let table: toml::Table = toml::from_str(raw).map_err(|e| Error::ParseFailed {
         detail: e.to_string(),
     })?;
     let implied = super::migrate::ImpliedDefaults::of(&table);
+    let defaults_revision = super::migrate::stored_defaults_revision(&table);
     let mut document = toml::Value::Table(table);
 
     let legacy_partial_exit_switch = super::migrate::read_legacy_partial_exit_switch(&document)?;
@@ -260,6 +262,7 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
 
     let legacy_ai = super::migrate::migrate_legacy_sections(raw, &mut config)?;
     let implied = implied.apply(&mut config);
+    let defaults_changed = super::migrate::apply_default_changes(defaults_revision, &mut config);
 
     // Normalize the navigation tabs: renamed ids migrate (wallet -> wallets), new
     // default tabs are added and removed tabs are dropped.
@@ -268,7 +271,7 @@ pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
 
     Ok(ParsedConfig {
         config,
-        migrated: relocated || legacy_ai || implied,
+        migrated: relocated || legacy_ai || implied || defaults_changed,
         legacy_partial_exit_switch,
     })
 }
@@ -584,7 +587,7 @@ pub fn reload_config_from_path(path: &str) -> Result<()> {
         write_config_atomic(&new_config, path)?;
         logger::info(
             LogTag::System,
-            &format!("Migrated legacy config layout written to {path} on reload"),
+            &format!("Migrated config written to {path} on reload"),
         );
     }
 

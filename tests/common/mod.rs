@@ -1099,6 +1099,12 @@ fn real_data_dir() -> Option<PathBuf> {
     dir.is_dir().then_some(dir)
 }
 
+/// This machine's real `config.toml`, read-only, or `None` when this machine has no
+/// real data directory.
+pub fn real_config_toml() -> Option<String> {
+    std::fs::read_to_string(real_data_dir()?.join("config.toml")).ok()
+}
+
 /// Clone the owner's REAL databases into a throwaway temp dir and point the process at
 /// it, so a test runs against production-scale data (~438k tokens) while being physically
 /// unable to modify, lock, or corrupt the originals.

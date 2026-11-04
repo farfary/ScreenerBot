@@ -21,6 +21,7 @@ mod common;
 mod config;
 mod config_api_surface;
 mod config_migration;
+mod config_upgrade_realdata;
 mod conversions;
 mod copy_analytics;
 mod copy_exits;

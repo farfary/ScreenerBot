@@ -50,7 +50,7 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::Router,
         })]
-        enabled: bool = false,
+        enabled: bool = true,
         #[metadata(field_metadata! {
             min: 0,
             max: 10000000,
@@ -82,14 +82,15 @@ config_struct! {
     /// Raptor aggregator router configuration.
     ///
     /// Raptor (Solana Tracker) is a second aggregator that competes with Jupiter
-    /// on every quote. It needs no API key and publishes no rate limit, but it is
-    /// served from a beta host, which is why it ships disabled.
+    /// on every quote. It needs no API key and publishes no rate limit. It is
+    /// served from a beta host, so it ranks last on an exact tie and the quote
+    /// deadline keeps a slow answer from delaying the comparison.
     pub struct RaptorConfig {
         #[metadata(field_metadata! {
             impact: ConfigImpact::High,
             category: ConfigCategory::Router,
         })]
-        enabled: bool = false,
+        enabled: bool = true,
         #[metadata(field_metadata! {
             min: 0,
             max: 10000000,
