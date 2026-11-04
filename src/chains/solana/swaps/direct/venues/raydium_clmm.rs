@@ -32,6 +32,16 @@
 //! rather than assumed constant past that point, and every swap is simulated
 //! before it is sent — an unsatisfiable `min_out` is rejected by a node for
 //! free rather than by the pool for a priority fee.
+//!
+//! # Fee shapes this venue refuses
+//!
+//! The programme charges `AmmConfig.trade_fee_rate` on the input, per step,
+//! only for a pool whose `fee_on` is 0 and whose `dynamic_fee_info` is unset.
+//! A pool taking its fee from one token only, or adding a volatility fee on top
+//! of the base rate, pays out less than this walk computes: a live pool with
+//! both quoted above its fill in each direction and failed
+//! `TooLittleOutputReceived` at any floor tighter than 3%. Both are refused as
+//! `PoolNotTradable` until their formulas are modelled and proven live.
 
 use super::clmm_ticks::{
     bitmap_extension_address, tick_array_address, ticks_ahead, walk_ticks, TICK_ARRAYS_PER_SWAP,
@@ -101,6 +111,7 @@ impl PoolVenue for RaydiumClmmVenue {
                 detail: format!("status byte {} has swapping disabled", state.status),
             });
         }
+        refuse_unmodelled_fee(&state)?;
         if state.liquidity == 0 {
             return Err(DirectSwapError::InsufficientLiquidity {
                 pool: *pool,
@@ -528,6 +539,28 @@ impl PoolMarket for ClmmMarket {
     }
 }
 
+/// Refuse a pool whose trade fee is not the plain input-side `AmmConfig` rate
+/// this venue's walk charges (see module docs).
+fn refuse_unmodelled_fee(state: &ClmmPoolState) -> DirectSwapResult<()> {
+    let detail = if state.fee_on != 0 {
+        format!(
+            "the pool takes its trade fee from one token only (fee_on {}), which this venue's \
+             walk does not model",
+            state.fee_on
+        )
+    } else if state.dynamic_fee {
+        "the pool adds a volatility fee to its base rate, which this venue's walk does not \
+         model"
+            .to_owned()
+    } else {
+        return Ok(());
+    };
+    Err(DirectSwapError::PoolNotTradable {
+        pool: state.pool,
+        detail,
+    })
+}
+
 fn clmm_program_id() -> Pubkey {
     Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).expect("CLMM program id constant is valid")
 }
@@ -569,6 +602,8 @@ mod tests {
             sqrt_price_x64: get_sqrt_price_at_tick(tick_current).expect("tick in range"),
             tick_current,
             status: 0,
+            fee_on: 0,
+            dynamic_fee: false,
         };
         let config = ClmmFeeConfig {
             protocol_fee_rate: 0,
@@ -588,6 +623,26 @@ mod tests {
             None,
             ticks,
         )
+    }
+
+    #[test]
+    fn a_fee_other_than_the_plain_input_rate_refuses_the_pool() {
+        let plain = market(1_000_000, 0, 0, Vec::new()).state;
+        assert!(refuse_unmodelled_fee(&plain).is_ok());
+
+        for (fee_on, dynamic_fee) in [(1, false), (2, false), (0, true), (1, true)] {
+            let state = ClmmPoolState {
+                fee_on,
+                dynamic_fee,
+                ..plain
+            };
+            match refuse_unmodelled_fee(&state) {
+                Err(DirectSwapError::PoolNotTradable { pool, .. }) => assert_eq!(pool, plain.pool),
+                other => panic!(
+                    "fee_on {fee_on}, dynamic {dynamic_fee}: expected a refusal, got {other:?}"
+                ),
+            }
+        }
     }
 
     #[test]

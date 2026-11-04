@@ -230,6 +230,12 @@ fn the_clmm_layout_reads_real_values_at_every_offset_it_claims() {
         state.decimals_1
     );
     assert!(state.swap_enabled(), "the fixture pool is tradable");
+    assert_eq!(
+        (state.fee_on, state.dynamic_fee),
+        (0, false),
+        "the fixture pool charges the plain input-side rate; a misplaced fee_on or \
+         dynamic_fee_info offset would read the neighbouring bytes instead"
+    );
     assert!(
         state.tick_spacing > 0 && state.tick_spacing < 1_000,
         "tick_spacing read from the wrong offset would not be a small positive integer, got {}",

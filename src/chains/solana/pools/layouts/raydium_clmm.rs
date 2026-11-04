@@ -13,8 +13,14 @@
 //! 137 token_vault_0  169 token_vault_1 201 observation_key
 //! 233 mint_decimals_0 234 mint_decimals_1 235 tick_spacing u16
 //! 237 liquidity u128 253 sqrt_price_x64 u128  269 tick_current i32
-//! 389 status u8      904 tick_array_bitmap [u64; 16]
+//! 389 status u8      390 fee_on u8           904 tick_array_bitmap [u64; 16]
+//! 1096 dynamic_fee_info (80 bytes)
 //! ```
+//!
+//! `fee_on` names the side the trade fee is taken from (0 the input, 1 token 0
+//! only, 2 token 1 only) and `dynamic_fee_info` all-zero means no volatility
+//! fee; any other value adds a surcharge to the `AmmConfig` rate
+//! (`PoolState::get_total_fee_rate` in the programme's `states/pool_fee.rs`).
 //!
 //! `AmmConfig` is 117 bytes: `43 protocol_fee_rate u32 · 47 trade_fee_rate u32 ·
 //! 51 tick_spacing u16 · 53 fund_fee_rate u32`, over a denominator of 1_000_000.
@@ -27,6 +33,10 @@ use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
 /// Bit index of the swap permission inside `PoolState::status`, a DISABLE flag.
 const STATUS_BIT_SWAP_DISABLED: u8 = 2;
+
+/// Offset and length of `PoolState::dynamic_fee_info`.
+const DYNAMIC_FEE_INFO_OFFSET: usize = 1_096;
+const DYNAMIC_FEE_INFO_LEN: usize = 80;
 
 /// Ticks stored per tick-array account.
 pub const TICK_ARRAY_SIZE: i32 = 60;
@@ -57,6 +67,10 @@ pub struct ClmmPoolState {
     pub sqrt_price_x64: u128,
     pub tick_current: i32,
     pub status: u8,
+    /// The side the trade fee is taken from; 0 is the input.
+    pub fee_on: u8,
+    /// Whether `dynamic_fee_info` is set, adding a volatility fee to the base rate.
+    pub dynamic_fee: bool,
 }
 
 impl ClmmPoolState {
@@ -77,6 +91,11 @@ impl ClmmPoolState {
             sqrt_price_x64: u128_at(data, 253)?,
             tick_current: i32_at(data, 269)?,
             status: u8_at(data, 389)?,
+            fee_on: u8_at(data, 390)?,
+            dynamic_fee: data
+                .get(DYNAMIC_FEE_INFO_OFFSET..DYNAMIC_FEE_INFO_OFFSET + DYNAMIC_FEE_INFO_LEN)?
+                .iter()
+                .any(|byte| *byte != 0),
         })
     }
 

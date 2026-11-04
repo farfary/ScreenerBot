@@ -35,6 +35,11 @@ const AMM_V4_SOL_USDC: &str = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2";
 /// Raydium CLMM, SOL/USDC. The deepest concentrated-liquidity pool on mainnet.
 const CLMM_SOL_USDC: &str = "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv";
 
+/// Raydium CLMM with `fee_on = 1` (the trade fee taken from token 0 only) and an
+/// active `dynamic_fee_info`. Quoted at the base input-side rate it over-stated
+/// both legs and failed `TooLittleOutputReceived`; the venue refuses the shape.
+const CLMM_UNMODELLED_FEE_POOL: &str = "8tDRGFVryzpRz4ymuPE8hjKDX3aAHDAtQa3NA19tKM8k";
+
 /// Orca Whirlpool, SOL/USDC. The deepest Orca pool on mainnet.
 const ORCA_SOL_USDC: &str = "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE";
 
@@ -1558,6 +1563,25 @@ async fn a_damm_v2_fee_above_half_is_quoted_exactly_in_both_directions() {
     simulate_with_no_slippage_room(DAMM_V2_HIGH_FEE_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS)
         .await;
     simulate_sell_with_no_slippage_room(DAMM_V2_HIGH_FEE_POOL, "damm v2 (60% fee)").await;
+}
+
+/// A CLMM pool whose fee this venue does not model is refused at load, before a
+/// quote could over-state it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_clmm_pool_with_a_one_sided_or_dynamic_fee_is_refused() {
+    let _guard = common::isolated_env();
+    let pool = Pubkey::from_str(CLMM_UNMODELLED_FEE_POOL).unwrap();
+    match direct::load_market(&pool, &NodeAccounts).await {
+        Err(direct::DirectSwapError::PoolNotTradable { detail, .. }) => {
+            assert!(
+                detail.contains("fee"),
+                "the refusal must name the fee, got: {detail}"
+            )
+        }
+        Err(other) => panic!("expected PoolNotTradable, got {other:?}"),
+        Ok(_) => panic!("a pool with a one-sided or dynamic fee must not load"),
+    }
 }
 
 /// A Whirlpool swap through tick arrays with no initialised tick, or through
