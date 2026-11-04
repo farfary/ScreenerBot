@@ -13,8 +13,9 @@
  * A page's `views` (in its fixture index) say what must render: tables with rows,
  * charts that draw a canvas, empty-state text, and dialogs that open and close.
  * An empty table keeps its body, with its message centred and no pager under it, an
- * empty state's glyph shares one row with its heading, and a value-typed cell shows
- * its value whole on one line.
+ * empty state's glyph shares one row with its heading, a value-typed cell shows its
+ * value whole on one line, and a control in a table cell is drawn whole at rest,
+ * under the pointer and with its focus ring.
  * A check carrying a `defect` description documents a dashboard fault that is
  * not fixed yet: it leaves the page's regular tests and runs alone as a todo test.
  *
@@ -377,6 +378,232 @@ async function assertPinnedEdgeClean(page, label) {
 }
 
 /**
+ * Installs `window.__cellProbe`, which finds the controls of the first rows of every
+ * visible DataTable and measures each one against the boxes that clip it. A control
+ * is measured by what it paints: its border box when it draws a border, fill or
+ * shadow, its glyph or text when it is bare, then its shadow and its focus ring. A
+ * hidden input (a switch) is measured by the track it shows. Every ancestor up to and
+ * including the cell that clips an axis clips there at its padding box, widened by its
+ * `overflow-clip-margin`.
+ */
+function installCellProbe() {
+  const CONTROLS =
+    'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [tabindex="0"]';
+  const px = (value) => parseFloat(value) || 0;
+  const shows = (colour) => {
+    const alpha = /rgba?\(([^)]*)\)/
+      .exec(colour)?.[1]
+      .split(/[\s,/]+/)
+      .filter(Boolean)[3];
+    return colour !== "transparent" && (alpha === undefined || parseFloat(alpha) > 0);
+  };
+  const grow = (box, left, top, right, bottom) => ({
+    left: Math.min(box.left, left),
+    top: Math.min(box.top, top),
+    right: Math.max(box.right, right),
+    bottom: Math.max(box.bottom, bottom),
+  });
+  const shownPart = (control) => {
+    const style = getComputedStyle(control);
+    const hidden = px(style.opacity) === 0 || control.getBoundingClientRect().width <= 1;
+    return control.matches("input") && hidden ? control.nextElementSibling : control;
+  };
+  const painted = (element) => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const sides = ["Top", "Right", "Bottom", "Left"];
+    const boxed =
+      sides.some(
+        (side) => px(style[`border${side}Width`]) > 0 && shows(style[`border${side}Color`])
+      ) ||
+      shows(style.backgroundColor) ||
+      style.boxShadow !== "none";
+    let box = rect;
+    if (!boxed) {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const glyph = range.getBoundingClientRect();
+      if (glyph.width && glyph.height) box = glyph;
+    }
+    box = { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+    if (style.boxShadow !== "none") {
+      for (const shadow of style.boxShadow.split(/,(?![^(]*\))/)) {
+        if (/\binset\b/.test(shadow)) continue;
+        const [x = 0, y = 0, blur = 0, spread = 0] = (
+          shadow.replace(/rgba?\([^)]*\)/g, "").match(/-?[\d.]+px/g) ?? []
+        ).map(px);
+        const reach = blur + spread;
+        box = grow(
+          box,
+          rect.left + x - reach,
+          rect.top + y - reach,
+          rect.right + x + reach,
+          rect.bottom + y + reach
+        );
+      }
+    }
+    if (style.outlineStyle !== "none" && px(style.outlineWidth) > 0) {
+      const ring = px(style.outlineWidth) + px(style.outlineOffset);
+      box = grow(box, rect.left - ring, rect.top - ring, rect.right + ring, rect.bottom + ring);
+    }
+    return box;
+  };
+  const describe = (control) =>
+    control.getAttribute("aria-label") ||
+    control.getAttribute("title") ||
+    control.dataset.actionId ||
+    control.className ||
+    control.tagName.toLowerCase();
+  const cuts = (control, state) => {
+    const cell = control.closest("td");
+    const element = shownPart(control);
+    if (!element) return [];
+    const box = painted(element);
+    const found = [];
+    for (let clip = element.parentElement; clip; clip = clip.parentElement) {
+      const style = getComputedStyle(clip);
+      if (style.display !== "inline" && style.display !== "contents") {
+        const rect = clip.getBoundingClientRect();
+        const margin = (axis) =>
+          style[`overflow${axis}`] === "clip" ? px(style.overflowClipMargin) : 0;
+        const left = rect.left + clip.clientLeft;
+        const top = rect.top + clip.clientTop;
+        const edges = [];
+        if (style.overflowX !== "visible") {
+          edges.push(["start", left - margin("X") - box.left]);
+          edges.push(["end", box.right - (left + clip.clientWidth + margin("X"))]);
+        }
+        if (style.overflowY !== "visible") {
+          edges.push(["top", top - margin("Y") - box.top]);
+          edges.push(["bottom", box.bottom - (top + clip.clientHeight + margin("Y"))]);
+        }
+        for (const [edge, overflow] of edges) {
+          if (overflow > 0.5) {
+            const where = `${cell.closest("[id]")?.id ?? "table"} ${cell.dataset.columnId}`;
+            const by = clip === cell ? "the cell" : `.${[...clip.classList].join(".")}`;
+            found.push(
+              `${where} "${describe(control)}" ${state}: ${edge} cut ${overflow.toFixed(1)}px by ${by}`
+            );
+          }
+        }
+      }
+      if (clip === cell) break;
+    }
+    return found;
+  };
+  // A control is found again by its table, row, column and place in the cell: a live
+  // table repaints its rows while the pointer moves, which detaches the found element.
+  const probes = [...document.querySelectorAll(".data-table")]
+    .filter((table) => table.getClientRects().length)
+    .flatMap((table) =>
+      [...table.querySelectorAll("tbody tr[data-row-id]")].slice(0, 4).flatMap((row) =>
+        [...row.querySelectorAll("td[data-column-id]")].flatMap((cell) =>
+          [...cell.querySelectorAll(CONTROLS)].map((control, index) => ({
+            table,
+            row: row.dataset.rowId,
+            column: cell.dataset.columnId,
+            index,
+            control,
+          }))
+        )
+      )
+    )
+    .filter(({ control }) => (shownPart(control) ?? control).getClientRects().length);
+  const find = (probe) => {
+    if (probe.control.isConnected) return probe.control;
+    const row = [...probe.table.querySelectorAll("tbody tr[data-row-id]")].find(
+      (candidate) => candidate.dataset.rowId === probe.row
+    );
+    const cell = [...(row?.querySelectorAll("td[data-column-id]") ?? [])].find(
+      (candidate) => candidate.dataset.columnId === probe.column
+    );
+    probe.control = cell?.querySelectorAll(CONTROLS)[probe.index] ?? probe.control;
+    return probe.control.isConnected ? probe.control : null;
+  };
+  const each = (measure) =>
+    probes.flatMap((probe) => {
+      const control = find(probe);
+      return control ? measure(control) : [];
+    });
+  // A token cell's row actions fade in over the end of the cell, and the identity
+  // yields `--ti-row-actions-width` for them; wider actions sit on the token's text.
+  const crowded = [...document.querySelectorAll(".ti-row-cell")]
+    .filter((cell) => cell.getClientRects().length && cell.querySelector(".ti-row-cell__actions"))
+    .flatMap((cell) => {
+      const actions = cell.querySelector(".ti-row-cell__actions").getBoundingClientRect().width;
+      const yielded = px(getComputedStyle(cell).getPropertyValue("--ti-row-actions-width"));
+      const where = cell.closest("[id]")?.id ?? "table";
+      return actions > yielded + 0.5
+        ? [`${where}: row actions ${actions.toFixed(1)}px wide in the ${yielded}px yielded`]
+        : [];
+    });
+  window.__cellProbe = {
+    crowded,
+    rest: () => each((control) => cuts(control, "at rest")),
+    focused: () =>
+      each((control) => {
+        if (control.disabled) return [];
+        control.focus({ preventScroll: true });
+        const found = cuts(control, "focused");
+        control.blur();
+        return found;
+      }),
+    /** The point to hover probe `index` at, or null when the pointer cannot reach it. */
+    point: (index) => {
+      const control = find(probes[index]);
+      if (!control || control.disabled) return null;
+      const rect = (shownPart(control) ?? control).getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      return hit && control.closest("tr").contains(hit) ? { x, y } : null;
+    },
+    hovered: (index) => {
+      const control = find(probes[index]);
+      return control ? cuts(control, "under the pointer") : [];
+    },
+  };
+  return probes.length;
+}
+
+/**
+ * A control in a table cell is drawn whole at rest, under the pointer and with its
+ * keyboard focus ring: no box inside the cell clips it, and the cell itself clips only
+ * past its padding. Text clips at its own edge; a clip at that edge also cut the top
+ * border off every row button that lifts on hover, and the copy button, link and
+ * switch of every address and switch cell. A token cell's row actions also fit the
+ * width its identity yields for them.
+ */
+async function assertCellControlsWhole(page, label) {
+  const still = await page.addStyleTag({
+    content: "*, *::before, *::after { transition: none !important; animation: none !important; }",
+  });
+  await page.mouse.move(0, 0);
+  const count = await page.evaluate(installCellProbe);
+  const found = await page.evaluate(() => [
+    ...window.__cellProbe.crowded,
+    ...window.__cellProbe.rest(),
+  ]);
+  for (let index = 0; index < count; index += 1) {
+    const point = await page.evaluate((at) => window.__cellProbe.point(at), index);
+    if (!point) continue;
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.move(point.x + 0.5, point.y);
+    found.push(...(await page.evaluate((at) => window.__cellProbe.hovered(at), index)));
+  }
+  await page.mouse.move(0, 0);
+  // Tab is a navigation key, so the page draws focus rings from here on.
+  await page.keyboard.press("Tab");
+  found.push(...(await page.evaluate(() => window.__cellProbe.focused())));
+  await page.evaluate(() => {
+    document.activeElement?.blur?.();
+    delete window.__cellProbe;
+  });
+  await still.evaluate((node) => node.remove());
+  assert.deepEqual([...new Set(found)], [], `${label}: table cell controls cut`);
+}
+
+/**
  * A table's loading or empty message sits in the middle of the visible scroll area,
  * at either end of a table wider than its view: the state cell spans the table's
  * whole scroll width, so a message centred in the cell drifts off to one side.
@@ -559,6 +786,7 @@ describe("dashboard stability", { concurrency: 4 }, () => {
           await assertSummaryLabelsBare(session.page, `${id} ${view.name}`);
           await assertValuesWhole(session.page, `${id} ${view.name}`);
           await assertHiddenStaysHidden(session.page, `${id} ${view.name}`);
+          await assertCellControlsWhole(session.page, `${id} ${view.name}`);
         }
         if (id === "positions") {
           // A new column set opens at its start edge, not at the previous view's offset.

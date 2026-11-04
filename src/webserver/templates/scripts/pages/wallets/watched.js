@@ -73,6 +73,7 @@ export function createWatchedWallets({
       grow: true,
       sortable: true,
       minWidth: addressFloorWidth() + 24,
+      wrap: false,
       render: (value, row) =>
         renderNamedAddress(row.label || I18n.t("wallets-watched-unlabelled"), row.address),
     },

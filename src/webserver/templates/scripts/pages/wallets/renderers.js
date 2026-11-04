@@ -115,6 +115,7 @@ export function createWalletRenderers({
       grow: true,
       sortable: true,
       minWidth: TOKEN_CELL_MIN_WIDTH,
+      wrap: false,
       render: (value, row) =>
         renderTokenCell(row.mint, { symbol: row.symbol, name: row.name, logoUrl: row.logo_url }),
     },
@@ -167,6 +168,7 @@ export function createWalletRenderers({
       grow: true,
       sortable: true,
       minWidth: addressFloorWidth() + 24,
+      wrap: false,
       render: (value, row) => renderNamedAddress(walletName(row), row.address),
     },
     {

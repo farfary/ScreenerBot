@@ -14,7 +14,7 @@ import { renderStateView } from "../ui/state_view.js";
 import { playToggleOn, playToggleOff, playSuccess, playError } from "../core/sounds.js";
 import { ChatWidget } from "../core/chat_widget.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
-import { renderTokenCell, resolveTokenCells } from "../ui/token_identity.js";
+import { TOKEN_CELL_MIN_WIDTH, renderTokenCell, resolveTokenCells } from "../ui/token_identity.js";
 import { formatLatencyMs, formatPercentValue } from "../core/format.js";
 import { LLM_PROVIDER_LABELS } from "../ui/llm_provider.js";
 
@@ -716,7 +716,7 @@ function createLifecycle() {
       {
         id: "token",
         label: I18n.t("assistant-history-column-token"),
-        minWidth: "content",
+        minWidth: TOKEN_CELL_MIN_WIDTH,
         wrap: false,
         render: (_value, row) => renderTokenCell(row.mint, { symbol: row.symbol }),
       },

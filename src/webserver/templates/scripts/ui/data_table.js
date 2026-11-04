@@ -101,7 +101,10 @@
  * - fallback: Default value for null/undefined (optional, default: "—")
  * - wrap: Text wrapping behavior (optional)
  *   - true: Allow multi-line text wrapping (word-break)
- *   - false: Single line with ellipsis truncation (recommended for long text)
+ *   - false: Single line with ellipsis truncation (recommended for long text), and
+ *     the cell is never line-clamped: required for a cell that renders a component
+ *     or a control (token identity, address, switch), which truncates itself and
+ *     whose copy button, link or switch the clamp's clip would cut
  *   - undefined: Default behavior (respects uniformRowHeight if set)
  *
  * Image Column Configuration (type: 'image'):
@@ -1673,10 +1676,11 @@ export class DataTable {
   }
 
   /**
-   * True when a cell of `col` is clamped to the uniform row height. A no-wrap column
-   * truncates through its own CSS (nowrap plus ellipsis), and the actions column is a
-   * row of buttons: clamping it blockifies the buttons, so the content floor no longer
-   * sees their width and the column cuts the first one off.
+   * True when a cell of `col` is clamped to the uniform row height. Only text is
+   * clamped, because the clamp clips at the text's edge. A no-wrap column truncates
+   * through its own CSS (nowrap plus ellipsis), and the actions column is a row of
+   * buttons: clamping it blockifies the buttons, so the content floor no longer sees
+   * their width and the column cuts the first one off.
    */
   _clampsCell(col) {
     return Boolean(this.options.uniformRowHeight) && col.wrap !== false && col.type !== "actions";

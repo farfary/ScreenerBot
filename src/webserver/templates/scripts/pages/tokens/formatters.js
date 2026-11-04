@@ -129,7 +129,7 @@ export function tokenCell(row) {
     logoUrl: row.logo_url || row.image_url,
     badges: boostMark,
     actions: `${tradeActions}
-      <button class="btn links-dropdown-trigger" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-external-links", "title"), I18n.attr("tokens-cell-external-links", "aria-label"))} type="button"><i class="icon-external-link"></i></button>`,
+      <button class="btn-icon row-action links-dropdown-trigger" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-external-links", "title"), I18n.attr("tokens-cell-external-links", "aria-label"))} type="button"><i class="icon-external-link"></i></button>`,
     actionCount: row.has_open_position ? 3 : 2,
     enlargeLogo: true,
   });

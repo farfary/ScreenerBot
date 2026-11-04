@@ -513,10 +513,14 @@ body.dt-column-resizing * {
   white-space: normal;
 }
 
-/* Flex cells in uniform rows - constrain height */
+/* A cell's lone block (a component, the row actions) is capped at the row's content
+   height: a table cell grows with its content whatever its own height says, so the cap
+   is what keeps every row one height. The cap never clips. The cell clips at its padding
+   box, and that padding is where a control's hover lift, shadow and focus ring paint; a
+   clip at the content edge cuts a row button's top border as it lifts. Only text clips
+   tighter, inside `.dt-cell-clamp`. */
 .data-table.uniform-rows td:where(:not(.dt-state-cell)) > div:first-child:last-child {
   max-height: var(--dt-row-content-height);
-  overflow: hidden;
 }
 
 /* Text wrapping support */

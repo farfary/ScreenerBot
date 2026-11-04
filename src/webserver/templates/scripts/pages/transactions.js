@@ -504,6 +504,7 @@ function createLifecycle() {
           label: I18n.t("transactions-col-token"),
           grow: true,
           minWidth: TOKEN_CELL_MIN_WIDTH,
+          wrap: false,
           render: (value, row) =>
             renderTokenCell(row?.token_mint?.trim(), { symbol: row?.token_symbol?.trim() }),
         },
@@ -529,6 +530,7 @@ function createLifecycle() {
           id: "signature",
           label: I18n.t("transactions-col-signature"),
           minWidth: 130,
+          wrap: false,
           render: (value) => renderSignature(value),
         },
       ];

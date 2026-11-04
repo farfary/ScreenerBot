@@ -65,6 +65,7 @@ export function createCompare(page) {
       grow: true,
       sortable: true,
       minWidth: addressFloorWidth() + 24,
+      wrap: false,
       render: (_value, row) => renderNamedAddress(taskName(row), row.target_address),
       sortFn: (a, b) => taskName(a).localeCompare(taskName(b)),
     },

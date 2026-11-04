@@ -344,7 +344,9 @@ a.ti-address-value:hover {
    actions fade in over the cell's end and the identity yields their width, so the
    ellipsis always reflects the space actually left. Coarse pointers keep them shown.
    The actions only fade: an offset at rest would sit past the cell's end and widen
-   its scroll width beyond the column. */
+   its scroll width beyond the column. The row cell does not clip: its actions' focus
+   rings paint into the table cell's padding, which clips, and the text ellipsizes in
+   its own lines. */
 .ti-row-cell {
   --ti-row-actions-width: 0px;
 
@@ -354,7 +356,6 @@ a.ti-address-value:hover {
   width: 100%;
   min-width: 0;
   max-height: 100%;
-  overflow: hidden;
 }
 
 .ti-row-cell--actions-1 {
@@ -379,12 +380,22 @@ a.ti-address-value:hover {
   transition: padding-inline-end 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Tags that cannot shrink stop at the meta's end instead of running under the row
+   actions. The clip reaches one focus ring past the text on every side, so the ring of
+   a tag that is a button (a copy task's origin, on the bottom line) is never cut: the
+   padding that widens the clip box is given back by an equal negative margin, so the
+   layout is unchanged. `overflow-clip-margin` cannot carry it; Chromium drops a
+   `calc()` there. */
 .ti-row-cell__meta {
+  --ti-meta-ring-room: calc(2 * var(--focus-ring-width));
+
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
+  margin: calc(-1 * var(--ti-meta-ring-room));
+  padding: var(--ti-meta-ring-room);
+  overflow: clip;
 }
 
 /* Each line shrinks its own text and ellipses it; badges and tags beside the text
@@ -485,4 +496,9 @@ a.ti-address-value:hover {
 
 .ti-row-cell__actions .btn-icon:is([data-action="sell"], .danger):not(:disabled) {
   color: var(--error-color);
+}
+
+/* A row control whose menu is open keeps its hover colour while the menu is up. */
+.ti-row-cell__actions .btn-icon.active {
+  color: var(--text-primary);
 }

@@ -291,6 +291,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       label: esc(I18n.t("strategies-col-on")),
       minWidth: "content",
       floating: true,
+      wrap: false,
       render: (_value, row) => switchCell(row),
     };
     const strategy = {

@@ -396,6 +396,7 @@ function createLifecycle() {
           id: "mint",
           label: I18n.t("events-col-token"),
           minWidth: TOKEN_CELL_MIN_WIDTH,
+          wrap: false,
           render: (value) => renderTokenCell(value?.trim()),
         },
         {
