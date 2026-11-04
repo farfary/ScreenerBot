@@ -52,7 +52,7 @@ use screenerbot::chains::solana::swaps::direct::venues::meteora_dlmm::{
     event_authority_address, oracle_address as dlmm_oracle_address,
 };
 use screenerbot::chains::solana::swaps::direct::venues::orca_whirlpool::{
-    candidate_tick_array_starts, tick_array_address as orca_tick_array_address,
+    swap_tick_array_starts, tick_array_address as orca_tick_array_address,
 };
 use screenerbot::chains::solana::swaps::direct::{
     self, DirectSwapIntent, FeeSide, PoolMarket, SwapAccounts,
@@ -365,9 +365,7 @@ fn the_orca_whirlpool_captured_tick_arrays_hold_real_ticks_not_padding() {
 
     let mut ticks = Vec::new();
     for zero_for_one in [true, false] {
-        for start in
-            candidate_tick_array_starts(state.tick_current, state.tick_spacing, zero_for_one)
-        {
+        for start in swap_tick_array_starts(state.tick_current, state.tick_spacing, zero_for_one) {
             let address = orca_tick_array_address(&program, &fixture.pool, start);
             if let Some(account) = fixture.accounts.get(&address.to_string()) {
                 ticks.extend(

@@ -94,6 +94,18 @@ const DAMM_V2_BOTH_TOKEN_POOL: &str = "6nA26rxJxWZicm5bFnTpjUcN6jCrybqLuRrApKVER
 /// checked against the pool's current `base_fee` before the venue.
 const DAMM_V2_HIGH_FEE_POOL: &str = "2U6aUQSwoFt8LTeXXbezphKC6fb3rZVauifBafUWGyjQ";
 
+/// Orca Whirlpool, JUP/SOL, tick spacing 16, JUP as token A. On 2026-11-04 the
+/// three tick arrays below its tick existed but held no initialised tick, so a
+/// sell (a->b) only quotes when the walk crosses empty arrays at constant
+/// liquidity to the end of the programme's own three-array sequence.
+const ORCA_EMPTY_ARRAYS_POOL: &str = "EgcgMpmGnGvU3Wa8T6gvmEN6pfSXXSxPTbYNEHVh8cZk";
+
+/// Orca Whirlpool, SOL as token A, tick spacing 8. On 2026-11-04 the third
+/// array above its tick had never been created, so a sell (b->a) only executes
+/// when that slot names the un-created PDA, which the programme reads as a
+/// zeroed array.
+const ORCA_MISSING_ARRAY_POOL: &str = "Ckp1kwZqosaLU1h3zWtuaMBubyWM7LX3cxYezRVin7p2";
+
 /// Meteora DLMM, SOL/USDC, bin step 4 (0.04% base fee). The deepest DLMM pool
 /// on mainnet -- also, per `venues.md`/module docs, one that trades often
 /// enough that the offline vault-delta replay could not be completed against
@@ -1546,6 +1558,24 @@ async fn a_damm_v2_fee_above_half_is_quoted_exactly_in_both_directions() {
     simulate_with_no_slippage_room(DAMM_V2_HIGH_FEE_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS)
         .await;
     simulate_sell_with_no_slippage_room(DAMM_V2_HIGH_FEE_POOL, "damm v2 (60% fee)").await;
+}
+
+/// A Whirlpool swap through tick arrays with no initialised tick, or through
+/// one never created, is quoted to the raw unit in both directions. Pool state
+/// moves on, so these pools prove exactness always and the sparse shape only
+/// while it lasts; `orca_whirlpool`'s unit tests pin the shape itself.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn an_orca_swap_through_empty_or_missing_tick_arrays_is_exact() {
+    let _guard = common::isolated_env();
+    for (pool, label) in [
+        (ORCA_EMPTY_ARRAYS_POOL, "orca whirlpool (empty arrays)"),
+        (ORCA_MISSING_ARRAY_POOL, "orca whirlpool (missing array)"),
+    ] {
+        let token = paired_token(pool).await;
+        simulate_with_no_slippage_room(pool, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+        simulate_sell_with_no_slippage_room(pool, label).await;
+    }
 }
 
 /// DAMM v2 has never had a real sell execute against it -- the venue is green on

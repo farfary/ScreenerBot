@@ -38,12 +38,25 @@
 //!
 //! # Tick arrays have NO on-chain bitmap
 //!
-//! Unlike Raydium CLMM, `Whirlpool` carries no bitmap field at all. Which tick
-//! arrays exist can only be learned by fetching the arithmetically-derived
-//! candidates and seeing which ones the RPC actually returns — an account
-//! that does not exist is simply left out of the swap, and the walk refuses
-//! once it runs out of loaded ticks, the same "loaded tick arrays cover only
-//! so much" contract Raydium CLMM already uses.
+//! Unlike Raydium CLMM, `Whirlpool` carries no bitmap field at all, and it
+//! needs none: the programme's `SparseSwapTickSequenceBuilder` (used by both
+//! `swap` and `swap_v2`) derives the three start indices a swap walks from the
+//! current tick alone — `[0, -1, -2]` arrays away on a→b, `[0, 1, 2]` on b→a,
+//! or `[1, 2, 3]` when `tick_current + tick_spacing` already reaches the next
+//! array — and drops any start outside the valid tick range. For each start it
+//! takes the initialised account, OR the un-created PDA passed in its place,
+//! which it treats as an all-zero array; the first start with neither ends
+//! the sequence. So every slot names the derived PDA whether or not the
+//! account exists: an absent array holds no initialised tick, and liquidity is
+//! constant across it.
+//!
+//! Inside that sequence the programme steps to the next initialised tick, and
+//! when none is left, to the sequence's own end — the last array's start on
+//! a→b, its start plus `88 × tick_spacing - 1` on b→a, the global min or max
+//! tick when the last array holds it — with liquidity unchanged. Input still
+//! left there fails the swap (`TickArraySequenceInvalidIndex`), so the quote
+//! walks the same ticks, ends at the same place and refuses the same sizes
+//! (`swap_tick_array_starts`, `sequence_end_tick`).
 //!
 //! **The tick-array PDA seed is the DECIMAL STRING of `start_tick_index`, not
 //! its big-endian bytes.** Raydium CLMM uses `start_index.to_be_bytes()`;
@@ -85,10 +98,10 @@
 //! The quote walks the real tick-by-tick swap loop the programme itself runs,
 //! delegated to `clmm_ticks::walk_ticks` — the same program-agnostic
 //! constant-liquidity, Q64.64 step math Raydium CLMM's venue uses. A size that
-//! would cross beyond the last tick array `load()` fetched is refused outright
-//! rather than assumed constant past that point.
+//! would travel past the end of the three-array sequence is refused outright,
+//! exactly where the programme itself would fail it.
 
-use super::clmm_ticks::{ticks_ahead, walk_ticks};
+use super::clmm_ticks::{ticks_ahead, walk_ticks, MAX_TICK, MIN_TICK};
 use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{MEMO_PROGRAM_ID, ORCA_WHIRLPOOL_PROGRAM_ID};
 use crate::chains::solana::layout::{mint_decimals, token_account_amount};
@@ -172,14 +185,12 @@ impl PoolVenue for OrcaWhirlpoolVenue {
         let program = whirlpool_program_id();
         let oracle = oracle_address(&program, pool);
 
-        // No pool-level bitmap exists for a Whirlpool -- unlike Raydium CLMM,
-        // the only way to learn which tick arrays are initialised is to fetch
-        // the arithmetically-derived candidates and see which the RPC
-        // actually returns.
+        // The arrays either direction's swap walks, fetched for their
+        // initialised ticks; one that does not exist holds none.
         let mut tick_array_starts: Vec<i32> = Vec::new();
         for zero_for_one in [true, false] {
             for start in
-                candidate_tick_array_starts(state.tick_current, state.tick_spacing, zero_for_one)
+                swap_tick_array_starts(state.tick_current, state.tick_spacing, zero_for_one)
             {
                 if !tick_array_starts.contains(&start) {
                     tick_array_starts.push(start);
@@ -265,18 +276,15 @@ impl PoolVenue for OrcaWhirlpoolVenue {
             }
         }
 
-        // Every tick array actually returned by the batch, decoded into its
-        // initialised ticks. An array the RPC did not return is simply not
-        // there to decode -- it is not a load error, because the swap may
-        // never reach it.
+        // Every tick array the batch returned, decoded into its initialised
+        // ticks. An array that does not exist is the programme's zeroed
+        // array, not a load error.
         let mut ticks: Vec<InitializedTick> = Vec::new();
-        let mut available_tick_array_starts: Vec<i32> = Vec::new();
         for (offset, address) in tick_array_addresses.iter().enumerate() {
             let Some(Some(account)) = accounts.get(fixed_addresses.len() + offset) else {
                 continue;
             };
             let start = tick_array_starts[offset];
-            available_tick_array_starts.push(start);
             if let Some(decoded) = decode_tick_array(&account.data, start, state.tick_spacing) {
                 ticks.extend(decoded);
             } else {
@@ -288,13 +296,6 @@ impl PoolVenue for OrcaWhirlpoolVenue {
         }
         ticks.sort_by_key(|tick| tick.tick);
         ticks.dedup_by_key(|tick| tick.tick);
-
-        if available_tick_array_starts.is_empty() {
-            return Err(DirectSwapError::PoolNotTradable {
-                pool: *pool,
-                detail: "not one tick array around the current tick exists on chain".to_owned(),
-            });
-        }
 
         Ok(Box::new(WhirlpoolMarket {
             state,
@@ -308,7 +309,6 @@ impl PoolVenue for OrcaWhirlpoolVenue {
             transfer_fee_a,
             transfer_fee_b,
             ticks,
-            available_tick_array_starts,
         }))
     }
 }
@@ -331,18 +331,10 @@ pub struct WhirlpoolMarket {
     vault_b_balance: u64,
     transfer_fee_a: Option<TransferFeeSchedule>,
     transfer_fee_b: Option<TransferFeeSchedule>,
-    /// Initialised ticks from every tick array `load()` fetched, sorted
-    /// ascending. Only ticks the swap could plausibly reach were fetched --
-    /// this is a bound on how far the walk can speak for, not a full pool
-    /// state.
+    /// Initialised ticks from the tick arrays of both directions' swap
+    /// sequences, sorted ascending: every tick a swap from the current tick
+    /// can reach, and nothing beyond it.
     ticks: Vec<InitializedTick>,
-    /// Start indices of the tick arrays that ACTUALLY EXIST on chain, out of
-    /// the candidates `load()` derived. A Whirlpool has no bitmap, so this
-    /// list is the only record of which of the three positional tick-array
-    /// accounts the instruction may name: passing a PDA nothing has ever
-    /// initialised fails the programme's own deserialisation, after the
-    /// priority fee is paid.
-    available_tick_array_starts: Vec<i32>,
 }
 
 impl WhirlpoolMarket {
@@ -360,7 +352,6 @@ impl WhirlpoolMarket {
         transfer_fee_a: Option<TransferFeeSchedule>,
         transfer_fee_b: Option<TransferFeeSchedule>,
         mut ticks: Vec<InitializedTick>,
-        available_tick_array_starts: Vec<i32>,
     ) -> Self {
         ticks.sort_by_key(|tick| tick.tick);
         ticks.dedup_by_key(|tick| tick.tick);
@@ -376,7 +367,6 @@ impl WhirlpoolMarket {
             transfer_fee_a,
             transfer_fee_b,
             ticks,
-            available_tick_array_starts,
         }
     }
 
@@ -419,28 +409,20 @@ impl WhirlpoolMarket {
         self.reserve(!input_is_a)
     }
 
-    /// The three tick-array accounts the instruction names, in the order the
-    /// programme walks them.
+    /// The three tick-array accounts the instruction names: the PDA of every
+    /// start in the swap's sequence, whether or not the account exists (the
+    /// programme reads an un-created PDA as a zeroed array; see module docs).
     ///
-    /// `swap` takes tick_array_0/1/2 as REQUIRED positional accounts, not as
-    /// optional trailing ones, so all three slots must be filled with an
-    /// account that exists. A Whirlpool publishes no bitmap, so the only
-    /// record of which candidates are real is what `load()` actually read
-    /// back; candidates it did not get are dropped here and the last real
-    /// array is repeated to fill the remaining slots. Repeating is safe and
-    /// is what Orca's own client does: the programme re-reads the same
-    /// account, and the walk has already refused any size that travels
-    /// further than the ticks we hold.
+    /// Near the edge of the tick range the sequence holds fewer than three
+    /// valid starts; the last one is repeated to fill the required positional
+    /// slots, which the programme de-duplicates by key.
     fn tick_array_accounts(&self, zero_for_one: bool) -> Vec<Pubkey> {
         let program = whirlpool_program_id();
-        let mut starts: Vec<i32> = candidate_tick_array_starts(
+        let mut starts = swap_tick_array_starts(
             self.state.tick_current,
             self.state.tick_spacing,
             zero_for_one,
-        )
-        .into_iter()
-        .filter(|start| self.available_tick_array_starts.contains(start))
-        .collect();
+        );
 
         let Some(last) = starts.last().copied() else {
             return Vec::new();
@@ -456,8 +438,38 @@ impl WhirlpoolMarket {
             .collect()
     }
 
+    /// Walk the swap over exactly the ticks the programme can reach: the
+    /// initialised ticks inside the sequence's arrays, then the sequence's
+    /// own end, which carries no liquidity change.
     fn walk(&self, zero_for_one: bool, amount_in: u64) -> DirectSwapResult<(u64, u64, u128)> {
-        let candidates = ticks_ahead(&self.ticks, self.state.tick_current, zero_for_one);
+        let starts = swap_tick_array_starts(
+            self.state.tick_current,
+            self.state.tick_spacing,
+            zero_for_one,
+        );
+        let (Some(&first), Some(&last)) = (starts.first(), starts.last()) else {
+            return Err(DirectSwapError::InsufficientLiquidity {
+                pool: self.state.pool,
+                amount_in,
+                detail: "the current tick leaves no tick array to swap through".to_owned(),
+            });
+        };
+        let span = TICK_ARRAY_SIZE * (self.state.tick_spacing as i32);
+        let (low, high) = (first.min(last), first.max(last).saturating_add(span));
+
+        let mut candidates: Vec<InitializedTick> =
+            ticks_ahead(&self.ticks, self.state.tick_current, zero_for_one)
+                .into_iter()
+                .filter(|tick| tick.tick >= low && tick.tick < high)
+                .collect();
+        let end = sequence_end_tick(last, self.state.tick_spacing, zero_for_one);
+        if candidates.last().map(|tick| tick.tick) != Some(end) {
+            candidates.push(InitializedTick {
+                tick: end,
+                liquidity_net: 0,
+            });
+        }
+
         walk_ticks(
             self.state.pool,
             &candidates,
@@ -587,15 +599,14 @@ impl PoolMarket for WhirlpoolMarket {
             });
         }
 
-        // Empty means the array holding the current tick does not exist on
-        // chain in this direction, so there is nothing valid to name in the
-        // three required slots.
+        // Empty only when the current tick leaves no valid start in this
+        // direction, so there is nothing to name in the three required slots.
         let tick_arrays = self.tick_array_accounts(input_is_a);
         if tick_arrays.len() != TICK_ARRAYS_PER_SWAP {
             return Err(DirectSwapError::InsufficientLiquidity {
                 pool: self.state.pool,
                 amount_in,
-                detail: "no tick array in the swap direction exists on chain".to_owned(),
+                detail: "the current tick leaves no tick array to swap through".to_owned(),
             });
         }
 
@@ -705,11 +716,13 @@ pub fn tick_array_start_index(tick: i32, tick_spacing: u16) -> i32 {
     index * span
 }
 
-/// The tick-array starts a swap in this direction might touch, walking
-/// outward from the array holding the current tick. There is no bitmap to
-/// consult -- `load()` fetches these candidates and keeps only the ones that
-/// actually exist.
-pub fn candidate_tick_array_starts(
+/// The tick-array starts a swap in this direction walks, in order: the
+/// programme's own `get_start_tick_indexes`. On b→a the sequence begins one
+/// array further up when `tick_current + tick_spacing` already reaches the
+/// next array, because no tick above the current one is left in its own.
+/// Starts outside the valid range are dropped, so the edge of the tick range
+/// yields fewer than three.
+pub fn swap_tick_array_starts(
     tick_current: i32,
     tick_spacing: u16,
     zero_for_one: bool,
@@ -718,17 +731,39 @@ pub fn candidate_tick_array_starts(
     if span == 0 {
         return Vec::new();
     }
-    let step = if zero_for_one { -span } else { span };
-    let mut starts = Vec::with_capacity(TICK_ARRAYS_PER_SWAP);
-    let mut start = tick_array_start_index(tick_current, tick_spacing);
-    for _ in 0..TICK_ARRAYS_PER_SWAP {
-        starts.push(start);
-        let Some(next) = start.checked_add(step) else {
-            break;
-        };
-        start = next;
+    let base = tick_array_start_index(tick_current, tick_spacing);
+    let offsets: [i32; TICK_ARRAYS_PER_SWAP] = if zero_for_one {
+        [0, -1, -2]
+    } else if tick_current.saturating_add(tick_spacing as i32) >= base.saturating_add(span) {
+        [1, 2, 3]
+    } else {
+        [0, 1, 2]
+    };
+    let lowest_valid = tick_array_start_index(MIN_TICK, tick_spacing);
+    offsets
+        .iter()
+        .filter_map(|offset| base.checked_add(offset.checked_mul(span)?))
+        .filter(|start| (lowest_valid..=MAX_TICK).contains(start))
+        .collect()
+}
+
+/// Where the programme's walk stops when no initialised tick is left in the
+/// sequence whose last array starts at `last_start`: that array's first tick
+/// on a→b, its last tick on b→a, or the global min or max tick when the array
+/// holds it.
+pub fn sequence_end_tick(last_start: i32, tick_spacing: u16, zero_for_one: bool) -> i32 {
+    let span = TICK_ARRAY_SIZE * (tick_spacing as i32);
+    if zero_for_one {
+        if last_start <= MIN_TICK {
+            MIN_TICK
+        } else {
+            last_start
+        }
+    } else if last_start.saturating_add(span) > MAX_TICK {
+        MAX_TICK
+    } else {
+        last_start + span - 1
     }
-    starts
 }
 
 /// The PDA of a tick array account. The seed is the DECIMAL STRING of
@@ -788,16 +823,6 @@ mod tests {
             mint_b,
             vault_b: Pubkey::new_unique(),
         };
-        // Every candidate array counts as present: these tests exercise the
-        // walk and the quote, not which accounts the instruction names.
-        let mut available: Vec<i32> = Vec::new();
-        for zero_for_one in [true, false] {
-            for start in candidate_tick_array_starts(tick_current, tick_spacing, zero_for_one) {
-                if !available.contains(&start) {
-                    available.push(start);
-                }
-            }
-        }
         WhirlpoolMarket::new(
             state,
             Pubkey::new_unique(),
@@ -809,17 +834,31 @@ mod tests {
             None,
             None,
             ticks,
-            available,
         )
+    }
+
+    /// The input that moves the price from `m`'s current tick to `tick` at
+    /// the pool's liquidity, ignoring fees.
+    fn input_to(m: &WhirlpoolMarket, zero_for_one: bool, tick: i32) -> u128 {
+        super::super::clmm_ticks::input_for_move(
+            zero_for_one,
+            m.state.liquidity,
+            m.state.sqrt_price,
+            get_sqrt_price_at_tick(tick).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn refusal_detail(result: DirectSwapResult<(u64, u64, u128)>) -> String {
+        match result.expect_err("the size must be refused") {
+            DirectSwapError::InsufficientLiquidity { detail, .. } => detail,
+            other => panic!("expected InsufficientLiquidity, got {other:?}"),
+        }
     }
 
     #[test]
     fn a_swap_entirely_within_one_liquidity_region_never_crosses_a_tick() {
-        let far_tick = InitializedTick {
-            tick: -10_000,
-            liquidity_net: 0,
-        };
-        let m = market(1_000_000_000_000, 0, 4, 0, vec![far_tick]);
+        let m = market(1_000_000_000_000, 0, 4, 0, Vec::new());
         let (out, fee, sqrt_end) = m.walk(true, 1_000_000).expect("stays in range");
         assert!(out > 0, "a real swap must produce something");
         assert_eq!(fee, 0, "the fee rate here is zero");
@@ -835,25 +874,13 @@ mod tests {
             tick: -20,
             liquidity_net: 400_000_000_000,
         };
-        let safety_net = InitializedTick {
-            tick: -100_000,
-            liquidity_net: 0,
-        };
         let initial_liquidity = 1_000_000_000_000u128;
-        let m = market(initial_liquidity, 0, 4, 0, vec![crossed, safety_net]);
-
-        let amount_to_cross = super::super::clmm_ticks::input_for_move(
-            true,
-            initial_liquidity,
-            m.state.sqrt_price,
-            get_sqrt_price_at_tick(-20).unwrap(),
-        )
-        .unwrap();
-        let amount_in = (amount_to_cross + 5_000_000_000) as u64;
+        let m = market(initial_liquidity, 0, 4, 0, vec![crossed]);
+        let amount_in = (input_to(&m, true, -20) + 5_000_000_000) as u64;
 
         let (out, _fee, sqrt_end) = m
             .walk(true, amount_in)
-            .expect("covered by the safety net tick");
+            .expect("the size ends inside the swap's tick arrays");
         let naive_out = super::super::clmm_ticks::output_for_move(
             true,
             initial_liquidity,
@@ -870,33 +897,109 @@ mod tests {
     }
 
     #[test]
-    fn a_swap_that_exhausts_every_loaded_tick_array_refuses_rather_than_guesses() {
-        let only_tick = InitializedTick {
-            tick: -20,
-            liquidity_net: 100,
-        };
-        let m = market(1_000_000_000_000, 0, 4, 0, vec![only_tick]);
-        let amount_to_cross = super::super::clmm_ticks::input_for_move(
-            true,
-            1_000_000_000_000,
-            m.state.sqrt_price,
-            get_sqrt_price_at_tick(-20).unwrap(),
-        )
-        .unwrap();
-        let amount_in = (amount_to_cross * 10) as u64;
+    fn a_swap_with_no_initialised_tick_ahead_walks_to_the_end_of_its_arrays() {
+        // A live JUP/SOL pool held three existing but empty arrays below its
+        // tick: liquidity is constant across them, and the programme swaps
+        // through them to the sequence's end.
+        let m = market(7_811_957_552, 10_014, 16, 0, Vec::new());
+        let starts = swap_tick_array_starts(10_014, 16, true);
+        assert_eq!(starts, vec![9_856, 8_448, 7_040]);
+        let end = sequence_end_tick(7_040, 16, true);
 
-        let err = m
-            .walk(true, amount_in)
-            .expect_err("a size beyond every loaded tick must not be quoted");
-        match err {
-            DirectSwapError::InsufficientLiquidity { detail, .. } => {
-                assert!(
-                    detail.contains("loaded tick arrays"),
-                    "the refusal must name the real limit, got: {detail}"
-                );
-            }
-            other => panic!("expected InsufficientLiquidity, got {other:?}"),
-        }
+        let inside = (input_to(&m, true, end) - 1) as u64;
+        let (_, _, sqrt_end) = m.walk(true, inside).expect("ends before the sequence does");
+        assert!(sqrt_end > get_sqrt_price_at_tick(end).unwrap());
+
+        let beyond = (input_to(&m, true, end) + 1_000) as u64;
+        assert!(refusal_detail(m.walk(true, beyond)).contains("loaded tick arrays"));
+    }
+
+    #[test]
+    fn the_b_to_a_walk_ends_on_the_last_tick_of_its_third_array() {
+        let m = market(1_000_000_000_000, 0, 4, 0, Vec::new());
+        assert_eq!(swap_tick_array_starts(0, 4, false), vec![0, 352, 704]);
+        let end = sequence_end_tick(704, 4, false);
+        assert_eq!(end, 1_055);
+
+        let inside = (input_to(&m, false, end) - 1) as u64;
+        m.walk(false, inside)
+            .expect("ends before the sequence does");
+        let beyond = (input_to(&m, false, end) + 1_000) as u64;
+        assert!(refusal_detail(m.walk(false, beyond)).contains("loaded tick arrays"));
+    }
+
+    #[test]
+    fn a_tick_beyond_the_swaps_arrays_never_extends_the_walk() {
+        // A tick the programme cannot reach in this swap must not be crossed
+        // in the quote, or the quote speaks for liquidity the swap never sees.
+        let unreachable = InitializedTick {
+            tick: -10_000,
+            liquidity_net: 0,
+        };
+        let m = market(1_000_000_000_000, 0, 4, 0, vec![unreachable]);
+        let beyond = (input_to(&m, true, -704) * 2) as u64;
+        assert!(refusal_detail(m.walk(true, beyond)).contains("loaded tick arrays"));
+    }
+
+    #[test]
+    fn an_initialised_tick_on_the_sequence_end_is_crossed_once() {
+        let edge = InitializedTick {
+            tick: -704,
+            liquidity_net: 0,
+        };
+        let m = market(1_000_000_000_000, 0, 4, 0, vec![edge]);
+        let inside = (input_to(&m, true, -704) - 1) as u64;
+        m.walk(true, inside).expect("ends before the sequence does");
+        let beyond = (input_to(&m, true, -704) + 1_000) as u64;
+        assert!(refusal_detail(m.walk(true, beyond)).contains("loaded tick arrays"));
+    }
+
+    #[test]
+    fn the_b_to_a_sequence_shifts_when_no_tick_above_is_left_in_the_current_array() {
+        // Array 0 covers ticks 0..=351 at spacing 4; from tick 348 the next
+        // tick up is 352, already in the next array.
+        assert_eq!(swap_tick_array_starts(347, 4, false), vec![0, 352, 704]);
+        assert_eq!(swap_tick_array_starts(348, 4, false), vec![352, 704, 1_056]);
+        assert_eq!(swap_tick_array_starts(348, 4, true), vec![0, -352, -704]);
+        assert_eq!(swap_tick_array_starts(-1, 4, false), vec![0, 352, 704]);
+        assert_eq!(swap_tick_array_starts(-5, 4, false), vec![-352, 0, 352]);
+    }
+
+    #[test]
+    fn the_sequence_stops_at_the_edge_of_the_tick_range() {
+        let span = TICK_ARRAY_SIZE * 64;
+        let lowest = tick_array_start_index(MIN_TICK, 64);
+        assert_eq!(
+            swap_tick_array_starts(MIN_TICK + 10, 64, true),
+            vec![lowest],
+            "nothing below the array holding the min tick is a valid start"
+        );
+        assert_eq!(sequence_end_tick(lowest, 64, true), MIN_TICK);
+
+        let highest = tick_array_start_index(MAX_TICK, 64);
+        let starts = swap_tick_array_starts(MAX_TICK - 10, 64, false);
+        assert_eq!(starts, vec![highest]);
+        assert_eq!(sequence_end_tick(highest, 64, false), MAX_TICK);
+        assert_eq!(sequence_end_tick(highest - span, 64, false), highest - 1);
+    }
+
+    #[test]
+    fn every_slot_names_its_derived_array_whether_or_not_it_exists() {
+        let m = market(1_000_000_000_000, -26_090, 8, 0, Vec::new());
+        let program = whirlpool_program_id();
+        let expected: Vec<Pubkey> = [-26_752, -26_048, -25_344]
+            .into_iter()
+            .map(|start| tick_array_address(&program, &m.state.pool, start))
+            .collect();
+        assert_eq!(m.tick_array_accounts(false), expected);
+    }
+
+    #[test]
+    fn the_edge_of_the_range_repeats_its_one_array_into_every_slot() {
+        let m = market(1_000_000_000_000, MAX_TICK - 10, 64, 0, Vec::new());
+        let accounts = m.tick_array_accounts(false);
+        assert_eq!(accounts.len(), TICK_ARRAYS_PER_SWAP);
+        assert!(accounts.iter().all(|account| *account == accounts[0]));
     }
 
     #[test]
