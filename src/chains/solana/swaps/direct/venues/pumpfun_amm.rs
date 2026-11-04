@@ -91,7 +91,7 @@
 //! live sell's vault deltas.
 
 use super::math::{constant_product_out, price_impact_pct};
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{
     ASSOCIATED_TOKEN_PROGRAM_ID, PUMP_FUN_AMM_PROGRAM_ID, SYSTEM_PROGRAM_ID,
 };
@@ -252,6 +252,8 @@ impl PoolVenue for PumpFunAmmVenue {
                     pool: *pool,
                     detail: "pump-swap global config lists no buyback fee recipient".to_owned(),
                 })?;
+
+        refuse_transfer_hook(pool, &[base_mint_account, quote_mint_account])?;
 
         Ok(Box::new(PumpAmmMarket {
             state,

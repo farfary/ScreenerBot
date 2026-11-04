@@ -59,6 +59,18 @@ pub(crate) const VIRTUAL_POOL_DISCRIMINATOR: [u8; 8] = [213, 224, 5, 209, 98, 69
 /// `PoolConfig`'s own Anchor discriminator, confirmed the same way.
 const POOL_CONFIG_DISCRIMINATOR: [u8; 8] = [26, 108, 14, 123, 116, 230, 129, 43];
 
+/// `TransferHookPool`'s Anchor discriminator, `sha256("account:TransferHookPool")[..8]`.
+/// The programme keeps the pool of a base mint with a Token-2022 transfer hook
+/// in this separate account type, which the on-chain IDL does not list yet;
+/// the name and hash come from the programme's published source and match
+/// the first 8 bytes of live pool `3VKozsPys21y1Ydv8ZjThXuehPQfY5NaQRP922bQ2wGe`.
+const TRANSFER_HOOK_POOL_DISCRIMINATOR: [u8; 8] = [237, 219, 184, 23, 42, 189, 169, 35];
+
+/// Whether `data` is a `TransferHookPool` account rather than a `VirtualPool`.
+pub fn is_transfer_hook_pool(data: &[u8]) -> bool {
+    data.get(0..8) == Some(&TRANSFER_HOOK_POOL_DISCRIMINATOR[..])
+}
+
 /// Curve checkpoints a `PoolConfig` may carry.
 const MAX_CURVE_POINTS: usize = 20;
 
@@ -205,5 +217,15 @@ mod tests {
         data[0] ^= 1;
         assert!(VirtualPoolState::decode(Pubkey::new_unique(), &data).is_none());
         assert!(VirtualPoolState::decode(Pubkey::new_unique(), &pool_data()[..305]).is_none());
+    }
+
+    #[test]
+    fn a_transfer_hook_pool_is_told_apart_from_a_virtual_pool() {
+        let mut data = pool_data();
+        assert!(!is_transfer_hook_pool(&data));
+        data[0..8].copy_from_slice(&TRANSFER_HOOK_POOL_DISCRIMINATOR);
+        assert!(is_transfer_hook_pool(&data));
+        assert!(VirtualPoolState::decode(Pubkey::new_unique(), &data).is_none());
+        assert!(!is_transfer_hook_pool(&[]));
     }
 }

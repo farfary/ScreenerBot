@@ -164,7 +164,7 @@
 //! and does not depend on this gap.
 
 use super::math::{mul_div_ceil, mul_div_floor};
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{MEMO_PROGRAM_ID, METEORA_DLMM_PROGRAM_ID};
 use crate::chains::solana::layout::{i64_at, mint_decimals, token_account_amount};
 use crate::chains::solana::pools::layouts::meteora_dlmm::{
@@ -177,10 +177,6 @@ use crate::chains::solana::solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
 };
-use crate::chains::solana::spl_token_2022::extension::{
-    transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
-};
-use crate::chains::solana::spl_token_2022::state::Mint;
 use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::swaps::direct::venue::{
     AccountReader, PoolMarket, PoolVenue, SwapAccounts, VenueQuote,
@@ -324,17 +320,9 @@ impl PoolVenue for MeteoraDlmmVenue {
             }
         })?;
 
-        // A transfer-HOOK mint needs extra accounts this venue does not build
-        // (`remaining_accounts_info` is always sent empty). Refuse rather than
-        // send an instruction the hook will reject.
-        if mint_has_transfer_hook(mint_x_account) || mint_has_transfer_hook(mint_y_account) {
-            return Err(DirectSwapError::PoolNotTradable {
-                pool: *pool,
-                detail: "one of this pool's mints carries a Token-2022 transfer hook, which this \
-                         venue does not build accounts for"
-                    .to_owned(),
-            });
-        }
+        // `remaining_accounts_info` is always sent empty, so a hooked mint's
+        // transfer would be missing its hook accounts.
+        refuse_transfer_hook(pool, &[mint_x_account, mint_y_account])?;
 
         let transfer_fee_x = transfer_fee_schedule(mint_x_account);
         let transfer_fee_y = transfer_fee_schedule(mint_y_account);
@@ -1127,16 +1115,6 @@ fn candidate_array_indices(active_array_index: i64, swap_for_y: bool) -> Vec<i64
         index = next;
     }
     indices
-}
-
-fn mint_has_transfer_hook(mint_account: &Account) -> bool {
-    if mint_account.owner != crate::chains::solana::spl_token_2022::id() {
-        return false;
-    }
-    let Ok(state) = StateWithExtensions::<Mint>::unpack(&mint_account.data) else {
-        return false;
-    };
-    state.get_extension::<TransferHook>().is_ok()
 }
 
 /// Bin array PDA: `["bin_array", lb_pair, array_index.to_le_bytes()]`,

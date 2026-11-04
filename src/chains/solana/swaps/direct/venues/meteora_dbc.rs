@@ -186,10 +186,12 @@
 use super::math::{
     fee_amount, mul_div_ceil, mul_div_floor, mul_shr128_ceil, mul_shr128_floor, shl128_div_floor,
 };
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::METEORA_DBC_PROGRAM_ID;
 use crate::chains::solana::layout::{mint_decimals, token_account_amount};
-use crate::chains::solana::pools::layouts::meteora_dbc::{PoolConfigState, VirtualPoolState};
+use crate::chains::solana::pools::layouts::meteora_dbc::{
+    is_transfer_hook_pool, PoolConfigState, VirtualPoolState,
+};
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::solana_sdk::{
     account::Account,
@@ -247,6 +249,13 @@ impl PoolVenue for MeteoraDbcVenue {
         pool_account: &Account,
         reader: &dyn AccountReader,
     ) -> DirectSwapResult<Box<dyn PoolMarket>> {
+        if is_transfer_hook_pool(&pool_account.data) {
+            return Err(DirectSwapError::PoolNotTradable {
+                pool: *pool,
+                detail: "a transfer-hook pool, whose hook accounts this venue does not build"
+                    .to_owned(),
+            });
+        }
         let state = VirtualPoolState::decode(*pool, &pool_account.data).ok_or_else(|| {
             DirectSwapError::PoolUndecodable {
                 pool: *pool,
@@ -371,6 +380,8 @@ impl PoolVenue for MeteoraDbcVenue {
                     detail: "quote_vault is not a token account".to_owned(),
                 }
             })?;
+
+        refuse_transfer_hook(pool, &[base_mint_account, quote_mint_account])?;
 
         Ok(Box::new(DbcMarket {
             state,

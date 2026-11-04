@@ -28,7 +28,7 @@
 //! transfer fee, so the quote must be net too.
 
 use super::math::{constant_product_out, fee_amount, price_impact_pct};
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::RAYDIUM_CPMM_PROGRAM_ID;
 use crate::chains::solana::layout::token_account_amount;
 use crate::chains::solana::pools::layouts::raydium_cpmm::{CpmmFeeConfig, CpmmPoolState};
@@ -139,6 +139,7 @@ impl PoolVenue for RaydiumCpmmVenue {
                 detail: "token_1 vault is not a token account".to_owned(),
             }
         })?;
+        refuse_transfer_hook(pool, &[fetched(3)?, fetched(4)?])?;
         let transfer_fee_0 = transfer_fee_schedule(fetched(3)?);
         let transfer_fee_1 = transfer_fee_schedule(fetched(4)?);
 

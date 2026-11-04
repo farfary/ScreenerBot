@@ -89,7 +89,7 @@
 //! rather than assumed constant past that point.
 
 use super::clmm_ticks::{ticks_ahead, walk_ticks};
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{MEMO_PROGRAM_ID, ORCA_WHIRLPOOL_PROGRAM_ID};
 use crate::chains::solana::layout::{mint_decimals, token_account_amount};
 use crate::chains::solana::pools::layouts::clmm_ticks::InitializedTick;
@@ -243,6 +243,7 @@ impl PoolVenue for OrcaWhirlpoolVenue {
                 detail: "token_mint_b is not a mint account".to_owned(),
             }
         })?;
+        refuse_transfer_hook(pool, &[mint_a_account, mint_b_account])?;
         let transfer_fee_a = transfer_fee_schedule(mint_a_account);
         let transfer_fee_b = transfer_fee_schedule(mint_b_account);
 

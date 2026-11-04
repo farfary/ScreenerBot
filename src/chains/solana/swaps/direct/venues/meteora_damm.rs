@@ -39,7 +39,7 @@
 //! always charge the output.
 
 use super::math::{mul_div_ceil, mul_div_floor};
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::METEORA_DAMM_PROGRAM_ID;
 use crate::chains::solana::layout::{mint_decimals, token_account_amount};
 use crate::chains::solana::pools::layouts::meteora_damm::{BaseFee, DammPoolState, DynamicFee};
@@ -168,6 +168,7 @@ impl PoolVenue for MeteoraDammVenue {
                 detail: "token_b mint is not a mint account".to_owned(),
             })?;
 
+        refuse_transfer_hook(pool, &[mint_a, mint_b])?;
         // The fee schedulers measure against either the slot or the unix clock,
         // which is the loader's job to read so the market itself stays pure.
         let current_point = if state.activation_type == ACTIVATION_TYPE_SLOT {

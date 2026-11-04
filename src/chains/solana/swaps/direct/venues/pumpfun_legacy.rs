@@ -132,7 +132,7 @@
 //! vault.
 
 use super::math::{constant_product_out, price_impact_pct};
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_MINT, SYSTEM_PROGRAM_ID};
 use crate::chains::solana::pools::layouts::pumpfun_amm::{FeeTierTable, PumpFees};
 use crate::chains::solana::pools::layouts::pumpfun_legacy::{BondingCurve, GlobalFeeRecipients};
@@ -314,6 +314,7 @@ impl PoolVenue for PumpFunLegacyVenue {
             })?;
 
         let tiers = FeeTierTable::decode(&required(2)?.data);
+        refuse_transfer_hook(pool, &[mint_account])?;
 
         Ok(Box::new(PumpLegacyMarket {
             curve,

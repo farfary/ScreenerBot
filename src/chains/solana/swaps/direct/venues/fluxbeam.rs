@@ -137,7 +137,7 @@
 //! fully exercised by every other pool, which is the actual common case.
 
 use super::math::{fee_amount, mul_div_ceil, price_impact_pct};
-use super::token2022::transfer_fee_schedule;
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule};
 use crate::chains::solana::constants::FLUXBEAM_AMM_PROGRAM_ID;
 use crate::chains::solana::layout::mint_decimals;
 use crate::chains::solana::pools::layouts::fluxbeam::FluxbeamPoolState;
@@ -263,6 +263,8 @@ impl PoolVenue for FluxbeamVenue {
                 detail: "token_b_mint is not a mint account".to_owned(),
             }
         })?;
+
+        refuse_transfer_hook(pool, &[mint_a_account, mint_b_account])?;
 
         // Refuse rather than guess how this fork's amount_in-based fee split
         // interacts with a mint that ALSO charges its own transfer fee -- see

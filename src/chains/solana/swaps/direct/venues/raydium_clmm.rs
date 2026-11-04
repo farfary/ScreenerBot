@@ -36,7 +36,7 @@
 use super::clmm_ticks::{
     bitmap_extension_address, tick_array_address, ticks_ahead, walk_ticks, TICK_ARRAYS_PER_SWAP,
 };
-use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
+use super::token2022::{refuse_transfer_hook, transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::{MEMO_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID};
 use crate::chains::solana::layout::token_account_amount;
 use crate::chains::solana::pools::layouts::clmm_ticks::InitializedTick;
@@ -179,6 +179,7 @@ impl PoolVenue for RaydiumClmmVenue {
         let mint_1_account = required(4)?;
         let token_program_0 = mint_0_account.owner;
         let token_program_1 = mint_1_account.owner;
+        refuse_transfer_hook(pool, &[mint_0_account, mint_1_account])?;
         let transfer_fee_0 = transfer_fee_schedule(mint_0_account);
         let transfer_fee_1 = transfer_fee_schedule(mint_1_account);
 
