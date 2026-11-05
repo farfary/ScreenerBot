@@ -477,7 +477,10 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
     );
   }
 
-  /** A view holding exit strategies names the rule exits that decide before any of them. */
+  /**
+   * A view holding exit strategies names the rule exits that decide before any of them;
+   * the chip's tooltip states that order, so the bar's first row stays one line.
+   */
   function syncRuleExits() {
     const names = (overview?.rule_exits ?? [])
       .filter((rule) => rule.enabled)
@@ -486,11 +489,6 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
       {
         id: "rule-exits",
         value: names.length > 0 ? Utils.formatList(names) : ABSENT,
-        hidden: view === "entry" || names.length === 0,
-      },
-      {
-        id: "rule-exits-hint",
-        value: I18n.t("strategies-exit-hint"),
         hidden: view === "entry" || names.length === 0,
       },
     ]);
@@ -513,13 +511,12 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
   }
 
   /**
-   * Two rows: the title, the trader-level state and the actions, then the kind switch
-   * and the search.
+   * Two rows: the trader-level state and the actions, then the kind switch and the
+   * search. The bar carries no title: the Auto Trader sub-tab already names the page.
    */
   function toolbar() {
     return {
       layout: "query-row",
-      identity: { icon: "icon-puzzle", title: I18n.t("trader-tab-strategies") },
       summary: [
         {
           id: "run-notice",
@@ -533,12 +530,7 @@ export function createRoster({ container, onOpen, onCreate, onImport, onDelete, 
           id: "rule-exits",
           label: I18n.t("strategies-exit-before"),
           value: ABSENT,
-          format: "text",
-          hidden: true,
-        },
-        {
-          id: "rule-exits-hint",
-          value: I18n.t("strategies-exit-hint"),
+          tooltip: I18n.t("strategies-exit-hint"),
           format: "text",
           hidden: true,
         },

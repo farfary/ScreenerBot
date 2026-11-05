@@ -13,7 +13,8 @@
  *   from and any check not passing in its tooltip, and positions still open in the
  *   other book show under Open.
  * - An exit strategy names the entry strategies it manages, and a view holding exit
- *   strategies names the rule exits that are checked before any of them.
+ *   strategies names the rule exits that are checked before any of them, with that order
+ *   stated in the chip's tooltip rather than on a line of its own.
  * - A strategy that is off offers no mode action; one that is on offers Arm live on
  *   paper and Return to paper on live, ahead of Edit and Delete. The arm dialog grows
  *   sideways before it scrolls, asks only for ticks, and opens at its top, so the readiness
@@ -24,6 +25,8 @@
  *   server stored before it is released; only a first read that fails shows the error,
  *   with Retry.
  * - A trader-level block is stated once, in the toolbar, with the action that lifts it.
+ * - The toolbar carries no title of its own: the sub-tab already names the page. At the
+ *   smallest window its first row is one line, the actions level with the state.
  * - A row opens its strategy in the editor; its switch does not.
  * - An empty view offers New Strategy with that view's kind chosen; All chooses none and
  *   focuses the first kind, and Escape closes the dialog back to its opener.
@@ -259,20 +262,14 @@ test("a view holding exit strategies names the rule exits checked before them", 
   const chip = page.locator('#strategies-roster .table-toolbar-chip[data-summary-id="rule-exits"]');
   await chip.waitFor();
   assert.match(plain(await chip.textContent()), /Checked first\s*Stop Loss, Take Profit,? and Time Exit/);
-  const hint = page.locator(
-    '#strategies-roster .table-toolbar-chip[data-summary-id="rule-exits-hint"]'
-  );
-  await hint.waitFor();
   assert.equal(
-    plain(await hint.textContent()),
+    plain(await chip.getAttribute("title")),
     "These exit rules are checked on every position before any exit strategy"
   );
   await view(page, "entry");
   await chip.waitFor({ state: "hidden" });
-  await hint.waitFor({ state: "hidden" });
   await view(page, "exit");
   await chip.waitFor();
-  await hint.waitFor();
 });
 
 test("only a strategy that is on offers the action that changes its mode", async (t) => {
@@ -568,6 +565,30 @@ test("a trader-level block is stated once in the toolbar, with the action that l
     0,
     "no notice of the page's own"
   );
+});
+
+test("the toolbar carries no title, and at the smallest window its first row is one line", async (t) => {
+  const page = await openRoster(t, {
+    route: withNotice("trader_off"),
+    viewport: { width: 1200, height: 700 },
+  });
+  const toolbar = page.locator("#strategies-roster .data-table-toolbar");
+  await page
+    .locator('#strategies-roster .table-toolbar-chip[data-summary-id="rule-exits"]')
+    .waitFor();
+  assert.equal(await toolbar.locator(".table-toolbar-identity").count(), 0);
+  assert.equal(await toolbar.getAttribute("data-has-identity"), null);
+  const row = await toolbar.evaluate((bar) => {
+    const chips = [...bar.querySelectorAll(".table-toolbar-chip:not([hidden])")];
+    const actions = bar.querySelector(".table-toolbar__actions").getBoundingClientRect();
+    const lead = bar.querySelector(".table-toolbar__lead").getBoundingClientRect();
+    return {
+      lines: new Set(chips.map((chip) => Math.round(chip.getBoundingClientRect().top))).size,
+      offset: Math.abs(lead.top + lead.height / 2 - (actions.top + actions.height / 2)),
+    };
+  });
+  assert.equal(row.lines, 1, "every state chip on one line");
+  assert.ok(row.offset <= 2, `actions level with the state, off by ${row.offset}px`);
 });
 
 test("an install without setup offers to complete it from the toolbar", async (t) => {
