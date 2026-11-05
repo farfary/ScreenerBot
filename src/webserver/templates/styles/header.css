@@ -51,8 +51,14 @@
    no-drag box cuts it, an element without app-region does not. Overlays mount on
    body after the header (dialogs, drawers, backdrops, menus), so each open one cuts
    the header's drag area where it covers it. Persistent overlays stay laid out while
-   closed (transparent, aria-hidden), so a closed overlay must not cut. */
-.electron-macos .modern-header ~ :not([aria-hidden="true"], [hidden], [inert]) {
+   closed (transparent, aria-hidden), so a closed overlay must not cut.
+   The page area and the status bar sit beside the header, never over it, and stay out
+   of this rule: app-region is inherited, so every descendant of a no-drag element is a
+   no-drag box at its unclipped position, and content scrolled up out of view would
+   erase the whole header drag area. */
+.electron-macos
+  .modern-header
+  ~ :not([aria-hidden="true"], [hidden], [inert], .app-main, .status-bar) {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
