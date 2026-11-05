@@ -224,6 +224,9 @@ trader-stop-loss-sell-part = Jual { $part }
 trader-stop-loss-part-of-position = Sebagian posisi
 trader-stop-loss-sell-rest = Jual Sisanya
 trader-stop-loss-still-below = Masih di bawah stop
+trader-stop-loss-sells-all = Menjual seluruh posisi sekaligus
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = Menjual { $part } dulu, lalu sisanya jika harga masih di bawah stop
 trader-stop-loss-summary = Kerugian dibatasi hingga <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Catatan:</strong> Stop loss melindungi dari kerugian lebih besar dengan exit lebih awal
 

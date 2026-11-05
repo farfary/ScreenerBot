@@ -240,6 +240,9 @@ trader-stop-loss-sell-part = { $part } verkaufen
 trader-stop-loss-part-of-position = Teil der Position
 trader-stop-loss-sell-rest = Rest verkaufen
 trader-stop-loss-still-below = Weiter unter dem Stop
+trader-stop-loss-sells-all = Verkauft die ganze Position auf einmal
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = Verkauft zuerst { $part }, dann den Rest, falls der Preis weiter unter dem Stop liegt
 trader-stop-loss-summary = Verlust begrenzt auf <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Hinweis:</strong> Der Stop-Loss schützt durch frühen Ausstieg vor größeren Verlusten
 

@@ -253,6 +253,9 @@ trader-stop-loss-sell-part = { $part } を売却
 trader-stop-loss-part-of-position = ポジションの一部
 trader-stop-loss-sell-rest = 残りを売却
 trader-stop-loss-still-below = まだストップを下回っている
+trader-stop-loss-sells-all = ポジション全体を一度に売却します
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = まず { $part } を売却し、価格がまだストップを下回っていれば残りを売却します
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = 損失を <strong>{ $loss }</strong> に限定
 trader-stop-loss-note = <strong>注意:</strong> 損切りは早めにエグジットすることで、より大きな損失を防ぎます

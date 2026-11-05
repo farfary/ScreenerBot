@@ -403,9 +403,11 @@
 }
 
 /* A settings surface whose master switch is off: one plain line says so and the
-   labels of its fields are muted. Every field stays editable, since its value applies
-   the moment the switch goes back on: never `disabled`, never `pointer-events: none`.
-   The Filtering source tabs and the Auto Trader rule cards share it. */
+   labels of its fields are muted; a control governed by a switch beside it (Stop Loss
+   "Sell Part First" over the part it sells) is muted while that switch is off. Every
+   field stays editable, since its value applies the moment the switch goes back on:
+   never `disabled`, never `pointer-events: none`. The Filtering source tabs and the
+   Auto Trader rule cards share it. */
 .config-off-note {
   margin: 0;
   font-size: var(--font-size-xs);
@@ -413,7 +415,8 @@
 }
 
 .config-field--inactive .config-field-label,
-.config-group--inactive .config-label {
+.config-group--inactive .config-label,
+.config-control--inactive {
   opacity: 0.55;
 }
 

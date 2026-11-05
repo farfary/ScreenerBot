@@ -94,43 +94,6 @@
   align-self: stretch;
 }
 
-/* A field that depends on a switch sits in the switch group's impact row, directly
-   under the switch, so showing it never moves another group. It keeps the group
-   rhythm in one column; the impact boxes beside it keep their own height instead
-   of stretching to the field's. */
-.config-group-dependent {
-  display: flex;
-  flex-direction: column;
-  row-gap: 0.4rem;
-  min-width: 0;
-}
-
-.config-group-dependent > * {
-  margin: 0;
-}
-
-.config-card:has(.config-group-dependent:not([hidden]))
-  > .config-group:not(.config-group-full)
-  > .config-impact {
-  align-self: start;
-}
-
-/* A switch field puts its switch in the control row under the hint, inside the
-   same frame a number field draws (the shared input tokens, height, width cap), so
-   the column has no empty control track and the fields read as one row. */
-.toggle-field {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  box-sizing: border-box;
-  max-width: 120px;
-  min-height: var(--input-height);
-  padding: 0 0.75rem;
-  border: var(--input-border-width) solid var(--input-border-default);
-  border-radius: var(--input-border-radius);
-  background: var(--input-bg);
-}
-
 .config-card > .config-group-full {
   margin: 0;
 }
@@ -224,6 +187,12 @@
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 0.5rem;
+}
+
+/* A switch that governs the field in its control row (Sell Part First over the part
+   it sells) stands beside its title, so the two read as one name and one state. */
+.config-label-row:has(> .toggle) {
+  justify-content: flex-start;
 }
 
 .config-label {
@@ -469,9 +438,8 @@
   flex: none;
 }
 
-/* A field or example step that depends on a switch leaves the layout while the
-   switch is off; this rule outranks the flex displays above. */
-.config-group-dependent[hidden],
+/* An example step that depends on a switch leaves the layout while the switch is
+   off; this rule outranks the flex display above. */
 .timeline-step[hidden] {
   display: none;
 }

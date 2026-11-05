@@ -295,6 +295,7 @@ export function createExampleUpdaters({
     // The share the first stop-loss sale sells, as loaded from `trader.stop_loss_partial_pct`
     // or as edited; the second sale sells the rest.
     const partialPct = Number(partialPctInput?.value);
+    const partText = formatPercentValue(partialPct, { decimals: 1, includeSign: false, trim: true });
 
     // Update impact text
     const impactText = $("#stop-loss-impact");
@@ -302,6 +303,12 @@ export function createExampleUpdaters({
       impactText.textContent = Number.isFinite(threshold)
         ? I18n.t("trader-stop-loss-impact", { threshold: String(threshold) })
         : "—";
+    }
+    const partialImpact = $("#stop-loss-partial-impact");
+    if (partialImpact) {
+      partialImpact.textContent = allowPartial
+        ? I18n.t("trader-stop-loss-sells-part", { part: partText })
+        : I18n.t("trader-stop-loss-sells-all");
     }
 
     // Update example values
@@ -349,9 +356,7 @@ export function createExampleUpdaters({
     const exitTitle = $("#stop-loss-exit-title");
     if (exitTitle) {
       exitTitle.textContent = allowPartial
-        ? I18n.t("trader-stop-loss-sell-part", {
-            part: formatPercentValue(partialPct, { decimals: 1, includeSign: false, trim: true }),
-          })
+        ? I18n.t("trader-stop-loss-sell-part", { part: partText })
         : I18n.t("trader-step-auto-exit");
     }
     const exitDetail = $("#stop-loss-exit-detail");

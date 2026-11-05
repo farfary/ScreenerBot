@@ -22,16 +22,16 @@
  *   one strip does not mix "+10%" with "+32.0%" or print "1.0000 SOL".
  * - A config card never draws more columns than it has field groups, so two groups
  *   share the width instead of leaving a third empty.
- * - A field's control (a number input or a switch such as Sell Part First) sits
- *   under its hint in the control row, never in the title row beside the label, so a
- *   switch field leaves no empty track under its hint.
+ * - A field's control sits under its hint in the control row, so no column leaves
+ *   an empty track under its hint. The one control in a title row is a switch over
+ *   the field it governs (Sell Part First over the part it sells).
  * - Every rule card's worked example carries the one section title, "How It Works".
  * - The time exit tab names the rule, each of its cards names the case it closes
  *   (losing or flat positions), and its duration field says what the duration does.
  * - Every sub-tab but the full-bleed strategy editor keeps the Stats tab's side gutter,
  *   and a newly chosen sub-tab opens at its top.
- * - A switch field (Sell Part First) sits in the same frame as the number fields
- *   beside it.
+ * - Sell Part First's switch stands beside its title, unframed, and its part field
+ *   fills the control row in the frame of the number fields beside it.
  * - A best or worst trade that is not known reads as one dash, never "— —".
  * - Each config card has its own title glyph, and no field borrows another card's
  *   (Trade Size once wore DCA's coins; Take Profit, Position Sizing and Entry
@@ -210,7 +210,7 @@ test("a config card draws no more columns than it has field groups", async () =>
   assert.deepEqual(empty, []);
 });
 
-test("every field control sits under its hint, never in the title row", async () => {
+test("every field control sits under its hint; only a governing switch is in the title row", async () => {
   const misplaced = [];
   for (const id of TABS) {
     await page.click(`#subTabsContainer [data-tab-id="${id}"]`);
@@ -224,12 +224,16 @@ test("every field control sits under its hint, never in the title row", async ()
             .flatMap((group) => {
               const hint = group.querySelector(":scope > .config-hint");
               const name = group.querySelector(".config-label")?.textContent.trim();
-              const inRow = group.querySelectorAll(".config-label-row :is(input, select)").length;
+              const inRow = [...group.querySelectorAll(".config-label-row :is(input, select)")];
               const control = group.querySelector(
                 ":scope > :is(.toggle, .input-group-enhanced, select, textarea)"
               );
+              const governs =
+                control && inRow.every((el) => el.matches(".toggle > input[type='checkbox']"));
               const issues = [];
-              if (inRow) issues.push(`${tab}: ${name} has a control in its title row`);
+              if (inRow.length && !governs) {
+                issues.push(`${tab}: ${name} has a control in its title row`);
+              }
               if (hint && control) {
                 const below =
                   control.getBoundingClientRect().top >= hint.getBoundingClientRect().bottom - 1;
@@ -319,23 +323,34 @@ test("a newly chosen sub-tab opens at its top", async () => {
   assert.equal(await page.$eval("#trader-content", (el) => el.scrollTop), 0);
 });
 
-test("Sell Part First sits in the frame of the number fields beside it", async () => {
+test("Sell Part First's switch stands beside its title over its framed part field", async () => {
   await page.click('#subTabsContainer [data-tab-id="stop-loss"]');
   await page.locator("#stop-loss-tab").waitFor();
-  const frame = (selector) =>
-    page.$eval(selector, (el) => {
-      const style = getComputedStyle(el);
+  const layout = await page.evaluate(() => {
+    const rect = (el) => el.getBoundingClientRect();
+    const toggle = document.querySelector("#stop-loss-allow-partial").closest(".toggle");
+    const label = document.querySelector('.config-label[for="stop-loss-allow-partial"]');
+    const style = (el) => {
+      const css = getComputedStyle(el);
       return {
-        border: `${style.borderTopWidth} ${style.borderTopStyle} ${style.borderTopColor}`,
-        radius: style.borderTopLeftRadius,
-        background: style.backgroundColor,
-        height: Math.round(el.getBoundingClientRect().height),
+        border: `${css.borderTopWidth} ${css.borderTopStyle} ${css.borderTopColor}`,
+        radius: css.borderTopLeftRadius,
+        background: css.backgroundColor,
+        height: Math.round(rect(el).height),
       };
-    });
-  assert.deepEqual(
-    await frame("#stop-loss-allow-partial-frame"),
-    await frame("#stop-loss-threshold")
-  );
+    };
+    return {
+      inTitleRow: toggle.parentElement.classList.contains("config-label-row"),
+      gap: Math.round(rect(toggle).left - rect(label).right),
+      framed: getComputedStyle(toggle.parentElement).borderTopStyle !== "none",
+      part: style(document.querySelector("#stop-loss-partial-pct")),
+      threshold: style(document.querySelector("#stop-loss-threshold")),
+    };
+  });
+  assert.equal(layout.inTitleRow, true);
+  assert.ok(layout.gap >= 0 && layout.gap <= 16, `switch ${layout.gap}px from its title`);
+  assert.equal(layout.framed, false);
+  assert.deepEqual(layout.part, layout.threshold);
 });
 
 test("an unknown best or worst trade reads as one dash", async () => {

@@ -14,9 +14,10 @@
  *   loss) while the config keeps its own sign: Stop Loss stores a positive percent,
  *   the time exit a negative one. Load, display, edit and save round-trip at both
  *   bounds of each field.
- * - Sell Part First shows its Part to Sell field only while on; the field takes its bounds
- *   and unit from the metadata, saves through its card, and the stop-loss example sells
- *   that part at the threshold and the rest if the price stays below the stop.
+ * - Sell Part First keeps its Part to Sell field in view, muted while off; the field takes
+ *   its bounds and unit from the metadata and saves through its card, the line under it
+ *   states what the stop loss sells, and the stop-loss example sells that part at the
+ *   threshold and the rest if the price stays below the stop.
  * - The take-profit ladder edits its steps in place up to the metadata's step limit,
  *   names what it cannot save and keeps Save disabled until it can, and saves its
  *   levels and shares as their two config lists. Its group takes its accessible name
@@ -251,19 +252,24 @@ for (const { tab, id, key, bounds } of LOSS_FIELDS) {
   }
 }
 
-test("Sell Part First shows its part field and a two-step stop-loss example", async () => {
+test("Sell Part First mutes its part field while off and drives a two-step example", async () => {
   const { page, close } = await openTrader("stop-loss", {
     stop_loss_allow_partial: true,
     stop_loss_partial_pct: 40,
   });
   try {
-    const group = page.locator("#stop-loss-partial-pct-group");
+    const control = page.locator("#stop-loss-partial-pct-control");
     const part = page.locator("#stop-loss-partial-pct");
+    const muted = () => control.evaluate((el) => getComputedStyle(el).opacity !== "1");
     const text = async (selector) => plain(await page.locator(selector).textContent());
     await page.waitForFunction(
       () => document.querySelector("#stop-loss-partial-pct").value === "40"
     );
-    assert.equal(await group.isVisible(), true);
+    assert.equal(await muted(), false);
+    assert.equal(
+      await text("#stop-loss-partial-impact"),
+      "Sells 40% first, then the rest if the price stays below the stop"
+    );
     assert.deepEqual(
       await part.evaluate((el) => ({
         min: el.min,
@@ -291,7 +297,10 @@ test("Sell Part First shows its part field and a two-step stop-loss example", as
     assert.equal(request.postDataJSON().stop_loss_partial_pct, 25);
 
     await page.locator('label[for="stop-loss-allow-partial"]').click();
-    assert.equal(await group.isVisible(), false);
+    assert.equal(await part.isVisible(), true);
+    assert.equal(await part.isEditable(), true);
+    assert.equal(await muted(), true);
+    assert.equal(await text("#stop-loss-partial-impact"), "Sells the whole position at once");
     assert.equal(await page.locator("#stop-loss-rest-step").isVisible(), false);
     assert.equal(await text("#stop-loss-exit-title"), "Auto Exit");
     assert.equal(await text("#stop-loss-exit-detail"), "Full position exit");

@@ -253,6 +253,9 @@ trader-stop-loss-sell-part = 卖出 { $part }
 trader-stop-loss-part-of-position = 部分仓位
 trader-stop-loss-sell-rest = 卖出剩余部分
 trader-stop-loss-still-below = 仍低于止损位
+trader-stop-loss-sells-all = 一次性卖出全部仓位
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = 先卖出 { $part }，若价格仍低于止损位再卖出剩余部分
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = 亏损限制在 <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>注意：</strong>止损通过提前出场来防范更大的亏损

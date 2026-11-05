@@ -232,6 +232,9 @@ trader-stop-loss-sell-part = { $part } बेचें
 trader-stop-loss-part-of-position = पोज़िशन का एक हिस्सा
 trader-stop-loss-sell-rest = बाकी बेचें
 trader-stop-loss-still-below = अब भी स्टॉप से नीचे
+trader-stop-loss-sells-all = पूरी पोज़िशन एक बार में बेचता है
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = पहले { $part } बेचता है, फिर कीमत अब भी स्टॉप से नीचे हो तो बाकी बेचता है
 trader-stop-loss-summary = नुकसान <strong>{ $loss }</strong> तक सीमित
 trader-stop-loss-note = <strong>नोट:</strong> स्टॉप लॉस जल्दी एग्ज़िट करके बड़े नुकसान से बचाता है
 

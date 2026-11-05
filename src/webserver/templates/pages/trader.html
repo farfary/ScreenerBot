@@ -266,41 +266,27 @@
             </div>
           </div>
 
-          <!-- Sell Part First -->
+          <!-- Sell Part First: its switch sits beside the title; the control row holds the part
+               the first sale sells (bounds and unit from the field metadata), muted while the
+               switch is off, and the impact line states what the stop loss sells -->
           <div class="config-group">
             <div class="config-label-row">
               <label for="stop-loss-allow-partial" class="config-label">
                 <i class="icon-scissors"></i>
                 <span data-l10n-id="config-trader-stop-loss-allow-partial"></span>
               </label>
+              <label class="toggle">
+                <input type="checkbox" id="stop-loss-allow-partial" />
+                <span class="toggle-track"></span>
+              </label>
             </div>
             <p class="config-hint"></p>
-            <div class="input-group-enhanced">
-              <span class="toggle-field" id="stop-loss-allow-partial-frame">
-                <label class="toggle">
-                  <input type="checkbox" id="stop-loss-allow-partial" />
-                  <span class="toggle-track"></span>
-                </label>
-              </span>
+            <div class="input-group-enhanced" id="stop-loss-partial-pct-control">
+              <input type="number" id="stop-loss-partial-pct" class="input-large" />
+              <span class="input-unit"></span>
             </div>
-
-            <!-- Part to Sell: shown under its switch while Sell Part First is on; bounds and unit come from the field metadata -->
-            <div
-              class="config-group config-group-dependent"
-              id="stop-loss-partial-pct-group"
-              hidden
-            >
-              <div class="config-label-row">
-                <label for="stop-loss-partial-pct" class="config-label">
-                  <i class="icon-chart-pie"></i>
-                  <span data-l10n-id="config-trader-stop-loss-partial-pct"></span>
-                </label>
-              </div>
-              <p class="config-hint"></p>
-              <div class="input-group-enhanced">
-                <input type="number" id="stop-loss-partial-pct" class="input-large" />
-                <span class="input-unit"></span>
-              </div>
+            <div class="config-impact">
+              <span class="impact-text" id="stop-loss-partial-impact"></span>
             </div>
           </div>
 

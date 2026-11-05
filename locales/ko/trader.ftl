@@ -253,6 +253,9 @@ trader-stop-loss-sell-part = { $part } 매도
 trader-stop-loss-part-of-position = 포지션의 일부
 trader-stop-loss-sell-rest = 나머지 매도
 trader-stop-loss-still-below = 여전히 손절가 아래
+trader-stop-loss-sells-all = 포지션 전체를 한 번에 매도합니다
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = 먼저 { $part } 매도 후, 가격이 여전히 손절가 아래이면 나머지를 매도합니다
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = 손실이 <strong>{ $loss }</strong>로 제한됨
 trader-stop-loss-note = <strong>참고:</strong> 손절은 조기에 청산하여 더 큰 손실을 방지합니다

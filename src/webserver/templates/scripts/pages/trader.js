@@ -314,11 +314,13 @@ function createLifecycle() {
     }
   }
 
-  /** "Part to Sell" is shown only while the stop loss may sell part of the position first. */
+  /** "Part to Sell" reads muted while the stop loss sells the whole position at once. */
   function syncStopLossPartialField() {
-    const group = $("#stop-loss-partial-pct-group");
+    const control = $("#stop-loss-partial-pct-control");
     const allowPartial = $("#stop-loss-allow-partial");
-    if (group && allowPartial) group.hidden = !allowPartial.checked;
+    if (control && allowPartial) {
+      control.classList.toggle("config-control--inactive", !allowPartial.checked);
+    }
   }
 
   /**

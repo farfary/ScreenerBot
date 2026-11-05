@@ -232,6 +232,9 @@ trader-stop-loss-sell-part = { $part } Sat
 trader-stop-loss-part-of-position = Pozisyonun bir kısmı
 trader-stop-loss-sell-rest = Kalanı Sat
 trader-stop-loss-still-below = Hâlâ stop seviyesinin altında
+trader-stop-loss-sells-all = Pozisyonun tamamını tek seferde satar
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = Önce pozisyonun { $part } kadarını satar, fiyat hâlâ stop seviyesinin altındaysa kalanını satar
 trader-stop-loss-summary = Zarar şununla sınırlandı: <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>Not:</strong> Zarar durdur, erken çıkarak daha büyük zararlara karşı korur
 

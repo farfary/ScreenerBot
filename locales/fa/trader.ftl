@@ -263,6 +263,9 @@ trader-stop-loss-sell-part = فروش { $part }
 trader-stop-loss-part-of-position = بخشی از پوزیشن
 trader-stop-loss-sell-rest = فروش باقی‌مانده
 trader-stop-loss-still-below = همچنان زیر حد ضرر
+trader-stop-loss-sells-all = کل پوزیشن را یک‌جا می‌فروشد
+# $part is a formatted percentage of the position.
+trader-stop-loss-sells-part = ابتدا { $part } را می‌فروشد و اگر قیمت همچنان زیر حد ضرر بماند، باقی را هم می‌فروشد
 # $loss is the loss percentage with its sign.
 trader-stop-loss-summary = ضرر محدود به <strong>{ $loss }</strong>
 trader-stop-loss-note = <strong>نکته:</strong> حد ضرر با خروج زودهنگام، از ضررهای بزرگ‌تر جلوگیری می‌کند
