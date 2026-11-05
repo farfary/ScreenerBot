@@ -47,9 +47,14 @@ test("Stats loads on activation once and again on every switch back, before any 
     assert.equal(statsReads, 1, "activation reads the stats once");
 
     await page.click('#subTabsContainer [data-tab-id="take-profit"]');
-    const reread = page.waitForRequest((request) => request.url().includes("/api/trader/stats"), {
-      timeout: 2000,
-    });
+    // A response exists only after the host counted the read; the request event fires
+    // while the request is still on its way to the host.
+    const reread = page.waitForResponse(
+      (response) => response.url().includes("/api/trader/stats"),
+      {
+        timeout: 2000,
+      }
+    );
     await page.click('#subTabsContainer [data-tab-id="stats"]');
     await reread;
     assert.equal(statsReads, 2);
