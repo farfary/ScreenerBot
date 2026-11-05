@@ -413,11 +413,6 @@
   font-size: var(--font-size-xs);
 }
 
-.strategy-test-running.loading-spinner::before {
-  width: 14px;
-  height: 14px;
-}
-
 .strategy-test-close {
   flex-shrink: 0;
   width: 24px;

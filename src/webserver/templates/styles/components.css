@@ -383,11 +383,17 @@
   height: 20px;
 }
 
-/* Inline variant — spinner + text on one row (e.g. status lines, buttons) */
+/* Inline variant — spinner + text on one row (e.g. status lines, buttons).
+   The circle scales with the row's font size so it reads as part of the line. */
 .loading-spinner.inline {
   flex-direction: row;
   min-height: 0;
   gap: 8px;
+}
+
+.loading-spinner.inline::before {
+  width: 1.15em;
+  height: 1.15em;
 }
 
 @media (prefers-reduced-motion: reduce) {
