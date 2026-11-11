@@ -12,22 +12,38 @@
 use chrono::{DateTime, Utc};
 
 use super::runtime::WalletWatchRuntime;
-use super::types::SignaturePageItem;
+use super::types::{ReferenceVerdict, SignaturePageItem};
 use crate::wallets::Error;
 
-/// Signatures per RPC page.
-pub const PAGE_SIZE: usize = 100;
+/// Signatures per RPC page: the most `getSignaturesForAddress` returns. A busy
+/// address is referenced by thousands of other wallets' failed transactions a
+/// minute; those are skipped without a detail fetch, so a full page costs one call.
+pub const PAGE_SIZE: usize = 1000;
 
-/// Maximum RPC pages fetched for one target in one service tick.
+/// Signatures read on a target's first observation, which establishes its
+/// cursor from recent history instead of replaying the address's lifetime.
+pub const INITIAL_WINDOW: usize = 100;
+
+/// Maximum RPC pages fetched for one target in one poll.
 pub const MAX_PAGES: usize = 5;
 
-/// Safe default per target. Five hundred signatures bound each wallet's
-/// transaction detail work while still covering ordinary activity.
+/// Pages per poll for a target that names no budget of its own.
 pub const DEFAULT_PAGE_BUDGET: usize = MAX_PAGES;
 
-/// Upper bound for a user-selected per-wallet budget. Even at this limit one
-/// poll reads at most 5,000 signatures before yielding to other targets.
+/// Upper bound for a user-selected per-wallet budget.
 pub const MAX_PAGE_BUDGET: usize = 50;
+
+/// Polls of a full budget an unfinished range may span before the target
+/// pauses. An unfinished range is read on, poll after poll; only a backlog this
+/// large (a long outage on an address referenced hundreds of times a second)
+/// stops the target instead of holding an unbounded range in memory.
+pub const BACKLOG_POLLS: usize = 20;
+
+/// The most references an unfinished range of `page_budget` holds before the
+/// target pauses.
+pub fn backlog_cap(page_budget: usize) -> usize {
+    page_budget.clamp(1, MAX_PAGE_BUDGET) * PAGE_SIZE * BACKLOG_POLLS
+}
 
 /// Resolve baseline versus escalated polling without duplicating the state rule in
 /// service code or tests. `None` while a connected transport needs no baseline poll
@@ -57,6 +73,8 @@ pub fn needs_gap_fill(startup: bool, was_connected: bool, is_connected: bool) ->
 pub struct SeenSignature {
     pub signature: String,
     pub failed: bool,
+    pub block_time: Option<i64>,
+    pub verdict: ReferenceVerdict,
     pub detected_at: DateTime<Utc>,
 }
 
@@ -67,6 +85,19 @@ pub struct CompletedCatchUp {
     pub signatures: Vec<SeenSignature>,
     /// The newest signature in the range; this becomes durable after replay.
     pub newest_signature: Option<String>,
+}
+
+impl CompletedCatchUp {
+    /// References per minute across the range, from its oldest and newest block
+    /// times. `None` when fewer than two references carry a block time.
+    pub fn references_per_minute(&self) -> Option<f64> {
+        let mut times = self.signatures.iter().filter_map(|seen| seen.block_time);
+        let oldest = times.next()?;
+        let newest = times.last()?;
+        // Block times have one-second resolution: a burst inside one second spans one.
+        let span_secs = (newest - oldest).max(1) as f64;
+        Some(self.signatures.len() as f64 * 60.0 / span_secs)
+    }
 }
 
 /// In-memory progress through one range ending at a durable cursor.
@@ -115,6 +146,8 @@ impl CatchUpState {
             .extend(page.into_iter().map(|item| SeenSignature {
                 signature: item.signature,
                 failed: item.failed,
+                block_time: item.block_time,
+                verdict: item.verdict,
                 detected_at,
             }));
         // With no durable cursor there is no previously observed boundary to fill.
@@ -149,7 +182,7 @@ impl CatchUpState {
     }
 }
 
-/// Advance one target by at most `MAX_PAGES`. Returns a replay batch only after
+/// Advance one target by at most `page_budget` pages. Returns a replay batch only after
 /// the complete range back to the durable cursor is known. Paging mechanics for
 /// the chain's wire format live behind the injected `runtime`; this function
 /// stays chain-neutral.
@@ -164,15 +197,20 @@ pub(super) async fn advance_catch_up(
     }
 
     for _ in 0..page_budget.clamp(1, MAX_PAGE_BUDGET) {
+        let limit = if state.initial_window {
+            INITIAL_WINDOW
+        } else {
+            PAGE_SIZE
+        };
         let page = runtime
             .fetch_signatures_page(
                 address,
-                PAGE_SIZE,
+                limit,
                 state.before.as_deref(),
                 state.durable_until.as_deref(),
             )
             .await?;
-        state.ingest_page(page, PAGE_SIZE);
+        state.ingest_page(page, limit);
         if state.is_complete() {
             break;
         }
@@ -197,7 +235,7 @@ mod tests {
         (0..count)
             .map(|n| SignaturePageItem {
                 signature: format!("{prefix}-{n:03}"),
-                failed: false,
+                ..SignaturePageItem::default()
             })
             .collect()
     }
@@ -208,6 +246,7 @@ mod tests {
             .map(|(signature, failed)| SignaturePageItem {
                 signature: (*signature).to_owned(),
                 failed: *failed,
+                ..SignaturePageItem::default()
             })
             .collect()
     }
@@ -289,6 +328,27 @@ mod tests {
     }
 
     #[test]
+    fn a_completed_range_reports_its_reference_rate_from_block_times() {
+        let mut state = CatchUpState::new(Some("old-cursor".to_owned()));
+        state.ingest_page(
+            (0..30)
+                .map(|n| SignaturePageItem {
+                    signature: format!("s{n}"),
+                    block_time: Some(1_000 - n / 10),
+                    ..SignaturePageItem::default()
+                })
+                .collect(),
+            PAGE_SIZE,
+        );
+        let completed = state.completed().expect("short page completes");
+        assert_eq!(completed.references_per_minute(), Some(30.0 * 60.0 / 2.0));
+
+        let mut sparse = CatchUpState::new(Some("old-cursor".to_owned()));
+        sparse.ingest_page(signatures("one", 1), PAGE_SIZE);
+        assert_eq!(sparse.completed().unwrap().references_per_minute(), None);
+    }
+
+    #[test]
     fn cadence_and_gap_fill_follow_connection_state() {
         assert_eq!(cadence_secs(true, true, 30, 3), Some(30));
         assert_eq!(cadence_secs(false, true, 30, 3), Some(3));
@@ -324,6 +384,41 @@ mod tests {
 
         assert_eq!(names(&completed), ["older", "newest"]);
         assert_eq!(completed.newest_signature.as_deref(), Some("newest"));
+    }
+
+    #[tokio::test]
+    async fn the_first_observation_reads_a_small_window_and_later_ranges_full_pages() {
+        use super::super::runtime::test_support::FakeRuntime;
+
+        let runtime = FakeRuntime::new(vec!["Addr1111".to_owned()]);
+        runtime.queue_page("Addr1111", vec!["recent".to_owned()]);
+        let mut first = CatchUpState::new(None);
+        advance_catch_up(
+            runtime.as_ref(),
+            "Addr1111",
+            &mut first,
+            DEFAULT_PAGE_BUDGET,
+        )
+        .await
+        .expect("fetch succeeds")
+        .expect("the first window completes");
+
+        runtime.queue_page("Addr1111", vec!["newer".to_owned()]);
+        let mut later = CatchUpState::new(Some("recent".to_owned()));
+        advance_catch_up(
+            runtime.as_ref(),
+            "Addr1111",
+            &mut later,
+            DEFAULT_PAGE_BUDGET,
+        )
+        .await
+        .expect("fetch succeeds")
+        .expect("a short page completes the range");
+
+        assert_eq!(
+            runtime.calls.lock().unwrap().page_sizes,
+            [INITIAL_WINDOW, PAGE_SIZE]
+        );
     }
 
     #[tokio::test]

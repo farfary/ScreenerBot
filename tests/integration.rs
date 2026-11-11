@@ -99,6 +99,7 @@ mod wallet_readiness;
 mod wallet_replacement;
 mod wallet_snapshot_subject_scope;
 mod wallet_watch;
+mod wallet_watch_sweep;
 mod webserver_boot_perf;
 
 /// Every test file and test directory is declared above; a file missing from the list would

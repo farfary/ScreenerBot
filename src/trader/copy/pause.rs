@@ -29,12 +29,10 @@ impl CopyPauseReason {
                 .arg("average", UiArg::Text(seconds(*average_ms)))
                 .arg("threshold", UiArg::Text(seconds(*threshold_ms))),
             Self::WatchDetached => UiText::new(ids::COPY_PAUSE_WATCH_DETACHED),
-            Self::WatchBudgetExceeded { page_budget, .. } => {
-                UiText::new(ids::COPY_PAUSE_WATCH_BUDGET_EXCEEDED).arg(
-                    "limit",
-                    UiArg::Text((page_budget * crate::wallets::watch::PAGE_SIZE).to_string()),
-                )
-            }
+            Self::WatchBudgetExceeded {
+                signatures_checked, ..
+            } => UiText::new(ids::COPY_PAUSE_WATCH_BUDGET_EXCEEDED)
+                .arg("limit", UiArg::Text(signatures_checked.to_string())),
             Self::HeliusUnavailable => UiText::new(ids::COPY_PAUSE_HELIUS_UNAVAILABLE),
             Self::WatchProcessingFailed => UiText::new(ids::COPY_PAUSE_WATCH_PROCESSING_FAILED),
             Self::StorageRestored => UiText::new(ids::COPY_PAUSE_STORAGE_RESTORED),

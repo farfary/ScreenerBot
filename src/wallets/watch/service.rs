@@ -38,7 +38,9 @@ use super::error::WatchRuntimeError;
 use super::poller;
 use super::recorder;
 use super::runtime::WalletWatchRuntime;
-use super::types::{WalletActivity, WatchMode, WatchSource, WatchTarget};
+use super::types::{
+    ReferenceVerdict, StreamMode, WalletActivity, WatchMode, WatchSource, WatchTarget,
+};
 
 /// Bound generous enough that a burst across every watched target cannot fill the
 /// channel before the slowest consumer (a Telegram send) catches up. Bounded so a
@@ -92,6 +94,36 @@ pub(super) fn is_healthy() -> bool {
 use super::service_targets::{
     handle_overflow, reload_targets, request_gap_fill, stop_all, TargetRuntime, TargetWorker,
 };
+
+/// A range carrying more references a minute than this, and at least
+/// `OWN_CHANGES_MIN_REFERENCES` of them, moves its target's stream to its own changes.
+pub(super) const OWN_CHANGES_ABOVE_PER_MIN: f64 = 600.0;
+/// Fewer references than this in a range never move a target off `References`, so
+/// one burst of a quiet wallet's own transactions cannot.
+pub(super) const OWN_CHANGES_MIN_REFERENCES: usize = 100;
+/// A range below this many references a minute returns its target to `References`.
+pub(super) const REFERENCES_BELOW_PER_MIN: f64 = 150.0;
+
+/// The stream mode a target should use after a completed range of `references`
+/// at `per_minute`. The gap between the two thresholds keeps a target from
+/// switching back and forth around one rate.
+pub(super) fn stream_mode_for(
+    current: StreamMode,
+    references: usize,
+    per_minute: Option<f64>,
+) -> StreamMode {
+    match (current, per_minute) {
+        (StreamMode::References, Some(rate))
+            if rate > OWN_CHANGES_ABOVE_PER_MIN && references >= OWN_CHANGES_MIN_REFERENCES =>
+        {
+            StreamMode::OwnChanges
+        }
+        (StreamMode::OwnChanges, Some(rate)) if rate < REFERENCES_BELOW_PER_MIN => {
+            StreamMode::References
+        }
+        (mode, _) => mode,
+    }
+}
 
 pub(super) fn high_activity_poll_due(
     elapsed: Duration,
@@ -231,8 +263,10 @@ pub(super) async fn poll_target(
     {
         Ok(Some(completed)) => completed,
         Ok(None) => {
-            // The own wallet's history is the trading ledger: it is never skipped,
-            // it keeps paging on every tick until the range completes.
+            // An unfinished range stays open and is read on at the next tick. The own
+            // wallet's history is the trading ledger and is never skipped; another
+            // target pauses only once its backlog passes `poller::backlog_cap`.
+            target_runtime.range_open = true;
             if !target_runtime
                 .target
                 .sources
@@ -270,13 +304,23 @@ pub(super) async fn poll_target(
                         target_runtime.high_activity_failures = 1;
                         target_runtime.high_activity_failure_reason = Some(result.pause_reason());
                     }
-                } else {
+                } else if target_runtime.catch_up.as_ref().is_some_and(|state| {
+                    state.pending_len() >= poller::backlog_cap(target_runtime.target.page_budget)
+                }) {
                     handle_overflow(target_runtime, watch_db).await;
+                } else {
+                    super::service_state::update_runtime_status(
+                        &target_runtime.target.address,
+                        WatchMode::Standard,
+                        true,
+                        true,
+                    );
                 }
             }
             return;
         }
         Err(e) => {
+            target_runtime.range_open = false;
             logger::warning(
                 LogTag::WalletWatch,
                 &format!("Poll failed for {}: {e}", target_runtime.target.address),
@@ -289,6 +333,18 @@ pub(super) async fn poll_target(
         }
     };
 
+    target_runtime.range_open = false;
+    let external = !target_runtime
+        .target
+        .sources
+        .contains(&WatchSource::OwnWallet);
+    if external {
+        target_runtime.stream_mode = stream_mode_for(
+            target_runtime.stream_mode,
+            completed.signatures.len(),
+            completed.references_per_minute(),
+        );
+    }
     if target_runtime.baseline_only {
         let baseline_result = match completed.newest_signature.as_deref() {
             Some(newest) => {
@@ -318,8 +374,19 @@ pub(super) async fn poll_target(
     }
 
     let mut replay_complete = true;
+    let mut durable = completed.newest_signature.clone();
+    let mut last_handled: Option<&str> = None;
     for seen in &completed.signatures {
-        if skip_known_failed_external(&target_runtime.target, seen.failed) {
+        if external && seen.verdict == ReferenceVerdict::Unsettled {
+            // Too recent to prove quiet: the range ends before it, and the next poll
+            // reads it again once its slot has settled.
+            durable = last_handled.map(str::to_owned);
+            break;
+        }
+        last_handled = Some(&seen.signature);
+        if skip_known_failed_external(&target_runtime.target, seen.failed)
+            || (external && seen.verdict == ReferenceVerdict::Quiet)
+        {
             continue;
         }
         if process_signature(
@@ -344,7 +411,7 @@ pub(super) async fn poll_target(
         return;
     }
 
-    if let Some(newest) = completed.newest_signature.as_deref() {
+    if let Some(newest) = durable.as_deref() {
         if let Err(e) = watch_db
             .set_cursor(&target_runtime.target.address, newest)
             .await
@@ -513,6 +580,14 @@ pub(super) async fn process_signature(
         return ProcessOutcome::Terminal;
     }
 
+    if !is_own && !chain_runtime.moves_subject(&target.address, &transaction) {
+        if dedupe::commit(subject.clone(), signature).await.is_err() {
+            return ProcessOutcome::Retryable;
+        }
+        clear_pending(subject, signature).await;
+        return ProcessOutcome::Terminal;
+    }
+
     let Some((kind, skip_reason)) = chain_runtime.classify(&target.address, &transaction) else {
         if dedupe::commit(subject.clone(), signature).await.is_err() {
             return ProcessOutcome::Retryable;
@@ -560,6 +635,11 @@ pub(super) async fn process_signature(
     ProcessOutcome::Terminal
 }
 
+/// Full transactions a high-activity poll may read per page of the target's budget.
+/// Helius meters each returned transaction, so this bound is its own and does not
+/// follow the raw signature page size.
+const HIGH_ACTIVITY_ITEMS_PER_PAGE: usize = 100;
+
 /// Advance an already-selected high-activity target. Helius returns confirmed
 /// successful transactions oldest first. One cursor write per fetched page keeps
 /// SQLite work bounded; on failure it commits the last fully handled item first.
@@ -606,7 +686,7 @@ async fn poll_high_activity_target(
     let cap = target_runtime
         .target
         .page_budget
-        .saturating_mul(poller::PAGE_SIZE);
+        .saturating_mul(HIGH_ACTIVITY_ITEMS_PER_PAGE);
     let mut after = cursor;
     let mut remaining = cap;
     while remaining > 0 {

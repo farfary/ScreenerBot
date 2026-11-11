@@ -519,14 +519,23 @@ where
         return;
     }
 
-    let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
-        .arg("--exact")
-        .arg(test_name(module, test))
-        .arg("--nocapture")
-        .env(ISOLATED_CHILD_ENV, "1")
+    let status = isolated_child(module, test)
         .status()
         .expect("run isolated child");
     assert!(status.success(), "{test} failed in its child process");
+}
+
+/// The command that re-runs the suite binary as the isolated child of `test`.
+fn isolated_child(module: &str, test: &str) -> std::process::Command {
+    let mut command = std::process::Command::new(std::env::current_exe().expect("test executable"));
+    command
+        .arg("--exact")
+        .arg(test_name(module, test))
+        .arg("--nocapture")
+        // `--exact` already selects the one test; a live test is `#[ignore]` and must run too.
+        .arg("--include-ignored")
+        .env(ISOLATED_CHILD_ENV, "1");
+    command
 }
 
 /// Name of the variable through which [`run_isolated_cases`] hands a child its case.
@@ -551,11 +560,7 @@ where
     }
 
     for case in cases {
-        let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
-            .arg("--exact")
-            .arg(test_name(module, test))
-            .arg("--nocapture")
-            .env(ISOLATED_CHILD_ENV, "1")
+        let status = isolated_child(module, test)
             .env(ISOLATED_CASE_ENV, case)
             .status()
             .expect("run isolated child");
@@ -564,6 +569,54 @@ where
             "{test} failed in its child process for case {case}"
         );
     }
+}
+
+/// Like [`run_isolated_cases`], but every case's child runs at the same time and writes its
+/// standard output and error to `log_for(case)`. For a live measurement that compares the
+/// cases over one shared time window.
+pub fn run_isolated_cases_concurrently<F, Fut>(
+    module: &str,
+    test: &str,
+    cases: &[&str],
+    log_for: impl Fn(&str) -> PathBuf,
+    body: F,
+) where
+    F: FnOnce(String) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    if std::env::var_os(ISOLATED_CHILD_ENV).is_some() {
+        run_isolated_cases(module, test, cases, body);
+        return;
+    }
+
+    let children: Vec<(String, std::process::Child)> = cases
+        .iter()
+        .map(|case| {
+            let path = log_for(case);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("create the case log directory");
+            }
+            let log = std::fs::File::create(&path).expect("create the case log");
+            let child = isolated_child(module, test)
+                .env(ISOLATED_CASE_ENV, case)
+                .stdout(log.try_clone().expect("clone the case log"))
+                .stderr(log)
+                .spawn()
+                .expect("spawn isolated child");
+            ((*case).to_owned(), child)
+        })
+        .collect();
+    let failed: Vec<String> = children
+        .into_iter()
+        .filter_map(|(case, mut child)| {
+            let status = child.wait().expect("wait for isolated child");
+            (!status.success()).then_some(case)
+        })
+        .collect();
+    assert!(
+        failed.is_empty(),
+        "{test} failed in its child process for cases {failed:?}"
+    );
 }
 
 /// Take the config-mutation guard and initialise config to DEFAULTS.

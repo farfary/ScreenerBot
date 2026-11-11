@@ -20,7 +20,9 @@ use super::poller;
 use super::runtime::WalletWatchRuntime;
 use super::service::{self, ProcessOutcome};
 use super::service_state::{self, WsRetry};
-use super::types::{WatchDisableReason, WatchNotification, WatchSource, WatchTarget};
+use super::types::{
+    StreamEvent, StreamMode, WatchDisableReason, WatchNotification, WatchSource, WatchTarget,
+};
 
 const TARGET_EVENT_CAPACITY: usize = 64;
 const TARGET_COMMAND_CAPACITY: usize = 8;
@@ -31,6 +33,10 @@ pub(super) struct TargetRuntime {
     pub(super) target: WatchTarget,
     pub(super) last_poll: Instant,
     pub(super) catch_up: Option<poller::CatchUpState>,
+    /// A poll ended with more of its range to read; the next tick reads on.
+    pub(super) range_open: bool,
+    /// What the target's live stream should listen to, from its measured rate.
+    pub(super) stream_mode: StreamMode,
     pub(super) baseline_only: bool,
     pub(super) backfill: bool,
     pub(super) high_activity: bool,
@@ -81,13 +87,14 @@ impl TargetWorker {
     }
 }
 
-/// A target exceeded its bounded raw cursor range. Its persisted cursor remains
-/// intact until the user resumes it with a higher budget or Helius support.
+/// A target's unfinished range passed `poller::backlog_cap`. Its persisted cursor
+/// remains intact until the user resumes it with a higher budget or Helius support.
 pub(super) async fn handle_overflow(runtime: &mut TargetRuntime, db: &WatchDatabase) {
     let address = runtime.target.address.clone();
     let Some(state) = runtime.catch_up.take() else {
         return;
     };
+    runtime.range_open = false;
     let (pages, skipped) = (runtime.target.page_budget, state.pending_len());
     let Some(id) = runtime.target.id else {
         return;
@@ -111,7 +118,13 @@ pub(super) async fn handle_overflow(runtime: &mut TargetRuntime, db: &WatchDatab
     }
 }
 
-fn spawn_ws_forwarder(
+/// Hand the worker's chosen stream mode to its forwarder, waking it only on a change.
+fn sync_stream_mode(sender: &watch::Sender<StreamMode>, chosen: StreamMode) {
+    sender.send_if_modified(|mode| std::mem::replace(mode, chosen) != chosen);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn spawn_ws_forwarder(
     address: String,
     is_own: bool,
     tx: mpsc::Sender<WatchNotification>,
@@ -119,14 +132,15 @@ fn spawn_ws_forwarder(
     cancel: Arc<Notify>,
     active: Arc<AtomicBool>,
     overflowed: Arc<AtomicBool>,
+    mut mode: watch::Receiver<StreamMode>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut retry = Duration::from_secs(1);
         loop {
-            let result = tokio::select! { _ = cancel.notified() => return, result = runtime.subscribe(&address) => result };
+            let requested = *mode.borrow_and_update();
+            let result = tokio::select! { _ = cancel.notified() => return, result = runtime.subscribe(&address, requested) => result };
             let mut subscription = match result {
                 Ok(subscription) => {
-                    active.store(true, Ordering::Relaxed);
                     retry = Duration::from_secs(1);
                     subscription
                 }
@@ -141,10 +155,30 @@ fn spawn_ws_forwarder(
                     continue;
                 }
             };
+            // The target counts as subscribed only once its stream reports itself live.
+            active.store(false, Ordering::Relaxed);
+            let mut mode_changed = false;
             loop {
-                let event = tokio::select! { _ = cancel.notified() => return, event = subscription.recv() => event };
+                let event = tokio::select! {
+                    _ = cancel.notified() => return,
+                    changed = mode.changed() => {
+                        if changed.is_err() {
+                            return;
+                        }
+                        mode_changed = true;
+                        break;
+                    }
+                    event = subscription.recv() => event,
+                };
                 let Some(event) = event else {
                     break;
+                };
+                let event = match event {
+                    StreamEvent::Live => {
+                        active.store(true, Ordering::Relaxed);
+                        continue;
+                    }
+                    StreamEvent::Notification(event) => event,
                 };
                 if event.failed && !is_own {
                     continue;
@@ -158,6 +192,14 @@ fn spawn_ws_forwarder(
                 }
             }
             active.store(false, Ordering::Relaxed);
+            drop(subscription);
+            if mode_changed {
+                logger::debug(
+                    LogTag::WalletWatch,
+                    &format!("Resubscribing {address} as {:?}", *mode.borrow()),
+                );
+                continue;
+            }
             tokio::select! { _ = cancel.notified() => return, _ = tokio::time::sleep(retry) => {} }
             retry = (retry * 2).min(Duration::from_secs(30));
         }
@@ -256,6 +298,8 @@ async fn run_worker(
     mut commands: mpsc::Receiver<WorkerCommand>,
     mut events: mpsc::Receiver<WatchNotification>,
     overflowed: Arc<AtomicBool>,
+    subscribed: Arc<AtomicBool>,
+    stream_mode: watch::Sender<StreamMode>,
     cancel: Arc<Notify>,
     chain: Arc<dyn WalletWatchRuntime>,
     db: WatchDatabase,
@@ -264,6 +308,7 @@ async fn run_worker(
     // The forwarder subscribes concurrently and buffers references, but this
     // worker establishes its cursor before it processes any of them.
     service::poll_target(&mut runtime, &chain, &db, own.clone(), true).await;
+    sync_stream_mode(&stream_mode, runtime.stream_mode);
     let mut tick = tokio::time::interval(Duration::from_millis(100));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut retries = Vec::new();
@@ -272,7 +317,11 @@ async fn run_worker(
             _ = cancel.notified() => break,
             Ok(()) = target_updates.changed() => runtime.target = target_updates.borrow_and_update().clone(),
             Some(command) = commands.recv() => match command {
-                WorkerCommand::GapFill => { service::poll_target(&mut runtime, &chain, &db, own.clone(), true).await; runtime.last_poll = Instant::now(); }
+                WorkerCommand::GapFill => {
+                    service::poll_target(&mut runtime, &chain, &db, own.clone(), true).await;
+                    runtime.last_poll = Instant::now();
+                    sync_stream_mode(&stream_mode, runtime.stream_mode);
+                }
             },
             Some(event) = events.recv() => process_event(&mut runtime, event, &chain, &own, &mut retries).await,
             _ = tick.tick() => {
@@ -284,12 +333,13 @@ async fn run_worker(
                 let due = if runtime.high_activity {
                     service::high_activity_poll_due(elapsed, runtime.high_activity_dirty || runtime.high_activity_catching_up || dropped, high, baseline)
                 } else {
-                    dropped || poller::cadence_secs(chain.is_connected(), chain.polls_while_connected(), baseline, fallback).is_some_and(|secs| elapsed >= Duration::from_secs(secs))
+                    dropped || runtime.range_open || poller::cadence_secs(chain.is_connected() && subscribed.load(Ordering::Relaxed), chain.polls_while_connected(), baseline, fallback).is_some_and(|secs| elapsed >= Duration::from_secs(secs))
                 };
                 if due {
                     runtime.last_poll = now;
                     runtime.high_activity_dirty = false;
                     service::poll_target(&mut runtime, &chain, &db, own.clone(), false).await;
+                    sync_stream_mode(&stream_mode, runtime.stream_mode);
                 }
             }
             else => break,
@@ -311,12 +361,15 @@ fn register(
     let (event_tx, event_rx) = mpsc::channel(TARGET_EVENT_CAPACITY);
     let active = Arc::new(AtomicBool::new(false));
     let overflowed = Arc::new(AtomicBool::new(false));
+    let (mode_tx, mode_rx) = watch::channel(StreamMode::References);
     service_state::set_subscription(address.clone(), Arc::clone(&active));
     let worker_task = tokio::spawn(run_worker(
         TargetRuntime {
             target: target.clone(),
             last_poll: Instant::now(),
             catch_up: None,
+            range_open: false,
+            stream_mode: StreamMode::References,
             baseline_only: false,
             backfill: false,
             high_activity: false,
@@ -329,6 +382,8 @@ fn register(
         command_rx,
         event_rx,
         Arc::clone(&overflowed),
+        Arc::clone(&active),
+        mode_tx,
         Arc::clone(&cancel),
         Arc::clone(chain),
         db.clone(),
@@ -342,6 +397,7 @@ fn register(
         Arc::clone(&cancel),
         active,
         overflowed,
+        mode_rx,
     );
     workers.insert(
         address,

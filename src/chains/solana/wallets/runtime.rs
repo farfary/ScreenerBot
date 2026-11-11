@@ -23,11 +23,12 @@ use crate::chains::solana::transactions::subject;
 use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::watch::runtime::{ConnectionWatch, NotificationStream, WalletWatchRuntime};
 use crate::wallets::watch::{
-    ActivityKind, SignaturePageItem, SuccessfulTransactionPageItem, SuccessfulTransactionsPage,
-    WatchNotification,
+    ActivityKind, SignaturePageItem, StreamEvent, StreamMode, SuccessfulTransactionPageItem,
+    SuccessfulTransactionsPage, WatchNotification,
 };
 use crate::wallets::Error;
 
+use super::account_changes::{self, AccountChangeStream};
 use super::classify;
 
 /// Build the Solana wallet-watch runtime. Registered as the factory passed to
@@ -37,6 +38,13 @@ pub fn build_runtime() -> Arc<dyn WalletWatchRuntime> {
 }
 
 pub(super) struct SolanaWalletWatchRuntime;
+
+/// The current slot on the endpoints that watch other wallets, `None` when none
+/// answers.
+pub(super) async fn watch_slot() -> Option<u64> {
+    let client = own_rpc_client(Capability::WatchOtherWallets).ok()?;
+    client.get_slot().await.ok()
+}
 
 fn parse_pubkey(address: &str) -> Result<Pubkey, Error> {
     address.parse::<Pubkey>().map_err(|e| Error::ChainRuntime {
@@ -64,14 +72,26 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         })
     }
 
-    async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, Error> {
-        let sub = rpc::subscribe_logs_mentions(address)
+    async fn subscribe(
+        &self,
+        address: &str,
+        mode: StreamMode,
+    ) -> Result<Box<dyn NotificationStream>, Error> {
+        let topic = match mode {
+            StreamMode::References => rpc::Topic::Mentions(address.to_owned()),
+            StreamMode::OwnChanges => rpc::Topic::Account(address.to_owned()),
+        };
+        let pubkey = parse_pubkey(address)?;
+        let sub = rpc::subscribe(topic)
             .await
             .map_err(|e| Error::ChainRuntime {
                 operation: "subscribe",
                 detail: e.to_string(),
             })?;
-        Ok(Box::new(SolanaNotificationStream { sub }))
+        Ok(match mode {
+            StreamMode::References => Box::new(SolanaNotificationStream { sub }),
+            StreamMode::OwnChanges => Box::new(AccountChangeStream::new(address, pubkey, sub)),
+        })
     }
 
     async fn fetch_signatures_page(
@@ -86,10 +106,13 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
             .fetch_signature_info_page(pubkey, page_size, before, until)
             .await
             .map(|page| {
+                let proof = account_changes::Proof::for_address(address);
                 page.into_iter()
                     .map(|info| SignaturePageItem {
                         signature: info.signature.to_string(),
                         failed: info.err.is_some(),
+                        block_time: info.block_time,
+                        verdict: proof.verdict(info.slot, info.block_time),
                     })
                     .collect()
             })
@@ -213,6 +236,19 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
             })
     }
 
+    fn moves_subject(&self, address: &str, transaction: &Transaction) -> bool {
+        transaction
+            .raw_transaction_data
+            .as_ref()
+            .and_then(|raw| {
+                serde_json::from_value::<crate::chains::solana::rpc::TransactionDetails>(
+                    raw.clone(),
+                )
+                .ok()
+            })
+            .is_none_or(|details| classify::subject_has_meaningful_effect(address, &details))
+    }
+
     fn classify(
         &self,
         address: &str,
@@ -238,17 +274,24 @@ impl ConnectionWatch for SolanaConnectionWatch {
 }
 
 struct SolanaNotificationStream {
-    sub: rpc::LogsSubscription,
+    sub: rpc::Subscription,
 }
 
 #[async_trait]
 impl NotificationStream for SolanaNotificationStream {
-    async fn recv(&mut self) -> Option<WatchNotification> {
-        let event = self.sub.recv().await?;
-        Some(WatchNotification {
-            signature: event.signature,
-            failed: event.failed,
-        })
+    async fn recv(&mut self) -> Option<StreamEvent> {
+        loop {
+            match self.sub.recv().await? {
+                rpc::TopicEvent::Confirmed => return Some(StreamEvent::Live),
+                rpc::TopicEvent::Mention(mention) => {
+                    return Some(StreamEvent::Notification(WatchNotification {
+                        signature: mention.signature,
+                        failed: mention.failed,
+                    }))
+                }
+                rpc::TopicEvent::AccountChanged { .. } => {}
+            }
+        }
     }
 }
 
@@ -268,5 +311,53 @@ mod tests {
         assert_eq!(subject.chain(), crate::chains::ChainId::Solana);
 
         assert!(runtime.resolve_subject("not-a-valid-pubkey").is_err());
+    }
+
+    /// A transaction of `fee_payer` whose account keys include `subject`, with each
+    /// key's lamports moving by `deltas`.
+    fn referencing(subject: &str, fee_payer: &str, deltas: [i64; 2]) -> Transaction {
+        let mut transaction = Transaction::new("signature".to_owned());
+        transaction.success = true;
+        transaction.raw_transaction_data = Some(serde_json::json!({
+            "slot": 42,
+            "transaction": {
+                "message": { "accountKeys": [fee_payer, subject], "instructions": [] },
+                "signatures": ["signature"]
+            },
+            "meta": {
+                "err": null,
+                "fee": 5_000,
+                "preBalances": [10_000_000_000_u64, 10_000_000_000_u64],
+                "postBalances": [
+                    (10_000_000_000_i64 + deltas[0]) as u64,
+                    (10_000_000_000_i64 + deltas[1]) as u64
+                ],
+                "preTokenBalances": [],
+                "postTokenBalances": [],
+                "innerInstructions": [],
+                "logMessages": []
+            },
+            "blockTime": 1
+        }));
+        transaction
+    }
+
+    #[test]
+    fn a_reference_that_moves_none_of_the_subjects_balances_is_not_its_activity() {
+        let runtime = SolanaWalletWatchRuntime;
+        let subject = Pubkey::new_unique().to_string();
+        let other = Pubkey::new_unique().to_string();
+
+        assert!(!runtime.moves_subject(&subject, &referencing(&subject, &other, [-5_000, 0])));
+        assert!(runtime.moves_subject(
+            &subject,
+            &referencing(&subject, &other, [-5_000, 250_000_000])
+        ));
+        let mut undecodable = referencing(&subject, &other, [-5_000, 0]);
+        undecodable.raw_transaction_data = None;
+        assert!(
+            runtime.moves_subject(&subject, &undecodable),
+            "without raw data the reference is kept"
+        );
     }
 }

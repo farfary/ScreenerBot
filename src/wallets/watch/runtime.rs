@@ -16,18 +16,16 @@ use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::Error;
 
 use super::types::{
-    ActivityKind, SignaturePageItem, SuccessfulTransactionsPage, WatchNotification,
+    ActivityKind, SignaturePageItem, StreamEvent, StreamMode, SuccessfulTransactionsPage,
 };
 
 /// One address's realtime notification subscription. Dropping the runtime's
-/// `Box<dyn NotificationStream>` must end the underlying subscription, the same
-/// contract `LogsSubscription` already has.
+/// `Box<dyn NotificationStream>` must end the underlying subscription.
 #[async_trait]
 pub trait NotificationStream: Send {
-    /// Waits for the next notification. `None` means the subscription ended
-    /// (transport error, close, or process shutdown) — the funnel treats this
-    /// exactly like the transport's own disconnect handling always has.
-    async fn recv(&mut self) -> Option<WatchNotification>;
+    /// Waits for the next event. `None` means the subscription ended (refused,
+    /// transport error, close, or process shutdown); the funnel subscribes again.
+    async fn recv(&mut self) -> Option<StreamEvent>;
 }
 
 /// A live view of runtime connectivity, so the funnel can gap-fill on
@@ -66,9 +64,14 @@ pub trait WalletWatchRuntime: Send + Sync {
     /// point-in-time read.
     fn connection_watch(&self) -> Box<dyn ConnectionWatch>;
 
-    /// Subscribe to realtime notifications for one address. Ends when the
-    /// returned handle is dropped.
-    async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, Error>;
+    /// Subscribe to realtime notifications for one address in `mode`. Ends when
+    /// the returned handle is dropped. A runtime that serves one mode only
+    /// answers every request with it.
+    async fn subscribe(
+        &self,
+        address: &str,
+        mode: StreamMode,
+    ) -> Result<Box<dyn NotificationStream>, Error>;
 
     /// Fetch one page of signatures for `address`, newest first, restricted to
     /// the `(until, before]` range (both ends optional/open).
@@ -106,6 +109,14 @@ pub trait WalletWatchRuntime: Send + Sync {
         signature: &str,
         is_own: bool,
     ) -> Result<Transaction, Error>;
+
+    /// Whether a decoded transaction changed anything `address` holds. A watched
+    /// wallet is referenced by many transactions of other signers that move none of
+    /// its balances; those are not its activity and are neither recorded nor
+    /// published. `true` is the answer whenever the runtime cannot tell.
+    fn moves_subject(&self, _address: &str, _transaction: &Transaction) -> bool {
+        true
+    }
 
     /// Classify a decoded, successful transaction from `address`'s
     /// perspective. `None` means dedupe should still commit but nothing is
@@ -163,6 +174,7 @@ pub(crate) mod test_support {
     use tokio::sync::{mpsc, Notify};
 
     use crate::chains::{AccountId, ChainId};
+    use crate::wallets::watch::types::WatchNotification;
 
     use super::*;
 
@@ -172,13 +184,19 @@ pub(crate) mod test_support {
     pub struct FakeCalls {
         pub resolved: Vec<String>,
         pub subscribed: Vec<String>,
+        /// The stream mode of each subscribe, in request order.
+        pub stream_modes: Vec<StreamMode>,
         pub fetched: Vec<String>,
+        /// The page size of each signature page request, in request order.
+        pub page_sizes: Vec<usize>,
         pub decoded: Vec<(String, String, bool)>,
         pub classified: Vec<String>,
     }
 
     pub struct FakeNotificationStream {
         pub rx: mpsc::UnboundedReceiver<WatchNotification>,
+        /// The stream reports itself live once, before its first notification.
+        pub live_sent: bool,
     }
 
     pub struct FetchBlock {
@@ -212,8 +230,12 @@ pub(crate) mod test_support {
 
     #[async_trait]
     impl NotificationStream for FakeNotificationStream {
-        async fn recv(&mut self) -> Option<WatchNotification> {
-            self.rx.recv().await
+        async fn recv(&mut self) -> Option<StreamEvent> {
+            if !self.live_sent {
+                self.live_sent = true;
+                return Some(StreamEvent::Live);
+            }
+            self.rx.recv().await.map(StreamEvent::Notification)
         }
     }
 
@@ -279,7 +301,7 @@ pub(crate) mod test_support {
                 page.into_iter()
                     .map(|signature| SignaturePageItem {
                         signature,
-                        failed: false,
+                        ..SignaturePageItem::default()
                     })
                     .collect(),
             );
@@ -392,12 +414,16 @@ pub(crate) mod test_support {
             })
         }
 
-        async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, Error> {
-            self.calls
-                .lock()
-                .unwrap()
-                .subscribed
-                .push(address.to_owned());
+        async fn subscribe(
+            &self,
+            address: &str,
+            mode: StreamMode,
+        ) -> Result<Box<dyn NotificationStream>, Error> {
+            {
+                let mut calls = self.calls.lock().unwrap();
+                calls.subscribed.push(address.to_owned());
+                calls.stream_modes.push(mode);
+            }
             let rx = self
                 .notifications
                 .lock()
@@ -408,17 +434,24 @@ pub(crate) mod test_support {
                     let (_tx, rx) = mpsc::unbounded_channel();
                     rx
                 });
-            Ok(Box::new(FakeNotificationStream { rx }))
+            Ok(Box::new(FakeNotificationStream {
+                rx,
+                live_sent: false,
+            }))
         }
 
         async fn fetch_signatures_page(
             &self,
             address: &str,
-            _page_size: usize,
+            page_size: usize,
             _before: Option<&str>,
             _until: Option<&str>,
         ) -> Result<Vec<SignaturePageItem>, Error> {
-            self.calls.lock().unwrap().fetched.push(address.to_owned());
+            {
+                let mut calls = self.calls.lock().unwrap();
+                calls.fetched.push(address.to_owned());
+                calls.page_sizes.push(page_size);
+            }
             let block = self.fetch_blocks.lock().unwrap().get(address).cloned();
             if let Some(block) = block {
                 block.wait().await;

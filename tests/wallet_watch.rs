@@ -10,6 +10,7 @@ fn full_page(prefix: &str) -> Vec<SignaturePageItem> {
         .map(|n| SignaturePageItem {
             signature: format!("{prefix}-{n:03}"),
             failed: false,
+            ..SignaturePageItem::default()
         })
         .collect()
 }
@@ -22,14 +23,17 @@ fn a_complete_range_is_replayed_oldest_first() {
             SignaturePageItem {
                 signature: "newest".to_owned(),
                 failed: false,
+                ..SignaturePageItem::default()
             },
             SignaturePageItem {
                 signature: "middle".to_owned(),
                 failed: false,
+                ..SignaturePageItem::default()
             },
             SignaturePageItem {
                 signature: "oldest".to_owned(),
                 failed: false,
+                ..SignaturePageItem::default()
             },
         ],
         100,
@@ -59,6 +63,7 @@ fn a_capped_range_resumes_without_exposing_a_cursor() {
         vec![SignaturePageItem {
             signature: "tail".to_owned(),
             failed: false,
+            ..SignaturePageItem::default()
         }],
         100,
     );
@@ -87,10 +92,12 @@ fn multiple_pages_keep_global_oldest_first_order() {
             SignaturePageItem {
                 signature: "old-1".to_owned(),
                 failed: false,
+                ..SignaturePageItem::default()
             },
             SignaturePageItem {
                 signature: "old-2".to_owned(),
                 failed: false,
+                ..SignaturePageItem::default()
             },
         ],
         100,

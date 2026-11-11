@@ -5,13 +5,15 @@
 //!
 //! One connection is multiplexed across every subscribed address. The transport
 //! is domain-free: it delivers notifications and nothing else. Callers subscribe
-//! by address and hold a `LogsSubscription`; dropping it unsubscribes.
+//! by topic (an address's mentions or its own account) and hold a `Subscription`;
+//! dropping it unsubscribes.
 //!
 //! Reconnects are handled here. Any stream termination -- a close frame, a
 //! transport error, or an ended stream -- is a disconnect: the transport backs
 //! off, reconnects, and resubscribes every address still registered.
 
 mod client;
+mod frames;
 mod payloads;
 mod registry;
 mod types;
@@ -19,17 +21,18 @@ mod types;
 pub use payloads::{
     get_websocket_url, get_websocket_url_from_http, get_websocket_urls, websocket_url_for_attempt,
 };
-pub use types::{ConnectionState, LogsSubscription, SubscriptionEvent, SubscriptionMetrics};
+pub use types::{ConnectionState, Mention, Subscription, SubscriptionMetrics, Topic, TopicEvent};
 
-/// Subscribe to `logsSubscribe` notifications mentioning `address`.
-pub async fn subscribe_logs_mentions(address: &str) -> crate::Result<LogsSubscription> {
+/// Subscribe to `topic` on the shared connection. The subscription is live once it
+/// delivers `TopicEvent::Confirmed`; dropping it unsubscribes.
+pub async fn subscribe(topic: Topic) -> crate::Result<Subscription> {
     let handle_id = client::next_handle_id();
     let (tx, receiver) = tokio::sync::mpsc::unbounded_channel();
 
     let mut commands = client::ensure_actor().await?;
     if commands
         .send(client::Command::Subscribe {
-            address: address.to_owned(),
+            topic: topic.clone(),
             handle_id,
             tx: tx.clone(),
         })
@@ -41,7 +44,7 @@ pub async fn subscribe_logs_mentions(address: &str) -> crate::Result<LogsSubscri
         commands = client::ensure_actor().await?;
         if commands
             .send(client::Command::Subscribe {
-                address: address.to_owned(),
+                topic: topic.clone(),
                 handle_id,
                 tx,
             })
@@ -49,19 +52,25 @@ pub async fn subscribe_logs_mentions(address: &str) -> crate::Result<LogsSubscri
         {
             return Err(crate::Error::Network(
                 crate::errors::NetworkError::RequestFailed {
-                    endpoint: "solana log subscription".to_owned(),
+                    endpoint: "solana subscription".to_owned(),
                     detail: "subscription transport unavailable".to_owned(),
                 },
             ));
         }
     }
 
-    Ok(LogsSubscription {
+    Ok(Subscription {
         id: handle_id,
-        address: address.to_owned(),
+        topic,
         receiver,
         commands,
     })
+}
+
+/// The number of the current connection; it grows by one on every connect, so
+/// coverage established on an earlier connection can be told apart.
+pub fn connection_generation() -> u64 {
+    client::connection_generation()
 }
 
 /// Watch the transport's connection state.

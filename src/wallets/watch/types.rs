@@ -73,12 +73,10 @@ impl WatchDisableReason {
     pub fn ui_text(&self) -> UiText {
         match self {
             Self::User => UiText::new(ids::WALLETS_WATCH_DISABLED_USER),
-            Self::SignatureBudget { page_budget, .. } => {
-                UiText::new(ids::WALLETS_WATCH_DISABLED_SIGNATURE_BUDGET).arg(
-                    "limit",
-                    UiArg::Text((page_budget * super::poller::PAGE_SIZE).to_string()),
-                )
-            }
+            Self::SignatureBudget {
+                signatures_checked, ..
+            } => UiText::new(ids::WALLETS_WATCH_DISABLED_SIGNATURE_BUDGET)
+                .arg("limit", UiArg::Text(signatures_checked.to_string())),
             Self::Unknown => UiText::new(ids::WALLETS_WATCH_DISABLED_UNKNOWN),
             Self::HeliusUnavailable => UiText::new(ids::WALLETS_WATCH_DISABLED_HELIUS_UNAVAILABLE),
             Self::ProcessingFailed => UiText::new(ids::WALLETS_WATCH_DISABLED_PROCESSING_FAILED),
@@ -227,13 +225,52 @@ pub struct WatchNotification {
     pub failed: bool,
 }
 
+/// One message of a target's live stream.
+#[derive(Debug, Clone)]
+pub enum StreamEvent {
+    /// The stream is live: what lands from here on is notified. Sent on first
+    /// subscribe and again after the transport resubscribes.
+    Live,
+    /// A transaction the stream reports for the target.
+    Notification(WatchNotification),
+}
+
+/// What a target's live stream listens to. Chosen per target from its measured
+/// reference rate (`service::stream_mode_for`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StreamMode {
+    /// Every transaction that references the address, whoever signed it.
+    #[default]
+    References,
+    /// Only changes of the address's own state. For an address that thousands of
+    /// other wallets' transactions reference a minute: the runtime reports the
+    /// references in each changed slot and proves the rest quiet.
+    OwnChanges,
+}
+
+/// What a chain runtime knows of one reference before any decode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReferenceVerdict {
+    /// Nothing is known: the reference is decoded.
+    #[default]
+    Unknown,
+    /// Proven to leave the address untouched: its own state did not change in the
+    /// reference's slot while its change stream was live. Handled without a decode.
+    Quiet,
+    /// Too recent to prove either way. A poll stops before it and reads it again.
+    Unsettled,
+}
+
 /// One signature returned by a cursor page. The chain adapter preserves the
 /// provider's failure metadata so the shared funnel can avoid decoding known
 /// failed activity for external watch targets without changing cursor progress.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SignaturePageItem {
     pub signature: String,
     pub failed: bool,
+    /// The transaction's block time (Unix seconds), when the provider reports one.
+    pub block_time: Option<i64>,
+    pub verdict: ReferenceVerdict,
 }
 
 /// One successful transaction returned by the high-activity provider path. A
@@ -403,15 +440,15 @@ mod tests {
     }
 
     #[test]
-    fn budget_pause_names_the_signature_limit() {
+    fn budget_pause_names_the_signatures_it_checked() {
         let en: LanguageIdentifier = "en".parse().unwrap();
         let reason = WatchDisableReason::SignatureBudget {
-            page_budget: 50,
-            signatures_checked: 5000,
+            page_budget: 5,
+            signatures_checked: 100_000,
         };
         assert_eq!(
             reason.ui_text().render_plain(&en),
-            "Paused: reached the 5000-signature check limit before catching up"
+            "Paused: reached the 100000-signature check limit before catching up"
         );
     }
 }

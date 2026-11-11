@@ -39,7 +39,18 @@ pub struct FetcherConfig {
     pub retry_base_delay_ms: u64,
     /// Commitment level for transaction queries
     pub commitment: CommitmentConfig,
+    /// Waits after each `getTransaction` that finds nothing yet, in order. Once they
+    /// are spent the fetch reports `IndexingDelay` and its caller retries later.
+    pub indexing_delays_ms: &'static [u64],
 }
+
+/// History reads can wait for a slow index: nothing downstream is time-bound.
+pub const HISTORY_INDEXING_DELAYS_MS: &[u64] = &[2_000, 4_000, 8_000, 16_000];
+
+/// A watched wallet's worker handles that wallet's transactions in order, so a
+/// wait here holds every later trade of the wallet. The ladder ends inside the
+/// default copy arrival limit; the watch's own retry queue takes over after it.
+pub const WATCH_INDEXING_DELAYS_MS: &[u64] = &[250, 500, 1_000, 2_000];
 
 impl Default for FetcherConfig {
     fn default() -> Self {
@@ -50,6 +61,17 @@ impl Default for FetcherConfig {
             max_retries: 3,
             retry_base_delay_ms: 1000, // 1 second base delay
             commitment: CommitmentConfig::confirmed(),
+            indexing_delays_ms: HISTORY_INDEXING_DELAYS_MS,
+        }
+    }
+}
+
+impl FetcherConfig {
+    /// The configuration for decoding a watched wallet's live transactions.
+    pub fn for_watch_target() -> Self {
+        Self {
+            indexing_delays_ms: WATCH_INDEXING_DELAYS_MS,
+            ..Self::default()
         }
     }
 }
@@ -316,7 +338,6 @@ impl TransactionFetcher {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
         let mut indexing_delay_attempts = 0;
-        const MAX_INDEXING_DELAY_ATTEMPTS: usize = 5;
 
         loop {
             match self.fetch_single_transaction_details(signature).await {
@@ -345,15 +366,16 @@ impl TransactionFetcher {
                     ) {
                         indexing_delay_attempts += 1;
 
-                        if indexing_delay_attempts >= MAX_INDEXING_DELAY_ATTEMPTS {
-                            // After 5 attempts with indexing delays, return special error for deferral
+                        // Once the ladder is spent, report the deferral to the caller.
+                        let Some(&indexing_delay) = self
+                            .config
+                            .indexing_delays_ms
+                            .get(indexing_delay_attempts - 1)
+                        else {
                             return Err(SolanaError::Execution(ExecutionFailure::IndexingDelay {
                                 reference: signature.to_owned(),
                             }));
-                        }
-
-                        // Use longer delays for indexing: 2s, 4s, 8s, 16s, 32s
-                        let indexing_delay = 2000 * (2_u64.pow(indexing_delay_attempts as u32 - 1));
+                        };
 
                         logger::info(
                             LogTag::Transactions,

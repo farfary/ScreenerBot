@@ -63,3 +63,22 @@ fn transaction_fetcher_preserves_rpc_retry_classification() {
     };
     assert!(provider_fault.is_retryable());
 }
+
+#[test]
+fn a_watched_wallet_waits_for_its_index_only_inside_the_copy_arrival_limit() {
+    let watch: u64 = FetcherConfig::for_watch_target()
+        .indexing_delays_ms
+        .iter()
+        .sum();
+    let arrival_limit =
+        crate::config::schemas::CopyTradingConfig::default().max_arrival_distance_ms;
+    assert!(
+        watch < arrival_limit,
+        "a {watch} ms wait holds the wallet's later trades past the {arrival_limit} ms copy limit"
+    );
+    assert_eq!(
+        FetcherConfig::default().indexing_delays_ms,
+        HISTORY_INDEXING_DELAYS_MS,
+        "history reads keep the long ladder"
+    );
+}

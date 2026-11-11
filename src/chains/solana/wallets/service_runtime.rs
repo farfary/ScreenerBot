@@ -21,7 +21,8 @@ use crate::chains::ChainId;
 use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::watch::runtime::{ConnectionWatch, NotificationStream, WalletWatchRuntime};
 use crate::wallets::watch::{
-    ActivityKind, SignaturePageItem, SuccessfulTransactionsPage, WatchNotification,
+    ActivityKind, SignaturePageItem, StreamEvent, StreamMode, SuccessfulTransactionsPage,
+    WatchNotification,
 };
 use crate::wallets::Error;
 
@@ -85,7 +86,13 @@ impl WalletWatchRuntime for ServiceWalletWatchRuntime {
         })
     }
 
-    async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, Error> {
+    /// The trading wallet's activity arrives as wallet version changes whatever the
+    /// requested mode.
+    async fn subscribe(
+        &self,
+        address: &str,
+        _mode: StreamMode,
+    ) -> Result<Box<dyn NotificationStream>, Error> {
         let trading_wallet = crate::chains::solana::accounts::configured_address_async()
             .await
             .ok();
@@ -106,6 +113,7 @@ impl WalletWatchRuntime for ServiceWalletWatchRuntime {
             versions,
             last_seen: newest,
             pending: Vec::new(),
+            live_sent: false,
         }))
     }
 
@@ -152,6 +160,10 @@ impl WalletWatchRuntime for ServiceWalletWatchRuntime {
             .await
     }
 
+    fn moves_subject(&self, address: &str, transaction: &Transaction) -> bool {
+        self.decoder.moves_subject(address, transaction)
+    }
+
     fn classify(
         &self,
         address: &str,
@@ -184,17 +196,24 @@ struct VersionNotificationStream {
     last_seen: Option<String>,
     /// Signatures read but not yet handed out, newest first.
     pending: Vec<SignaturePageItem>,
+    /// The version watch is live from the moment of subscribing; that is
+    /// reported once, before the first notification.
+    live_sent: bool,
 }
 
 #[async_trait]
 impl NotificationStream for VersionNotificationStream {
-    async fn recv(&mut self) -> Option<WatchNotification> {
+    async fn recv(&mut self) -> Option<StreamEvent> {
+        if !self.live_sent {
+            self.live_sent = true;
+            return Some(StreamEvent::Live);
+        }
         loop {
             if let Some(item) = self.pending.pop() {
-                return Some(WatchNotification {
+                return Some(StreamEvent::Notification(WatchNotification {
                     signature: item.signature,
                     failed: item.failed,
-                });
+                }));
             }
             self.versions.changed().await.ok()?;
             // A failed read ends the stream; the funnel resubscribes and
@@ -240,21 +259,29 @@ mod tests {
             address: String::new(),
             versions,
             last_seen: Some("seen".to_owned()),
+            live_sent: false,
             pending: vec![
                 SignaturePageItem {
                     signature: "newer".to_owned(),
                     failed: false,
+                    ..SignaturePageItem::default()
                 },
                 SignaturePageItem {
                     signature: "older".to_owned(),
                     failed: true,
+                    ..SignaturePageItem::default()
                 },
             ],
         };
-        let first = stream.recv().await.unwrap();
+        assert!(matches!(stream.recv().await, Some(StreamEvent::Live)));
+        let notification = |event: Option<StreamEvent>| match event {
+            Some(StreamEvent::Notification(notification)) => notification,
+            other => panic!("expected a notification, got {other:?}"),
+        };
+        let first = notification(stream.recv().await);
         assert_eq!(first.signature, "older");
         assert!(first.failed);
-        assert_eq!(stream.recv().await.unwrap().signature, "newer");
+        assert_eq!(notification(stream.recv().await).signature, "newer");
         // With nothing pending and the version sender gone, the stream ends.
         drop(sender);
         assert!(stream.recv().await.is_none());

@@ -92,7 +92,9 @@ impl TransactionProcessor {
     pub fn new_for_watch_target(wallet_pubkey: Pubkey) -> Self {
         Self {
             wallet_pubkey,
-            fetcher: TransactionFetcher::new(),
+            fetcher: TransactionFetcher::with_config(
+                crate::chains::solana::transactions::fetcher::FetcherConfig::for_watch_target(),
+            ),
             analyzer: TransactionAnalyzer::new(false, Some(wallet_pubkey.to_string())),
             debug_enabled: false,
             cache_only: false,

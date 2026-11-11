@@ -12,96 +12,27 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::logger::{self, LogTag};
 
+use super::frames::{parse_message, ParsedMessage, METHOD_NOT_FOUND};
 use super::payloads;
 use super::registry::Registry;
-use super::types::{ConnectionState, LogsSubscription, SubscriptionEvent, SubscriptionMetrics};
+use super::types::{ConnectionState, Subscription, SubscriptionMetrics, Topic, TopicEvent};
 
 /// A command sent into the running actor from a subscriber handle.
 pub(super) enum Command {
     Subscribe {
-        address: String,
+        topic: Topic,
         handle_id: u64,
-        tx: mpsc::UnboundedSender<SubscriptionEvent>,
+        tx: mpsc::UnboundedSender<TopicEvent>,
     },
     Unsubscribe {
-        address: String,
+        topic: Topic,
         handle_id: u64,
     },
 }
 
-/// Parsed form of one inbound WebSocket text frame.
-#[derive(Debug, PartialEq)]
-pub(super) enum ParsedMessage {
-    Notification {
-        subscription_id: u64,
-        signature: String,
-        slot: Option<u64>,
-        failed: bool,
-        logs: Vec<String>,
-    },
-    Confirmation {
-        request_id: u64,
-        subscription_id: u64,
-    },
-    RpcError {
-        request_id: Option<u64>,
-        message: String,
-    },
-    Ignored,
-}
-
-/// Parse one inbound WebSocket text frame. Pure, no I/O.
-pub(super) fn parse_message(raw: &str) -> ParsedMessage {
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) else {
-        return ParsedMessage::Ignored;
-    };
-
-    if v["method"] == "logsNotification" {
-        let Some(subscription_id) = v["params"]["subscription"].as_u64() else {
-            return ParsedMessage::Ignored;
-        };
-        let value = &v["params"]["result"]["value"];
-        let Some(signature) = value["signature"].as_str() else {
-            return ParsedMessage::Ignored;
-        };
-        let slot = v["params"]["result"]["context"]["slot"].as_u64();
-        let failed = !value["err"].is_null();
-        let logs = value["logs"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|entry| entry.as_str().map(str::to_owned))
-                    .collect()
-            })
-            .unwrap_or_default();
-        return ParsedMessage::Notification {
-            subscription_id,
-            signature: signature.to_owned(),
-            slot,
-            failed,
-            logs,
-        };
-    }
-
-    if v["error"].is_object() {
-        return ParsedMessage::RpcError {
-            request_id: v["id"].as_u64(),
-            message: v["error"]["message"]
-                .as_str()
-                .unwrap_or("unknown")
-                .to_owned(),
-        };
-    }
-
-    if let (Some(request_id), Some(subscription_id)) = (v["id"].as_u64(), v["result"].as_u64()) {
-        return ParsedMessage::Confirmation {
-            request_id,
-            subscription_id,
-        };
-    }
-
-    ParsedMessage::Ignored
-}
+/// How long the transport stays down once no configured endpoint serves
+/// `logsSubscribe`, before it asks again. Watched wallets are polled meanwhile.
+const UNSUPPORTED_RECHECK: Duration = Duration::from_secs(300);
 
 /// Reconnect backoff in seconds: 1, 2, 4, 8, 16, 32, then capped at 60.
 pub(super) fn reconnect_delay_secs(attempt: u32) -> u64 {
@@ -121,6 +52,9 @@ static STATE: LazyLock<(
 static NEXT_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 static NOTIFICATIONS: AtomicU64 = AtomicU64::new(0);
 static RECONNECTS: AtomicU64 = AtomicU64::new(0);
+/// Counts successful connects. A subscriber that saw `Confirmed` on one generation
+/// knows a later generation may have missed notifications in between.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
 /// Unix seconds of the last notification; 0 means never.
 static LAST_MESSAGE_UNIX: AtomicI64 = AtomicI64::new(0);
 static ACTIVE_ADDRESSES: AtomicU64 = AtomicU64::new(0);
@@ -137,6 +71,11 @@ pub(super) fn next_handle_id() -> u64 {
 /// A receiver for the transport's connection state.
 pub(super) fn state_receiver() -> watch::Receiver<ConnectionState> {
     STATE.1.clone()
+}
+
+/// The number of the current connection; it grows by one on every connect.
+pub(super) fn connection_generation() -> u64 {
+    GENERATION.load(Relaxed)
 }
 
 /// A snapshot of the transport's counters.
@@ -178,17 +117,17 @@ fn drain_pending_commands(
     while let Ok(cmd) = commands.try_recv() {
         match cmd {
             Command::Subscribe {
-                address,
+                topic,
                 handle_id,
                 tx,
             } => {
-                registry.add_subscriber(&address, handle_id, tx);
+                registry.add_subscriber(&topic, handle_id, tx);
             }
-            Command::Unsubscribe { address, handle_id } => {
-                registry.remove_subscriber(&address, handle_id);
+            Command::Unsubscribe { topic, handle_id } => {
+                registry.remove_subscriber(&topic, handle_id);
             }
         }
-        ACTIVE_ADDRESSES.store(registry.addresses().len() as u64, Relaxed);
+        ACTIVE_ADDRESSES.store(registry.topics().len() as u64, Relaxed);
     }
 }
 
@@ -199,6 +138,8 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
     let mut attempt: u32 = 0;
     let mut provider_index: usize = 0;
     let mut next_request_id: u64 = 1;
+    // Endpoints that answered `logsSubscribe` with method-not-found.
+    let mut unsupported: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     'outer: loop {
         let urls = match payloads::get_websocket_urls() {
@@ -216,12 +157,32 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
             }
         };
 
-        provider_index %= urls.len();
-        let url = urls[provider_index].as_str().to_owned();
+        let usable: Vec<&String> = urls
+            .iter()
+            .filter(|url| !unsupported.contains(*url))
+            .collect();
+        if usable.is_empty() {
+            logger::info(
+                LogTag::Websocket,
+                &format!(
+                    "No configured RPC endpoint serves the subscriptions the app uses; watched wallets are polled, next check in {}s",
+                    UNSUPPORTED_RECHECK.as_secs()
+                ),
+            );
+            set_state(ConnectionState::Down);
+            drain_pending_commands(&mut commands, &mut registry);
+            tokio::time::sleep(UNSUPPORTED_RECHECK).await;
+            drain_pending_commands(&mut commands, &mut registry);
+            unsupported.clear();
+            continue 'outer;
+        }
+        provider_index %= usable.len();
+        let url = usable[provider_index].as_str().to_owned();
+        let usable_count = usable.len();
         let stream = match crate::net::connect_ws(&url).await {
             Ok(s) => s,
             Err(e) => {
-                provider_index = (provider_index + 1) % urls.len();
+                provider_index = (provider_index + 1) % usable_count;
                 let completed_cycle = provider_index == 0;
                 let delay = if completed_cycle {
                     reconnect_delay_secs(attempt)
@@ -255,18 +216,21 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
             &format!("WebSocket connected ({})", crate::logger::redact_url(&url)),
         );
         attempt = 0;
+        GENERATION.fetch_add(1, Relaxed);
         set_state(ConnectionState::Connected);
         let (mut ws_tx, mut ws_rx) = stream.split();
 
         // Server subscription ids never survive a reconnect; resubscribe everything.
         registry.clear_server_state();
         let mut connection_lost = false;
-        for address in registry.addresses() {
+        let mut endpoint_unsupported = false;
+        let mut refusals_logged = std::collections::HashSet::new();
+        for topic in registry.topics() {
             let id = next_request_id;
             next_request_id += 1;
             if ws_tx
                 .send(Message::Text(
-                    payloads::logs_subscribe_payload(&address, id).into(),
+                    payloads::subscribe_payload(&topic, id).into(),
                 ))
                 .await
                 .is_err()
@@ -278,7 +242,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                 connection_lost = true;
                 break;
             }
-            registry.note_pending(id, &address);
+            registry.note_pending(id, &topic);
         }
 
         if !connection_lost {
@@ -296,35 +260,25 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                                 *COMMANDS.lock().await = None;
                                 return;
                             }
-                            Some(Command::Subscribe { address, handle_id, tx }) => {
-                                let is_new = registry.add_subscriber(&address, handle_id, tx);
-                                ACTIVE_ADDRESSES.store(registry.addresses().len() as u64, Relaxed);
+                            Some(Command::Subscribe { topic, handle_id, tx }) => {
+                                let is_new = registry.add_subscriber(&topic, handle_id, tx);
+                                ACTIVE_ADDRESSES.store(registry.topics().len() as u64, Relaxed);
                                 if is_new {
                                     let id = next_request_id;
                                     next_request_id += 1;
                                     if ws_tx
-                                        .send(Message::Text(payloads::logs_subscribe_payload(&address, id).into()))
+                                        .send(Message::Text(payloads::subscribe_payload(&topic, id).into()))
                                         .await
                                         .is_err()
                                     {
                                         break;
                                     }
-                                    registry.note_pending(id, &address);
+                                    registry.note_pending(id, &topic);
                                 }
                             }
-                            Some(Command::Unsubscribe { address, handle_id }) => {
-                                if let Some(sub_id) = registry.remove_subscriber(&address, handle_id) {
-                                    let id = next_request_id;
-                                    next_request_id += 1;
-                                    if ws_tx
-                                        .send(Message::Text(payloads::logs_unsubscribe_payload(sub_id, id).into()))
-                                        .await
-                                        .is_err()
-                                    {
-                                        break;
-                                    }
-                                }
-                                ACTIVE_ADDRESSES.store(registry.addresses().len() as u64, Relaxed);
+                            Some(Command::Unsubscribe { topic, handle_id }) => {
+                                registry.remove_subscriber(&topic, handle_id);
+                                ACTIVE_ADDRESSES.store(registry.topics().len() as u64, Relaxed);
                                 if registry.is_empty() {
                                     logger::info(LogTag::Websocket, "No subscriptions remain - closing WebSocket");
                                     let _ = ws_tx.send(Message::Close(None)).await;
@@ -343,7 +297,12 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                     }
                     frame = ws_rx.next() => {
                         match frame {
-                            Some(Ok(Message::Text(text))) => handle_text(&text, &mut registry),
+                            Some(Ok(Message::Text(text))) => {
+                                if handle_text(&text, &mut registry, &mut refusals_logged) {
+                                    endpoint_unsupported = true;
+                                    break;
+                                }
+                            }
                             Some(Ok(Message::Ping(p))) => {
                                 if ws_tx.send(Message::Pong(p)).await.is_err() {
                                     break;
@@ -357,12 +316,46 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                         }
                     }
                 }
+                let mut released = true;
+                for (topic, sub_id) in registry.take_releases() {
+                    let id = next_request_id;
+                    next_request_id += 1;
+                    if ws_tx
+                        .send(Message::Text(
+                            payloads::unsubscribe_payload(&topic, sub_id, id).into(),
+                        ))
+                        .await
+                        .is_err()
+                    {
+                        released = false;
+                        break;
+                    }
+                }
+                if !released {
+                    break;
+                }
             }
         }
 
+        if endpoint_unsupported {
+            // Not a disconnect: this endpoint has no log subscriptions. Try the next one
+            // at once; the loop above stops when none is left.
+            let _ = ws_tx.send(Message::Close(None)).await;
+            logger::info(
+                LogTag::Websocket,
+                &format!(
+                    "WebSocket provider {} does not serve a subscription method the app uses; trying the next endpoint",
+                    crate::logger::redact_url(&url)
+                ),
+            );
+            unsupported.insert(url);
+            set_state(ConnectionState::Reconnecting);
+            provider_index = 0;
+            continue 'outer;
+        }
         RECONNECTS.fetch_add(1, Relaxed);
         set_state(ConnectionState::Reconnecting);
-        provider_index = (provider_index + 1) % urls.len();
+        provider_index = (provider_index + 1) % usable_count;
         let completed_cycle = provider_index == 0;
         let delay = if completed_cycle {
             reconnect_delay_secs(attempt)
@@ -382,71 +375,90 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
     }
 }
 
-/// Handle one parsed inbound frame against the registry.
-fn handle_text(raw: &str, registry: &mut Registry) {
+/// Handle one parsed inbound frame against the registry. Returns `true` when the
+/// endpoint does not serve `logsSubscribe` at all.
+fn handle_text(
+    raw: &str,
+    registry: &mut Registry,
+    refusals_logged: &mut std::collections::HashSet<String>,
+) -> bool {
     match parse_message(raw) {
-        ParsedMessage::Notification {
+        ParsedMessage::Mention {
             subscription_id,
-            signature,
+            mention,
+        } => deliver(registry, subscription_id, TopicEvent::Mention(mention)),
+        ParsedMessage::AccountChange {
+            subscription_id,
             slot,
-            failed,
-            logs,
-        } => {
-            let Some(address) = registry.address_for_subscription(subscription_id) else {
-                logger::debug(
-                    LogTag::Websocket,
-                    &format!("Notification for unknown subscription id {subscription_id}"),
-                );
-                return;
-            };
-            let address = address.to_owned();
-            NOTIFICATIONS.fetch_add(1, Relaxed);
-            LAST_MESSAGE_UNIX.store(chrono::Utc::now().timestamp(), Relaxed);
-            // Truncate by characters, never by bytes: this frame came off the wire
-            // and a byte slice through a multi-byte character would panic.
-            let sig8: String = signature.chars().take(8).collect();
-            logger::debug(
-                LogTag::Websocket,
-                &format!("logs notification {sig8} for {address}"),
-            );
-            let event = SubscriptionEvent {
-                address: address.clone(),
-                signature,
-                slot,
-                failed,
-                logs,
-            };
-            registry.fanout(&address, &event);
-        }
+        } => deliver(
+            registry,
+            subscription_id,
+            TopicEvent::AccountChanged { slot },
+        ),
         ParsedMessage::Confirmation {
             request_id,
             subscription_id,
         } => {
-            let address = registry.confirm(request_id, subscription_id);
+            let topic = registry.confirm(request_id, subscription_id);
             logger::debug(
                 LogTag::Websocket,
                 &format!(
-                    "Subscription confirmed: request {request_id} -> id {subscription_id} ({address:?})"
+                    "Subscription confirmed: request {request_id} -> id {subscription_id} ({topic:?})"
                 ),
             );
         }
-        ParsedMessage::RpcError { message, .. } => {
-            logger::warning(
-                LogTag::Websocket,
-                &format!("Subscription RPC error: {message}"),
-            );
+        ParsedMessage::RpcError {
+            request_id,
+            code,
+            message,
+        } => {
+            // An endpoint that lacks a subscription method is skipped as a whole.
+            if code == Some(METHOD_NOT_FOUND)
+                && request_id.is_some_and(|id| registry.pending_topic(id).is_some())
+            {
+                return true;
+            }
+            // A refused subscribe ends its subscribers' streams, so each watcher knows
+            // it is not subscribed and polls instead of waiting on silence.
+            let refused = request_id.and_then(|id| registry.refuse(id));
+            if refusals_logged.insert(message.clone()) {
+                logger::info(
+                    LogTag::Websocket,
+                    &format!(
+                        "Subscription refused{}: {message}",
+                        refused
+                            .map(|topic| format!(" ({} {})", topic.method(), topic.address()))
+                            .unwrap_or_default()
+                    ),
+                );
+            }
         }
         ParsedMessage::Ignored => {}
     }
+    false
 }
 
-impl Drop for LogsSubscription {
+/// Hand one notification to the subscribers of the topic its subscription id names.
+fn deliver(registry: &mut Registry, subscription_id: u64, event: TopicEvent) {
+    let Some(topic) = registry.topic_for_subscription(subscription_id).cloned() else {
+        logger::debug(
+            LogTag::Websocket,
+            &format!("Notification for unknown subscription id {subscription_id}"),
+        );
+        return;
+    };
+    NOTIFICATIONS.fetch_add(1, Relaxed);
+    LAST_MESSAGE_UNIX.store(chrono::Utc::now().timestamp(), Relaxed);
+    registry.fanout(&topic, &event);
+}
+
+impl Drop for Subscription {
     fn drop(&mut self) {
         // Send on the channel the handle carries rather than looking the actor up
         // through COMMANDS: a lock we failed to take here would silently skip the
         // unsubscribe and leave the address subscribed on the server forever.
         let _ = self.commands.send(Command::Unsubscribe {
-            address: self.address.clone(),
+            topic: self.topic.clone(),
             handle_id: self.id,
         });
     }
@@ -466,104 +478,5 @@ mod tests {
         assert_eq!(reconnect_delay_secs(5), 32);
         assert_eq!(reconnect_delay_secs(6), 60);
         assert_eq!(reconnect_delay_secs(50), 60);
-    }
-
-    #[test]
-    fn parse_message_notification_success() {
-        let raw = r#"{
-            "jsonrpc": "2.0",
-            "method": "logsNotification",
-            "params": {
-                "result": {
-                    "context": { "slot": 5208469 },
-                    "value": {
-                        "signature": "5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5Ncn16wmqokgpiKRLuS83KUxyZyv2sUYv",
-                        "err": null,
-                        "logs": [
-                            "Program 11111111111111111111111111111111 invoke [1]",
-                            "Program 11111111111111111111111111111111 success"
-                        ]
-                    }
-                },
-                "subscription": 24040
-            }
-        }"#;
-
-        match parse_message(raw) {
-            ParsedMessage::Notification {
-                subscription_id,
-                signature,
-                slot,
-                failed,
-                logs,
-            } => {
-                assert_eq!(subscription_id, 24040);
-                assert_eq!(
-                    signature,
-                    "5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5Ncn16wmqokgpiKRLuS83KUxyZyv2sUYv"
-                );
-                assert_eq!(slot, Some(5208469));
-                assert!(!failed);
-                assert_eq!(logs.len(), 2);
-            }
-            other => panic!("expected Notification, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn parse_message_notification_failed_transaction() {
-        let raw = r#"{
-            "jsonrpc": "2.0",
-            "method": "logsNotification",
-            "params": {
-                "result": {
-                    "context": { "slot": 1 },
-                    "value": {
-                        "signature": "sig",
-                        "err": { "InstructionError": [0, { "Custom": 1 }] },
-                        "logs": []
-                    }
-                },
-                "subscription": 1
-            }
-        }"#;
-
-        match parse_message(raw) {
-            ParsedMessage::Notification { failed, .. } => assert!(failed),
-            other => panic!("expected Notification, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn parse_message_confirmation() {
-        let raw = r#"{"jsonrpc":"2.0","result":24040,"id":1}"#;
-        assert_eq!(
-            parse_message(raw),
-            ParsedMessage::Confirmation {
-                request_id: 1,
-                subscription_id: 24040,
-            }
-        );
-    }
-
-    #[test]
-    fn parse_message_rpc_error() {
-        let raw = r#"{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":1}"#;
-        match parse_message(raw) {
-            ParsedMessage::RpcError {
-                request_id,
-                message,
-            } => {
-                assert_eq!(request_id, Some(1));
-                assert_eq!(message, "Invalid params");
-            }
-            other => panic!("expected RpcError, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn parse_message_ignored_cases() {
-        assert_eq!(parse_message("not json"), ParsedMessage::Ignored);
-        assert_eq!(parse_message("{}"), ParsedMessage::Ignored);
     }
 }

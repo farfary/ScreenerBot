@@ -65,9 +65,9 @@ pub use helpers::{parse_pubkey, spl_token_program_id};
 // ============================================================================
 
 pub use subscriptions::{
-    connection_state, get_websocket_url, get_websocket_url_from_http, get_websocket_urls,
-    subscribe_logs_mentions, subscription_metrics, websocket_url_for_attempt, ConnectionState,
-    LogsSubscription, SubscriptionEvent, SubscriptionMetrics,
+    connection_generation, connection_state, get_websocket_url, get_websocket_url_from_http,
+    get_websocket_urls, subscribe, subscription_metrics, websocket_url_for_attempt,
+    ConnectionState, Mention, Subscription, SubscriptionMetrics, Topic, TopicEvent,
 };
 
 // ============================================================================

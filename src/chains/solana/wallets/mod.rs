@@ -7,6 +7,7 @@
 //! `crate::wallets::watch` — this module supplies the one Solana-specific step
 //! that pipeline calls into.
 
+mod account_changes;
 pub mod classify;
 pub mod runtime;
 pub mod service_runtime;
