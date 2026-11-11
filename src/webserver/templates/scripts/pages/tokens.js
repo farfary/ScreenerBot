@@ -288,22 +288,10 @@ function createLifecycle() {
     }
   };
 
+  // The reason columns exist only in their own views (`buildColumns`), so a view
+  // switch changes the filters here and never forces a column the viewer hid.
   const applyViewPreferences = () => {
     if (!table) return;
-    const showRejectReason = state.view === "rejected";
-    if (table.state && typeof table.state === "object") {
-      table.state.visibleColumns = table.state.visibleColumns || {};
-      table.state.visibleColumns.reject_reason = showRejectReason;
-    }
-    const column = Array.isArray(table.options?.columns)
-      ? table.options.columns.find((col) => col.id === "reject_reason")
-      : null;
-    if (column) {
-      column.visible = showRejectReason;
-    }
-    if (typeof table._renderTable === "function") {
-      table._renderTable();
-    }
     updateFilterVisibility();
     updateRejectionReasonOptions();
   };

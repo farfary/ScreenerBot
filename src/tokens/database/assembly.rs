@@ -70,6 +70,21 @@ fn parse_json_list<T: serde::de::DeserializeOwned>(raw: Option<&str>) -> Vec<T> 
         .unwrap_or_default()
 }
 
+/// The market source the config prefers.
+fn preferred_market_source() -> DataSource {
+    crate::config::with_config(|cfg| market_source_named(&cfg.tokens.preferred_market_data_source))
+}
+
+/// The market source a configured name selects: GeckoTerminal by its name in any case,
+/// DexScreener (the default) for anything else.
+pub(super) fn market_source_named(name: &str) -> DataSource {
+    if name.eq_ignore_ascii_case(DataSource::GeckoTerminal.as_str()) {
+        DataSource::GeckoTerminal
+    } else {
+        DataSource::DexScreener
+    }
+}
+
 /// The tables a token row is assembled from, by the alias its columns are read through.
 /// Each is keyed by chain and mint, so a join adds at most one row per token and never
 /// removes one.
@@ -186,14 +201,7 @@ impl TokenDatabase {
     ///
     /// Returns None if token doesn't exist or has no market data from preferred source.
     pub fn get_full_token(&self, mint: &str) -> TokenResult<Option<Token>> {
-        // Determine preferred source from config
-        let preferred_source =
-            crate::config::with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());
-        let primary_source = if preferred_source.eq_ignore_ascii_case("geckoterminal") {
-            DataSource::GeckoTerminal
-        } else {
-            DataSource::DexScreener
-        };
+        let primary_source = preferred_market_source();
 
         if let Some(token) = self.get_full_token_for_source(mint, primary_source)? {
             return Ok(Some(token));
@@ -410,7 +418,8 @@ impl TokenDatabase {
             })
         })?;
 
-        // Parse row data
+        // Read once for the page; each row takes the preferred source when it has data.
+        let prefers_gecko = preferred_market_source() == DataSource::GeckoTerminal;
         let tokens_iter = stmt
             .query_map(bound.as_slice(), |row| {
                 let mint: String = row.get(0)?;
@@ -680,9 +689,6 @@ impl TokenDatabase {
             let priority = priority_value
                 .map(Priority::from_value)
                 .unwrap_or(Priority::Standard);
-            // Determine chosen market source based on config preference then fallback
-            let preferred_source =
-                crate::config::with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());
             let dex_available = d_price_sol.is_some() || d_price_usd.is_some();
             let gecko_available = g_price_sol.is_some() || g_price_usd.is_some();
 
@@ -711,7 +717,7 @@ impl TokenDatabase {
                 tx6s,
                 tx24b,
                 tx24s,
-            ) = if preferred_source == "geckoterminal" {
+            ) = if prefers_gecko {
                 if gecko_available {
                     (
                         DataSource::GeckoTerminal,
@@ -1048,43 +1054,5 @@ impl TokenDatabase {
         }
         tokens.shrink_to_fit(); // reclaim over-allocated Vec capacity
         Ok(tokens)
-    }
-
-    fn get_optional_market_data(
-        &self,
-        mint: &str,
-    ) -> TokenResult<(Option<MarketDataType>, DataSource)> {
-        let preferred_source =
-            crate::config::with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());
-
-        if preferred_source == "geckoterminal" {
-            if let Some(data) = self.get_geckoterminal_data(mint)? {
-                return Ok((
-                    Some(MarketDataType::GeckoTerminal(data)),
-                    DataSource::GeckoTerminal,
-                ));
-            }
-            if let Some(data) = self.get_dexscreener_data(mint)? {
-                return Ok((
-                    Some(MarketDataType::DexScreener(data)),
-                    DataSource::DexScreener,
-                ));
-            }
-        } else {
-            if let Some(data) = self.get_dexscreener_data(mint)? {
-                return Ok((
-                    Some(MarketDataType::DexScreener(data)),
-                    DataSource::DexScreener,
-                ));
-            }
-            if let Some(data) = self.get_geckoterminal_data(mint)? {
-                return Ok((
-                    Some(MarketDataType::GeckoTerminal(data)),
-                    DataSource::GeckoTerminal,
-                ));
-            }
-        }
-
-        Ok((None, DataSource::Unknown))
     }
 }

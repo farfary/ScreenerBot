@@ -642,7 +642,8 @@ body {
 .pnl-negative,
 .pnl-neutral,
 .value-positive,
-.value-negative {
+.value-negative,
+.value-warning {
   user-select: text;
   cursor: text;
 }
@@ -778,7 +779,7 @@ select,
   font-weight: 500;
 }
 
-/* Value classes for positive/negative styling in tables */
+/* Value classes for positive, negative and warning tones in tables */
 .value-positive {
   font-family: var(--font-data);
   font-feature-settings:
@@ -793,6 +794,14 @@ select,
     "tnum" 1,
     "zero" 1;
   color: var(--error-color);
+}
+
+.value-warning {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  color: var(--warning-color);
 }
 
 /* Monospace for addresses, hashes, signatures */

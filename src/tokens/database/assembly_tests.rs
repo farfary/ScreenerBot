@@ -127,3 +127,24 @@ fn every_paged_row_carries_its_own_data() {
         assert_eq!(token.security_score, *score, "{}", token.mint);
     }
 }
+
+#[test]
+fn every_reader_takes_the_same_market_source_from_a_configured_name() {
+    use super::assembly::market_source_named;
+    use crate::tokens::types::DataSource;
+
+    for name in ["geckoterminal", "GeckoTerminal", "GECKOTERMINAL"] {
+        assert_eq!(
+            market_source_named(name),
+            DataSource::GeckoTerminal,
+            "{name}"
+        );
+    }
+    for name in ["dexscreener", "DexScreener", "", "rugcheck"] {
+        assert_eq!(
+            market_source_named(name),
+            DataSource::DexScreener,
+            "{name:?}"
+        );
+    }
+}
