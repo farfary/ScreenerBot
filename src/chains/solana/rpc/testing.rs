@@ -52,14 +52,7 @@ pub async fn test_rpc_endpoint(url: &str, wallet_address: Option<&str>) -> RpcEn
     let display_url = parsed.host_str().unwrap_or("RPC endpoint").to_owned();
     logger::debug(LogTag::Rpc, &format!("Testing RPC endpoint: {display_url}"));
 
-    let lower = display_url.to_lowercase();
-    let is_premium = lower.contains("helius")
-        || lower.contains("quicknode")
-        || lower.contains("quiknode")
-        || lower.contains("alchemy")
-        || lower.contains("triton")
-        || lower.contains("shyft")
-        || lower.contains("getblock");
+    let is_premium = crate::rpc::detect_provider_kind(&display_url).is_premium();
 
     let client = match crate::net::client_builder()
         .timeout(Duration::from_secs(10))

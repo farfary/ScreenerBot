@@ -17,6 +17,8 @@ pub fn detect_provider_kind(url: &str) -> ProviderKind {
         ProviderKind::Triton
     } else if lower.contains("alchemy") {
         ProviderKind::Alchemy
+    } else if lower.contains("drpc.org") || lower.contains("drpc.live") {
+        ProviderKind::Drpc
     } else if lower.contains("getblock") {
         ProviderKind::GetBlock
     } else if lower.contains("shyft") {
@@ -62,4 +64,50 @@ pub fn derive_websocket_url(http_url: &str) -> Option<String> {
     };
 
     Some(ws_url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_provider_kind, generate_provider_id};
+    use crate::rpc::types::ProviderKind;
+
+    #[test]
+    fn recognises_each_provider_by_its_endpoint_url() {
+        for (url, kind) in [
+            (
+                "https://mainnet.helius-rpc.com/?api-key=k",
+                ProviderKind::Helius,
+            ),
+            (
+                "https://a-b.solana-mainnet.quiknode.pro/k/",
+                ProviderKind::QuickNode,
+            ),
+            ("https://x.rpcpool.com/k", ProviderKind::Triton),
+            (
+                "https://solana-mainnet.g.alchemy.com/v2/k",
+                ProviderKind::Alchemy,
+            ),
+            ("https://lb.drpc.org/solana/k", ProviderKind::Drpc),
+            ("https://lb.drpc.live/solana/k", ProviderKind::Drpc),
+            (
+                "https://lb.drpc.org/ogrpc?network=solana&dkey=k",
+                ProviderKind::Drpc,
+            ),
+            ("https://go.getblock.io/k", ProviderKind::GetBlock),
+            ("https://rpc.shyft.to?api_key=k", ProviderKind::Shyft),
+            ("https://api.mainnet-beta.solana.com", ProviderKind::Public),
+            ("https://rpc.example.org", ProviderKind::Unknown),
+        ] {
+            assert_eq!(detect_provider_kind(url), kind, "{url}");
+        }
+    }
+
+    #[test]
+    fn a_drpc_key_is_a_premium_provider_with_its_own_name() {
+        let kind = detect_provider_kind("https://lb.drpc.org/solana/k");
+        assert!(kind.is_premium());
+        assert_eq!(kind.to_string(), "dRPC");
+        assert_eq!(serde_json::to_value(kind).unwrap(), "drpc");
+        assert!(generate_provider_id("https://lb.drpc.org/solana/k").starts_with("drpc_"));
+    }
 }

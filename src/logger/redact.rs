@@ -27,6 +27,7 @@ const CREDENTIAL_PARAMS: &[&str] = &[
     "access_token",
     "auth",
     "auth_token",
+    "dkey",
     "secret",
     "client_secret",
     "password",
@@ -42,6 +43,8 @@ const PATH_TOKEN_HOSTS: &[&str] = &[
     "quiknode.pro",
     "quicknode.pro",
     "alchemy.com",
+    "drpc.org",
+    "drpc.live",
     "rpcpool.com",
     "getblock.io",
     "api.telegram.org",
@@ -225,6 +228,10 @@ mod tests {
             "https://host/path?a=1&API_KEY=***&b=2&refresh_token=***#x"
         );
         assert_eq!(
+            redact_url("https://lb.drpc.org/ogrpc?network=solana&dkey=secret"),
+            "https://lb.drpc.org/ogrpc?network=solana&dkey=***"
+        );
+        assert_eq!(
             redact_url(
                 "https://generativelanguage.googleapis.com/v1/models/m:generateContent?key=secret"
             ),
@@ -253,6 +260,14 @@ mod tests {
         assert_eq!(
             redact_url("https://solana-mainnet.g.alchemy.com/v2/0123456789abcdef0123"),
             "https://solana-mainnet.g.alchemy.com/v2/***"
+        );
+        assert_eq!(
+            redact_url("https://lb.drpc.org/solana/0123456789abcdef0123"),
+            "https://lb.drpc.org/solana/***"
+        );
+        assert_eq!(
+            redact_url("https://lb.drpc.live/solana/0123456789abcdef0123"),
+            "https://lb.drpc.live/solana/***"
         );
         assert_eq!(
             redact_url("https://api.telegram.org/bot123456:ABCDEFGHIJKLMNOP/sendMessage"),

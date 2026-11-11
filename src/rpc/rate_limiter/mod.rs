@@ -47,6 +47,7 @@ impl RateLimiterManager {
             ProviderKind::QuickNode,
             ProviderKind::Triton,
             ProviderKind::Alchemy,
+            ProviderKind::Drpc,
             ProviderKind::GetBlock,
             ProviderKind::Shyft,
             ProviderKind::Public,
@@ -76,6 +77,7 @@ impl RateLimiterManager {
         default_rates.insert(ProviderKind::QuickNode, quicknode_rate_limit);
         default_rates.insert(ProviderKind::Triton, triton_rate_limit);
         default_rates.insert(ProviderKind::Alchemy, quicknode_rate_limit); // Similar to QuickNode
+        default_rates.insert(ProviderKind::Drpc, quicknode_rate_limit);
         default_rates.insert(ProviderKind::GetBlock, quicknode_rate_limit);
         default_rates.insert(ProviderKind::Shyft, quicknode_rate_limit);
         default_rates.insert(ProviderKind::Public, public_rate_limit);
