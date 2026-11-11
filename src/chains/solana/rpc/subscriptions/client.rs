@@ -34,6 +34,21 @@ pub(super) enum Command {
 /// `logsSubscribe`, before it asks again. Watched wallets are polled meanwhile.
 const UNSUPPORTED_RECHECK: Duration = Duration::from_secs(300);
 
+/// How long a connection must hold before its close counts as routine: providers
+/// close long-lived sockets every so often, and the reconnect restores every topic.
+const STABLE_CONNECTION: Duration = Duration::from_secs(60);
+
+/// The backoff attempt after a connection that held for `lived` closed. A routine
+/// close starts the backoff over; an endpoint that keeps dropping new connections
+/// keeps escalating instead of being retried every second.
+fn attempt_after_close(attempt: u32, lived: Duration) -> u32 {
+    if lived >= STABLE_CONNECTION {
+        0
+    } else {
+        attempt
+    }
+}
+
 /// Reconnect backoff in seconds: 1, 2, 4, 8, 16, 32, then capped at 60.
 pub(super) fn reconnect_delay_secs(attempt: u32) -> u64 {
     2u64.saturating_pow(attempt.min(6)).min(60).max(1)
@@ -215,7 +230,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
             LogTag::Websocket,
             &format!("WebSocket connected ({})", crate::logger::redact_url(&url)),
         );
-        attempt = 0;
+        let connected_at = std::time::Instant::now();
         GENERATION.fetch_add(1, Relaxed);
         set_state(ConnectionState::Connected);
         let (mut ws_tx, mut ws_rx) = stream.split();
@@ -353,6 +368,8 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
             provider_index = 0;
             continue 'outer;
         }
+        let lived = connected_at.elapsed();
+        attempt = attempt_after_close(attempt, lived);
         RECONNECTS.fetch_add(1, Relaxed);
         set_state(ConnectionState::Reconnecting);
         provider_index = (provider_index + 1) % usable_count;
@@ -362,10 +379,23 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
         } else {
             0
         };
-        logger::warning(
-            LogTag::Websocket,
-            &format!("WebSocket disconnected - failing over in {delay}s"),
-        );
+        if lived >= STABLE_CONNECTION {
+            logger::info(
+                LogTag::Websocket,
+                &format!(
+                    "WebSocket closed after {}s - reconnecting in {delay}s",
+                    lived.as_secs()
+                ),
+            );
+        } else {
+            logger::warning(
+                LogTag::Websocket,
+                &format!(
+                    "WebSocket dropped {}s after connecting - failing over in {delay}s",
+                    lived.as_secs()
+                ),
+            );
+        }
         if delay > 0 {
             tokio::time::sleep(Duration::from_secs(delay)).await;
         }
@@ -467,6 +497,17 @@ impl Drop for Subscription {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_routine_close_starts_the_backoff_over_and_a_quick_drop_escalates_it() {
+        assert_eq!(attempt_after_close(3, STABLE_CONNECTION), 0);
+        assert_eq!(attempt_after_close(3, Duration::from_secs(5)), 3);
+        assert_eq!(
+            reconnect_delay_secs(attempt_after_close(3, Duration::from_secs(5))),
+            8,
+            "a dropping endpoint is not retried every second"
+        );
+    }
 
     #[test]
     fn reconnect_delay_matches_schedule() {

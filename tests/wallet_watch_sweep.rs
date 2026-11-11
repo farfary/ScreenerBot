@@ -53,6 +53,10 @@ const TRUTH_PAGES: usize = 100;
 /// Unobserved successful references decoded per wallet for the ground truth.
 const TRUTH_DECODES: usize = 200;
 const TRUTH_CONCURRENCY: usize = 6;
+/// Seconds at each end of the window left out of the ground truth: the service cannot
+/// publish a transaction landing in its last seconds, and a target's first observation
+/// only sets its cursor.
+const WINDOW_EDGE_SECS: i64 = 10;
 const STATUS_EVERY: Duration = Duration::from_secs(10);
 const WRAPPED_SOL: &str = "So11111111111111111111111111111111111111112";
 /// A native move smaller than this is fees and rent, not a trade leg.
@@ -742,7 +746,8 @@ struct Truth {
     decoded: usize,
     decode_errors: usize,
     swaps: usize,
-    missed: Vec<String>,
+    /// Missed swaps with their block times.
+    missed: Vec<(String, i64)>,
 }
 
 /// Read back each wallet's references inside the service window and decode the successful
@@ -752,7 +757,10 @@ async fn ground_truth(
     wallets: &[Wallet],
     run: &ServiceRun,
 ) -> HashMap<String, Truth> {
-    let (from, to) = (run.started.timestamp(), run.finished.timestamp());
+    let (from, to) = (
+        run.started.timestamp() + WINDOW_EDGE_SECS,
+        run.finished.timestamp() - WINDOW_EDGE_SECS,
+    );
     let mut truth = HashMap::new();
     for wallet in wallets {
         let pubkey =
@@ -784,7 +792,7 @@ async fn ground_truth(
                     result.successful += 1;
                     let signature = item.signature.to_string();
                     if !observed.contains(signature.as_str()) {
-                        unobserved.push(signature);
+                        unobserved.push((signature, time));
                     }
                 }
             }
@@ -803,14 +811,14 @@ async fn ground_truth(
         }
         let address = wallet.address.as_str();
         let decoded = stream::iter(unobserved)
-            .map(|signature| async move {
+            .map(|(signature, time)| async move {
                 let result = runtime.decode_transaction(address, &signature, false).await;
-                (signature, result)
+                (signature, time, result)
             })
             .buffer_unordered(TRUTH_CONCURRENCY)
             .collect::<Vec<_>>()
             .await;
-        for (signature, decoded) in decoded {
+        for (signature, time, decoded) in decoded {
             match decoded {
                 Ok(transaction) => {
                     result.decoded += 1;
@@ -819,7 +827,7 @@ async fn ground_truth(
                             kind,
                             ActivityKind::Swap { .. } | ActivityKind::StableSwap { .. }
                         ) {
-                            result.missed.push(signature);
+                            result.missed.push((signature, time));
                         }
                     }
                 }
@@ -933,6 +941,21 @@ fn write_service_reports(
     }
     write(&out.join("activity.tsv"), &activity_rows);
     write(&out.join("service.tsv"), &service_rows);
+    let mut missed_rows =
+        String::from("provider\twallet\tsignature\tblock_time\tsecs_before_window_end\n");
+    for wallet in wallets {
+        if let Some(wallet_truth) = truth.get(&wallet.address) {
+            for (signature, time) in &wallet_truth.missed {
+                let _ = writeln!(
+                    missed_rows,
+                    "{provider}\t{}\t{signature}\t{time}\t{}",
+                    wallet.label,
+                    run.finished.timestamp() - time
+                );
+            }
+        }
+    }
+    write(&out.join("missed.tsv"), &missed_rows);
     let mut timeline = run.timeline.join("\n");
     let _ = write!(
         timeline,
