@@ -88,25 +88,34 @@
   text-overflow: ellipsis;
 }
 
+/* State colours come from the semantic tokens of the active theme: in-flight buys and
+   adds in the warning hue, sales and closes leaning toward the error hue, failures in
+   the error hue. */
+.data-table tbody tr {
+  --pos-buying: var(--semantic-warning-text);
+  --pos-selling: color-mix(in srgb, var(--semantic-warning-text) 65%, var(--semantic-error-text));
+  --pos-failed: var(--semantic-error-text);
+}
+
 .pos-state-caption.pos-state-buying {
-  color: #fbbf24;
+  color: var(--pos-buying);
 }
 
 .pos-state-caption.pos-state-selling,
 .pos-state-caption.pos-state-closing {
-  color: #fb923c;
+  color: var(--pos-selling);
 }
 
 .pos-state-caption.pos-state-failed {
-  color: #f87171;
+  color: var(--pos-failed);
 }
 
-/* Tiny spinner used inside the state caption */
+/* Tiny spinner used inside the state caption, drawn in the caption's colour */
 .pos-state-spinner {
   width: 11px;
   height: 11px;
   flex-shrink: 0;
-  border: 2px solid rgb(255, 255, 255, 0.25);
+  border: 2px solid color-mix(in srgb, currentcolor 25%, transparent);
   border-top-color: currentcolor;
   border-radius: var(--radius-full);
   animation: spin 0.7s linear infinite;
@@ -114,17 +123,17 @@
 
 /* In-flight buy */
 .data-table tbody tr.pos-row-buying {
-  --dt-row-wash: rgb(245, 158, 11, 0.09);
+  --dt-row-wash: color-mix(in srgb, var(--pos-buying) 10%, transparent);
 }
 
 /* In-flight sell or close */
 .data-table tbody tr:is(.pos-row-selling, .pos-row-closing) {
-  --dt-row-wash: rgb(251, 146, 60, 0.09);
+  --dt-row-wash: color-mix(in srgb, var(--pos-selling) 10%, transparent);
 }
 
 /* Failed buy */
 .data-table tbody tr.pos-row-failed {
-  --dt-row-wash: rgb(239, 68, 68, 0.1);
+  --dt-row-wash: color-mix(in srgb, var(--pos-failed) 11%, transparent);
 }
 
 /* Pending (synthetic) rows are non-interactive placeholders */
@@ -140,24 +149,24 @@
   font-style: italic;
 }
 
-/* Arrival glow when a position lands in the Closed list */
-.pos-row-just-closed > td {
+/* A position that closed moments ago lands on the Closed list under a green wash that
+   fades to the row's own surface. A row arriving while the list is on screen gets the
+   same wash from the table's arrival motion. */
+.data-table tbody tr.pos-row-just-closed {
+  --dt-row-arrival: color-mix(in srgb, var(--success-color) 20%, transparent);
+
   animation: pos-arrive 1.6s ease-out;
 }
 
 @keyframes pos-arrive {
-  0% {
-    background-image: linear-gradient(0deg, rgb(34, 197, 94, 0.22), rgb(34, 197, 94, 0.22));
-  }
-
-  100% {
-    background-image: linear-gradient(0deg, rgb(34, 197, 94, 0), rgb(34, 197, 94, 0));
+  from {
+    --dt-row-wash: var(--dt-row-arrival);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pos-state-spinner,
-  .pos-row-just-closed > td {
+  .data-table tbody tr.pos-row-just-closed {
     animation: none;
   }
 }

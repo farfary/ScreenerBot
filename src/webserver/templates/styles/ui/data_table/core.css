@@ -407,13 +407,26 @@ body.dt-column-resizing * {
 /* Table body. A row state (a boost, a pending position) tints the row by setting
    `--dt-row-wash`, a translucent colour layered over whatever surface the row has
    (zebra, hover), never by painting its own background: the pinned cells read the
-   same variable, so the tint covers the whole row. */
+   same variable, so the tint covers the whole row. It is registered as a colour so a
+   tint fades in and out with the state instead of snapping, and so the arrival wash
+   of a row that just came in (`--dt-row-arrival`, data_table/row_motion.js) can fade
+   to the row's own tint. */
+@property --dt-row-wash {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
 .data-table tbody tr {
   --dt-row-wash: transparent;
+  --dt-row-arrival: color-mix(in srgb, var(--primary-color) 14%, transparent);
 
   background-image: linear-gradient(var(--dt-row-wash), var(--dt-row-wash));
   border-bottom: 1px solid var(--border-color);
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    --dt-row-wash var(--transition-normal);
   min-height: 44px;
 }
 
@@ -437,11 +450,13 @@ body.dt-column-resizing * {
   background-color: rgb(59, 130, 246, 0.15);
 }
 
-.data-table.zebra tbody tr:nth-child(even) {
+/* A row fading out no longer counts, so the stripes below it settle when it starts
+   leaving instead of flipping again when it is removed. */
+.data-table.zebra tbody tr:nth-child(even of :not(.dt-row-leaving)) {
   background-color: rgb(0, 0, 0, 0.02);
 }
 
-.data-table.zebra tbody tr:nth-child(even):hover {
+.data-table.zebra tbody tr:nth-child(even of :not(.dt-row-leaving)):hover {
   background-color: var(--bg-hover);
 }
 
@@ -676,38 +691,14 @@ body.dt-column-resizing * {
   }
 }
 
-/* ==================== Row enter / leave animations ====================
- * Opt-in via the DataTable `rowClass` (enter) and `rowExitAnimation` (leave)
- * options. Used e.g. by the positions page so a pending buy slides in and a
- * just-closed position fades out before moving to the Closed list.
+/* ==================== Row motion ====================
+ * Rows of a live change enter, leave and slide through the Web Animations API
+ * (data_table/row_motion.js). A leaving row fades where it stands and then closes
+ * its gap; until it is removed it takes no pointer events, so a click passes to the
+ * row the viewer sees.
  */
-.data-table tbody tr.dt-row-enter {
-  --fade-rise: -4px;
-
-  animation: fadeIn 0.34s ease both;
-}
-
-@keyframes dt-row-leave-kf {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-    transform: translateX(calc(var(--dir-sign) * 14px));
-  }
-}
-
 .data-table tbody tr.dt-row-leaving {
-  animation: dt-row-leave-kf 0.32s ease forwards;
   pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .data-table tbody tr.dt-row-enter,
-  .data-table tbody tr.dt-row-leaving {
-    animation: none;
-  }
 }
 
 /* ==================== Floating / Pinned-Left Columns ====================
@@ -771,12 +762,12 @@ body.dt-column-resizing * {
 
 /* Zebra even rows: the zebra overlay (matches `.data-table.zebra tbody
    tr:nth-child(even)` above) mixed into the base surface. */
-.data-table.zebra tbody tr:nth-child(even) td.dt-col-sticky {
+.data-table.zebra tbody tr:nth-child(even of :not(.dt-row-leaving)) td.dt-col-sticky {
   --dt-sticky-surface: color-mix(in srgb, rgb(0, 0, 0) 2%, var(--bg-primary));
 }
 
 .data-table tbody tr:hover td.dt-col-sticky,
-.data-table.zebra tbody tr:nth-child(even):hover td.dt-col-sticky {
+.data-table.zebra tbody tr:nth-child(even of :not(.dt-row-leaving)):hover td.dt-col-sticky {
   --dt-sticky-surface: var(--bg-hover, var(--bg-card-hover));
 }
 
@@ -817,11 +808,7 @@ body.dt-column-resizing * {
   background:
     linear-gradient(var(--to-inline-end), var(--dt-pin-shadow), transparent),
     linear-gradient(var(--to-inline-end), var(--dt-row-wash, transparent) 40%, transparent),
-    linear-gradient(
-      var(--to-inline-end),
-      var(--dt-sticky-surface) 40%,
-      transparent
-    );
+    linear-gradient(var(--to-inline-end), var(--dt-sticky-surface) 40%, transparent);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-base);

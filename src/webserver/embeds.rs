@@ -355,6 +355,8 @@ pub const DATA_TABLE_EVENT_HANDLERS: &str =
     include_str!("templates/scripts/ui/data_table/event_handlers.js");
 pub const DATA_TABLE_LAYOUT_STATE: &str =
     include_str!("templates/scripts/ui/data_table/layout_state.js");
+pub const DATA_TABLE_ROW_MOTION: &str =
+    include_str!("templates/scripts/ui/data_table/row_motion.js");
 pub const DATA_TABLE_SEARCH: &str = include_str!("templates/scripts/ui/data_table/search.js");
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 pub const TOAST_UI: &str = include_str!("templates/scripts/ui/toast.js");

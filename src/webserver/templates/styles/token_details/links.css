@@ -229,15 +229,17 @@
   }
 }
 
-/* The explorer grid's last row, three across or two on a narrow sheet. */
+/* The explorer grid's last row, three across or two on a narrow sheet. The subject names
+   `.links-external-row`: under a `:has()` ancestor a bare `:nth-child()` or `*` subject
+   makes the browser restyle the whole document on every text change anywhere. */
 @media (width > 650px) {
   .links-sheet-section:has(+ .links-sheet-section)
     .links-explorer-grid
-    > :nth-child(3n + 1):nth-last-child(-n + 3),
+    > .links-external-row:nth-child(3n + 1):nth-last-child(-n + 3),
   .links-sheet-section:has(+ .links-sheet-section)
     .links-explorer-grid
-    > :nth-child(3n + 1):nth-last-child(-n + 3)
-    ~ * {
+    > .links-external-row:nth-child(3n + 1):nth-last-child(-n + 3)
+    ~ .links-external-row {
     border-bottom: 0;
   }
 }
@@ -249,11 +251,11 @@
 
   .links-sheet-section:has(+ .links-sheet-section)
     .links-explorer-grid
-    > :nth-child(odd):nth-last-child(-n + 2),
+    > .links-external-row:nth-child(odd):nth-last-child(-n + 2),
   .links-sheet-section:has(+ .links-sheet-section)
     .links-explorer-grid
-    > :nth-child(odd):nth-last-child(-n + 2)
-    + * {
+    > .links-external-row:nth-child(odd):nth-last-child(-n + 2)
+    + .links-external-row {
     border-bottom: 0;
   }
 }

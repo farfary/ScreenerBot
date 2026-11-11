@@ -9,6 +9,14 @@ import { waitForReady } from "./bootstrap.js";
 const AUTO_DISMISS_COMPLETED_MS = 10000; // 10 seconds
 const AUTO_DISMISS_FAILED_MS = 30000; // 30 seconds
 const RECONNECT_DELAY_MS = 3000;
+/** Most missed actions one sync settles; any beyond it settle on the next sync. */
+const MISSED_ACTIONS_LIMIT = 20;
+/** Stream update that carries each final status. */
+const FINAL_UPDATE_TYPES = {
+  completed: "action_completed",
+  failed: "action_failed",
+  cancelled: "action_cancelled",
+};
 const STREAM_LOCK = "screenerbot-actions-stream";
 const STREAM_CHANNEL = "screenerbot-actions-stream";
 
@@ -583,6 +591,7 @@ class NotificationManager {
       }
 
       this.emitSummary();
+      await this.settleMissedActions(new Set(actions.map((action) => action?.id)));
     } catch (error) {
       console.error("[NotificationManager] Failed to sync active actions", error);
       this.notifySubscribers({
@@ -590,6 +599,51 @@ class NotificationManager {
         reason,
         error: error.message,
       });
+    }
+  }
+
+  /**
+   * Settle the actions this tab still holds in progress that the server no longer lists as
+   * active. They finished while the stream was down (sleep, a lost connection, a backend
+   * restart), so their final update never arrived and their rows would stay in flight until a
+   * reload. Each one is fetched and replayed as the update the stream missed; one the server
+   * no longer knows is dropped.
+   */
+  async settleMissedActions(activeIds) {
+    const missed = [...this.notifications.values()]
+      .filter((n) => this.getStatus(n) === "in_progress" && !activeIds.has(n.id))
+      .slice(0, MISSED_ACTIONS_LIMIT);
+    if (missed.length === 0) return;
+
+    const results = await Promise.allSettled(
+      missed.map(async ({ id }) => {
+        const response = await fetch(`/api/actions/${encodeURIComponent(id)}`, {
+          headers: { "Cache-Control": "no-store", "X-Requested-With": "fetch" },
+        });
+        if (response.status === 404) return { id, gone: true };
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        return { id, action: (await response.json())?.action ?? null };
+      })
+    );
+
+    let dropped = false;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.warn("[NotificationManager] Missed action not settled", result.reason);
+        continue;
+      }
+      const { id, gone, action } = result.value;
+      if (gone) {
+        dropped = this.notifications.delete(id) || dropped;
+        continue;
+      }
+      const updateType = FINAL_UPDATE_TYPES[this.getStatus(action)];
+      if (updateType) this.handleUpdate({ action_id: id, update_type: updateType, action });
+    }
+
+    if (dropped) {
+      this.notifySubscribers({ type: "bulk_update", reason: "settled" });
+      this.emitSummary();
     }
   }
 

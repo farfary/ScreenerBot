@@ -723,13 +723,23 @@ export function applyEventHandlersMixin(DataTable) {
 
     // Hover tracking for render skipping during user interaction
     // This prevents table re-renders while user is hovering rows
-    const mouseEnterHandler = () => {
+    // Where the pointer is and when it last moved decide which live changes may land while
+    // it is over the table (data_table/row_motion.js); a held change lands at the latest
+    // when it leaves.
+    const trackPointer = (event) => {
+      this._pointerX = event.clientX;
+      this._pointerY = event.clientY;
+      this._pointerMovedAt = performance.now();
+    };
+    const mouseEnterHandler = (event) => {
       this._isHovering = true;
+      trackPointer(event);
       if (this._hoverTimeout) {
         clearTimeout(this._hoverTimeout);
         this._hoverTimeout = null;
       }
     };
+    const pointerMoveHandler = trackPointer;
     const mouseLeaveHandler = () => {
       // Small delay before allowing re-renders to prevent flicker on quick mouse movements
       if (this._hoverTimeout) {
@@ -737,10 +747,14 @@ export function applyEventHandlersMixin(DataTable) {
       }
       this._hoverTimeout = setTimeout(() => {
         this._isHovering = false;
+        this._pointerX = Number.NaN;
+        this._pointerY = Number.NaN;
         this._hoverTimeout = null;
+        this._flushHeldMotion();
       }, 150);
     };
     this._addEventListener(this.elements.scrollContainer, "mouseenter", mouseEnterHandler);
+    this._addEventListener(this.elements.scrollContainer, "pointermove", pointerMoveHandler);
     this._addEventListener(this.elements.scrollContainer, "mouseleave", mouseLeaveHandler);
 
     // Scroll position tracking (throttled to avoid excessive saves)

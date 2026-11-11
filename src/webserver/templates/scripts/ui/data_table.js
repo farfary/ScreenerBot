@@ -15,6 +15,11 @@
  * - State persistence via server-side storage
  * - Custom cell renderers
  * - Row actions and selection
+ * - Live row motion: rows that arrive, leave or move animate, and the row a pointer is
+ *   aiming at, or resting on a control of, never moves (data_table/row_motion.js).
+ *   `rowContinuityKey: (row) => key` names the subject of a row whose id changes (a
+ *   pending row that became a real one), so it changes in place; `rowMotion: false`
+ *   turns the motion off
  * - Optional logging
  *
  * Usage:
@@ -163,6 +168,7 @@ import { applyColumnManagementMixin } from "./data_table/column_management.js";
 import { applyClientPaginationMixin } from "./data_table/client_pagination.js";
 import { applyServerPaginationMixin } from "./data_table/server_pagination.js";
 import { applyEventHandlersMixin } from "./data_table/event_handlers.js";
+import { applyRowMotionMixin, isLeavingRow } from "./data_table/row_motion.js";
 import { columnLayoutSignature, reconcileSavedLayout } from "./data_table/layout_state.js";
 import { rowMatchesSearch } from "./data_table/search.js";
 
@@ -295,7 +301,18 @@ export class DataTable {
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
     this._pagination = this._initializePagination(this.options.pagination);
     this._paginationScrollRAF = null;
+    // A live render held while the pointer guards a row it would move
+    // (data_table/row_motion.js), applied once the pointer stops guarding it.
     this._pendingRenderOptions = null;
+    this._pointerX = Number.NaN;
+    this._pointerY = Number.NaN;
+    this._pointerMovedAt = Number.NEGATIVE_INFINITY;
+    this._heldMotionTimer = null;
+    this._rowMotion = null;
+    this._heldGaps = null;
+    this._renderedHeaderMarkup = null;
+    this._renderedColgroupMarkup = null;
+    this._renderedEmptyMarkup = null;
     this._serverStateRestored = false; // Track if server state has been restored
     this._settingsDialog = null; // NEW: Table settings dialog instance
     this._toolbarOverflowCloseTimer = null;
@@ -565,6 +582,11 @@ export class DataTable {
       this.options.zebra ? "zebra" : ""
     } ${uniformRowsLines ? "uniform-rows" : ""}`.trim();
     const tableStyle = uniformRowsLines ? `style="--dt-row-lines: ${uniformRowsLines};"` : "";
+
+    this._renderedHeaderMarkup = null;
+    this._renderedColgroupMarkup = null;
+    this._renderedEmptyMarkup = null;
+    this._resetRowMotion();
 
     container.innerHTML = `
       <div class="data-table-wrapper ${fixedHeightClass}" ${
@@ -1068,11 +1090,14 @@ export class DataTable {
         const customClass = this._computeRowClass(row);
         const customAttributes = this._computeRowAttributes(row);
         const rowClass = [isSelected ? "selected" : "", customClass].filter(Boolean).join(" ");
+        const continuity = this._continuityKey(row);
 
         return `
         <tr
           data-row-id="${rowId}"
-          class="${rowClass}"${customClass ? ` data-dt-row-class="${customClass}"` : ""}${customAttributes}
+          class="${rowClass}"${customClass ? ` data-dt-row-class="${customClass}"` : ""}${customAttributes}${
+            continuity === null ? "" : ` data-dt-continuity="${escapeHtml(continuity)}"`
+          }
         >
           ${this._renderRow(row, index)}
         </tr>
@@ -1229,6 +1254,7 @@ export class DataTable {
     // Keep the optional per-row state class in sync (pending/selling/etc.)
     this._syncRowClass(tr, row);
     this._syncRowAttributes(tr, row);
+    this._syncRowContinuity(tr, row);
 
     visibleColumns.forEach((col) => {
       const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
@@ -1249,108 +1275,122 @@ export class DataTable {
   }
 
   /**
-   * Update table body in-place (diffing) to avoid full reload
+   * Bring the body in line with `newData` in place, keeping every row's node.
+   *
+   * Same rows in the same order (the common live update: a price ticked) only rewrites cell
+   * values. Otherwise rows are matched by id (and by `rowContinuityKey` for a subject whose
+   * id changed), new rows are created, and placement moves only the rows that left the
+   * longest run of kept order (`_placeRows`): the body is never detached and re-inserted, so
+   * CSS animations in untouched rows keep running and no row is pulled from under the cursor.
+   * With `tops` (viewport tops captured before the render, `_captureRowTops`) and a small
+   * change, the motion is planned for `_playRowMotion`.
    */
-  _updateTableBody(newData) {
+  _updateTableBody(newData, { tops = null } = {}) {
     const tbody = this.elements.tbody;
+    const live = this._liveRows();
+    const animate = (entering, leaving) =>
+      Boolean(tops) && live.length > 0 && this._motionChangeFits(entering, leaving);
 
     if (newData.length === 0) {
-      tbody.innerHTML = this._renderEmptyState();
+      const markup = this._renderEmptyState();
+      const stateRow = tbody.querySelector(":scope > tr:not([data-row-id]):not(.dt-row-leaving)");
+      if (live.length === 0 && stateRow && this._renderedEmptyMarkup === markup) return;
+      this._renderedEmptyMarkup = markup;
+      if (!animate(0, live.length)) {
+        this._resetRowMotion();
+        tbody.innerHTML = markup;
+        return;
+      }
+      // The last rows fade where they stand and the empty state takes their place.
+      stateRow?.remove();
+      live.forEach((tr) => this._removeRow(tr, true));
+      tbody.insertAdjacentHTML("beforeend", markup);
+      tbody.lastElementChild?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 220,
+        easing: "ease-out",
+      });
       return;
     }
+    this._renderedEmptyMarkup = null;
 
-    // Check if currently showing empty state
-    if (tbody.querySelector(".dt-state-cell > .state-view")) {
-      tbody.innerHTML = "";
+    // A state row (empty, error, loading) gives way to the data.
+    for (const child of Array.from(tbody.children)) {
+      if (!child.hasAttribute("data-row-id") && !isLeavingRow(child)) child.remove();
     }
 
     const visibleColumns = this._getOrderedColumns();
 
-    // FAST PATH — same rows, same order: only cell VALUES can differ.
-    //
-    // The general path below pushes every <tr> through a DocumentFragment, which DETACHES and
-    // RE-INSERTS the entire body even when nothing moved. On a table that polls once a second
-    // that is a full re-layout of every row per tick, it restarts CSS animations, and it yanks
-    // the row out from under the cursor mid-hover. Rows only need to move when the row set or
-    // its order actually changes; the overwhelmingly common live update (a price ticked, a
-    // position's size grew) changes neither.
     if (this._rowOrderMatchesDom(newData)) {
-      const domRows = tbody.children;
       newData.forEach((row, index) => {
-        this._updateRowCells(domRows[index], row, visibleColumns, this._getRowId(row, index));
+        this._updateRowCells(live[index], row, visibleColumns, this._getRowId(row, index));
       });
       return;
     }
 
-    // Index existing rows
-    const existingRows = new Map();
-    Array.from(tbody.children).forEach((tr) => {
-      const id = tr.getAttribute("data-row-id");
-      if (id) existingRows.set(id, tr);
-    });
-
-    // Whether the table already had rows before this update. Used to gate the
-    // enter animation so an initial full load doesn't animate every row at once.
-    const hadRows = existingRows.size > 0;
-
-    const fragment = document.createDocumentFragment();
-
-    newData.forEach((row, index) => {
+    const existing = new Map(live.map((tr) => [tr.getAttribute("data-row-id"), tr]));
+    const leavingById = this._leavingRowsById();
+    const slots = newData.map((row, index) => {
       const rowId = this._getRowId(row, index);
-      const rowIdStr = String(rowId);
-      const existing = existingRows.get(rowIdStr);
-
-      if (existing) {
-        // Update existing row
-        existingRows.delete(rowIdStr);
-        this._updateRowCells(existing, row, visibleColumns, rowId);
-        fragment.appendChild(existing);
-      } else {
-        // Create new row
-        const tr = document.createElement("tr");
-        tr.setAttribute("data-row-id", rowIdStr);
-        if (this.state.selectedRows.has(rowId)) {
-          tr.classList.add("selected");
-        }
-        this._syncRowClass(tr, row);
-        this._syncRowAttributes(tr, row);
-        tr.innerHTML = this._renderRow(row, index);
-        // Subtle enter animation only on incremental updates (not initial load),
-        // so freshly-injected rows (e.g. a pending buy) slide in gracefully.
-        if (hadRows && !this._prefersReducedMotion()) {
-          tr.classList.add("dt-row-enter");
-          window.setTimeout(() => tr.classList.remove("dt-row-enter"), 360);
-        }
-        fragment.appendChild(tr);
+      const id = String(rowId);
+      let tr = existing.get(id) ?? null;
+      if (tr) {
+        existing.delete(id);
+      } else if (leavingById.has(id)) {
+        tr = leavingById.get(id);
+        this._reviveRow(tr, id);
       }
+      return { row, index, rowId, id, tr, morphed: false };
     });
 
-    // Remove remaining rows — optionally play a leave animation for rows the
-    // page flags (e.g. a position that just finished closing) before removal.
-    const leaving = Array.from(existingRows.values());
-    const animateExit =
-      typeof this.options.rowExitAnimation === "function" &&
-      leaving.length > 0 &&
-      leaving.length <= 8 &&
-      !this._prefersReducedMotion();
-    leaving.forEach((tr) => {
-      let shouldAnimate = false;
-      if (animateExit) {
-        try {
-          shouldAnimate = this.options.rowExitAnimation(tr) === true;
-        } catch (error) {
-          this._log("error", "rowExitAnimation function failed", error);
-        }
+    // A row that leaves while another with its continuity key arrives is that subject under
+    // a new id: keep its node so it changes in place.
+    const byContinuity = new Map();
+    existing.forEach((tr, id) => {
+      const key = tr.getAttribute("data-dt-continuity");
+      if (key && !byContinuity.has(key)) byContinuity.set(key, id);
+    });
+    if (byContinuity.size > 0) {
+      slots.forEach((slot) => {
+        if (slot.tr) return;
+        const key = this._continuityKey(slot.row);
+        const oldId = key === null ? undefined : byContinuity.get(key);
+        if (oldId === undefined) return;
+        byContinuity.delete(key);
+        slot.tr = existing.get(oldId);
+        existing.delete(oldId);
+        slot.tr.setAttribute("data-row-id", slot.id);
+        slot.morphed = true;
+      });
+    }
+
+    const leaving = Array.from(existing.values());
+    const entering = slots.filter((slot) => !slot.tr).length;
+    const withMotion = animate(entering, leaving.length);
+    const entered = [];
+    const arrived = [];
+
+    slots.forEach((slot) => {
+      if (slot.tr) {
+        this._updateRowCells(slot.tr, slot.row, visibleColumns, slot.rowId);
+        if (slot.morphed) arrived.push(slot.tr);
+        return;
       }
-      if (shouldAnimate) {
-        this._animateRowExit(tr);
-      } else {
-        tr.remove();
+      const tr = document.createElement("tr");
+      tr.setAttribute("data-row-id", slot.id);
+      if (this.state.selectedRows.has(slot.rowId)) {
+        tr.classList.add("selected");
       }
+      this._syncRowClass(tr, slot.row);
+      this._syncRowAttributes(tr, slot.row);
+      this._syncRowContinuity(tr, slot.row);
+      tr.innerHTML = this._renderRow(slot.row, slot.index);
+      slot.tr = tr;
+      entered.push(tr);
     });
 
-    // Append fragment (reorders existing rows and adds new ones)
-    tbody.appendChild(fragment);
+    this._placeRows(slots.map((slot) => slot.tr));
+    leaving.forEach((tr) => this._removeRow(tr, withMotion));
+    this._rowMotion = withMotion ? { tops, entered, arrived } : null;
   }
 
   /** Respect the user's reduced-motion preference for table animations. */
@@ -1360,21 +1400,6 @@ export class DataTable {
     } catch {
       return false;
     }
-  }
-
-  /** Add a leaving class and remove the row after the exit animation. */
-  _animateRowExit(tr) {
-    if (tr.dataset.dtLeaving === "1") return;
-    tr.dataset.dtLeaving = "1";
-    tr.classList.add("dt-row-leaving");
-    const dur = Number(this.options.rowExitDurationMs) || 340;
-    window.setTimeout(() => {
-      try {
-        tr.remove();
-      } catch {
-        /* row already detached */
-      }
-    }, dur);
   }
 
   /**
@@ -1912,10 +1937,9 @@ export class DataTable {
    * pointer is over the table.
    */
   _rowOrderMatchesDom(rows) {
-    const tbody = this.elements?.tbody;
-    if (!tbody) return false;
+    if (!this.elements?.tbody) return false;
 
-    const domRows = tbody.children;
+    const domRows = this._liveRows();
     if (domRows.length !== rows.length) return false;
 
     return rows.every(
@@ -1950,18 +1974,13 @@ export class DataTable {
       // holdings had changed (a DCA landing, say) went on showing its old numbers until the
       // page was reloaded. That is the bug it looked like: "the table is wrong until Ctrl+R".
       //
-      // The skip exists to stop rows jumping out from under the cursor mid-click. That is a
-      // STRUCTURAL concern — rows added, removed or reordered. When the row set and order
-      // are unchanged, an update only rewrites cell contents: nothing moves, the scroll
-      // cannot shift, and it is safe to apply while hovering. Anything with an open menu or
-      // a focused control inside the table still waits, because re-rendering that cell would
-      // close or blur it.
+      // When the row set and order are unchanged, an update only rewrites cell contents:
+      // nothing moves, the scroll cannot shift, and it is safe to apply while hovering.
       const visibleRows = this._getClientPaginatedData();
       const canUpdateValuesInPlace =
-        this.elements?.tbody &&
+        Boolean(this.elements?.tbody) &&
         !this._isEditingOrMenuOpen() &&
         this._rowOrderMatchesDom(visibleRows);
-
       if (canUpdateValuesInPlace) {
         this._updateTableBody(visibleRows);
         // A never-cut value that grew in place (a row action that appeared under the
@@ -1974,15 +1993,36 @@ export class DataTable {
         return;
       }
 
-      // A body showing no rows (a load error, an empty state, or nothing yet) has no row
-      // to move out from under the cursor, so its first rows render at once: hovering over
-      // the Retry or New action that filled it must not keep that state on screen.
-      const bodyShowsRows = Boolean(this.elements?.tbody?.querySelector("tr[data-row-id]"));
-      if (bodyShowsRows || this._isEditingOrMenuOpen()) {
-        this._log("debug", "Skipping render during user interaction");
+      // An open menu or a focused control inside the table waits: re-rendering its cell
+      // would close or blur it. A LIVE change (rows arrived) that would insert, remove or
+      // reorder a row at or above a pointer that guards its row waits too, so the row the
+      // viewer is about to click never moves under the cursor; the rows on screen keep their
+      // values current and the change lands once the pointer stops guarding it
+      // (`_releaseHeldMotion`). A change the viewer made (search, sort, filter) applies at
+      // once, and so does a change below the pointer.
+      const holdsPointerRow =
+        renderOptions.live === true &&
+        Boolean(this.elements?.tbody?.querySelector("tr[data-row-id]")) &&
+        this._movesPointerRow(visibleRows);
+      if (this._isEditingOrMenuOpen() || holdsPointerRow) {
+        this._log("debug", "Holding render during user interaction");
+        this._holdRender(renderOptions, visibleRows);
         return;
       }
     }
+    this._pendingRenderOptions = null;
+    // A render the viewer caused (sort, search, a view switch) shows its result at once.
+    if (renderOptions.live !== true) this._settleRowMotion();
+
+    // Where each row is drawn before this render, for the slides of a live change.
+    const motionRows = this._getClientPaginatedData();
+    const motionTops =
+      renderOptions.live === true &&
+      renderOptions.resetScroll !== true &&
+      this._motionEnabled() &&
+      !this._rowOrderMatchesDom(motionRows)
+        ? this._captureRowTops()
+        : null;
 
     const scrollContainer = this.elements.scrollContainer;
     const prevScrollTop =
@@ -2014,23 +2054,30 @@ export class DataTable {
       }
     }
 
-    if (this.elements.thead) {
-      this.elements.thead.innerHTML = this._renderHeader();
+    // The header and colgroup are rebuilt only when their markup changed. A live poll
+    // renders once a second, and replacing them every time re-created every header cell
+    // (losing its hover and the sort icon's state) and re-laid out the whole table.
+    const headerMarkup = this._renderHeader();
+    if (this.elements.thead && headerMarkup !== this._renderedHeaderMarkup) {
+      this.elements.thead.innerHTML = headerMarkup;
+      this._renderedHeaderMarkup = headerMarkup;
     }
     if (this.elements.tbody) {
-      const visibleRows = this._getClientPaginatedData();
-      this._updateTableBody(visibleRows);
+      this._updateTableBody(motionRows, { tops: motionTops });
     }
 
     // Update colgroup in BOTH header and body tables
     const colgroupMarkup = this._renderColgroup().trim();
-    for (const tbl of [this.elements.table, this.elements.headerTable]) {
-      if (!tbl) continue;
-      const existing = tbl.querySelector("colgroup");
-      if (existing) {
-        existing.outerHTML = colgroupMarkup;
-      } else {
-        tbl.insertAdjacentHTML("afterbegin", colgroupMarkup);
+    if (colgroupMarkup !== this._renderedColgroupMarkup) {
+      this._renderedColgroupMarkup = colgroupMarkup;
+      for (const tbl of [this.elements.table, this.elements.headerTable]) {
+        if (!tbl) continue;
+        const existing = tbl.querySelector("colgroup");
+        if (existing) {
+          existing.outerHTML = colgroupMarkup;
+        } else {
+          tbl.insertAdjacentHTML("afterbegin", colgroupMarkup);
+        }
       }
     }
 
@@ -2107,6 +2154,9 @@ export class DataTable {
     // Recompute cumulative left offsets for any pinned/floating columns so the
     // CSS (left: var(--dt-pin-left-N)) stacks them correctly.
     this._updateStickyOffsets();
+
+    // Rows slide from where they were drawn once layout, widths and scroll are final.
+    this._playRowMotion();
   }
 
   /**
@@ -2324,6 +2374,11 @@ export class DataTable {
     });
   }
 
+  /** Is `reason` a background refresh (a poll, the first load) rather than a new query? */
+  _isBackgroundReload(reason) {
+    return BACKGROUND_RELOAD_REASONS.has(reason ?? "reload");
+  }
+
   /**
    * Should this reload defer to a load that is ALREADY in flight instead of killing it?
    *
@@ -2346,8 +2401,7 @@ export class DataTable {
     if (options.force) {
       return false;
     }
-    const reason = options.reason ?? "reload";
-    if (!BACKGROUND_RELOAD_REASONS.has(reason)) {
+    if (!this._isBackgroundReload(options.reason)) {
       return false;
     }
     const pagination = this._pagination;
@@ -3711,6 +3765,8 @@ export class DataTable {
       clearTimeout(this._hoverTimeout);
       this._hoverTimeout = null;
     }
+    this._pendingRenderOptions = null;
+    this._resetRowMotion();
 
     // Clean up settings dialog
     if (this._settingsDialog) {
@@ -3796,3 +3852,4 @@ applyColumnManagementMixin(DataTable);
 applyClientPaginationMixin(DataTable);
 applyServerPaginationMixin(DataTable);
 applyEventHandlersMixin(DataTable);
+applyRowMotionMixin(DataTable);

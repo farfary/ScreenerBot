@@ -848,13 +848,15 @@ export function applyServerPaginationMixin(DataTable) {
       preserveScroll: normalized.preserveScroll,
     };
 
-    // Always force-render pagination updates so new rows appear even while the
-    // user is hovering/scrolling (interaction guard would otherwise skip renders)
-    const metaWithForce = {
+    // A background load (a poll, the first load) is LIVE data: it renders while the user
+    // hovers, with row motion, and holds only a change that would move the row under the
+    // pointer (data_table/row_motion.js). A load the user asked for (sort, page, view
+    // switch) is forced and lands at once.
+    const pageMeta = {
       ...meta,
       renderOptions: {
         ...(meta.renderOptions || {}),
-        force: true,
+        ...(this._isBackgroundReload(options.reason) ? { live: true } : { force: true }),
       },
     };
 
@@ -868,14 +870,14 @@ export function applyServerPaginationMixin(DataTable) {
 
     if (effectiveDirection === "prev" || mode === "prepend") {
       this._prependData(normalized.rows, {
-        ...metaWithForce,
+        ...pageMeta,
         preserveScroll: normalized.preserveScroll ?? options.preserveScroll ?? undefined,
       });
     } else if (effectiveDirection === "next" || mode === "append") {
-      this._appendData(normalized.rows, metaWithForce);
+      this._appendData(normalized.rows, pageMeta);
     } else {
       const renderOptions = {
-        ...(metaWithForce.renderOptions || {}),
+        ...(pageMeta.renderOptions || {}),
       };
       if (normalized.resetScroll ?? options.resetScroll) {
         renderOptions.resetScroll = true;
@@ -883,7 +885,7 @@ export function applyServerPaginationMixin(DataTable) {
       // A page result asks for a render when its rows are unchanged but what the empty
       // state says is not; otherwise unchanged rows are skipped, which keeps polls quiet.
       this._replaceData(normalized.rows, {
-        ...metaWithForce,
+        ...pageMeta,
         renderOptions,
         forceRender: normalized.forceRender,
       });
@@ -1105,6 +1107,9 @@ export function applyServerPaginationMixin(DataTable) {
     const renderOptions = meta.renderOptions ? { ...meta.renderOptions } : {};
     if (meta.resetScroll) {
       renderOptions.resetScroll = true;
+    } else if (renderOptions.force !== true) {
+      // New rows from the page or a poll, not a change of what the table shows.
+      renderOptions.live = true;
     }
     this._applyFilters({ renderOptions });
     this._lastFullRenderTime = Date.now();
@@ -1272,9 +1277,9 @@ export function applyServerPaginationMixin(DataTable) {
     const pagination = this._pagination;
     const visible = Boolean(
       pagination?.enabled &&
-        !this._scrollLoadingDisabled &&
-        pagination.loadingNext &&
-        pagination.loadingNextReason === "scroll"
+      !this._scrollLoadingDisabled &&
+      pagination.loadingNext &&
+      pagination.loadingNextReason === "scroll"
     );
     loader.classList.toggle("is-visible", visible);
   };

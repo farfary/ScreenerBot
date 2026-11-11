@@ -174,12 +174,37 @@ test("an initial page result re-renders unchanged rows only when it asks to", ()
   };
   table._setLoadingState = () => {};
   table._log = () => {};
+  table._isBackgroundReload = () => true;
 
-  table._applyPageResult("initial", { rows: [] });
+  table._applyPageResult("initial", { rows: [] }, { reason: "poll" });
   assert.equal(renders, 0, "unchanged rows rendered moments ago are not drawn again");
 
-  table._applyPageResult("initial", { rows: [], forceRender: true });
+  table._applyPageResult("initial", { rows: [], forceRender: true }, { reason: "poll" });
   assert.equal(renders, 1, "a result that asks for a render is drawn");
+});
+
+test("a background page result renders live and one the viewer asked for is forced", () => {
+  const table = new TestTable();
+  table._pagination = { enabled: true, abortController: null };
+  table.state = { data: [], hasAutoFitted: false };
+  table.options = {};
+  const rendered = [];
+  table._applyFilters = ({ renderOptions }) => rendered.push(renderOptions);
+  table._setLoadingState = () => {};
+  table._log = () => {};
+  table._isBackgroundReload = (reason) => reason === "poll";
+
+  table._applyPageResult("initial", { rows: [{ id: 1 }] }, { reason: "poll" });
+  table._applyPageResult("initial", { rows: [{ id: 2 }] }, { reason: "sort" });
+
+  assert.equal(
+    rendered[0].live,
+    true,
+    "a poll renders live: row motion and the pointer hold apply"
+  );
+  assert.notEqual(rendered[0].force, true, "a poll never overrides the pointer hold");
+  assert.equal(rendered[1].force, true, "a sort lands at once");
+  assert.notEqual(rendered[1].live, true, "a sort is not a live change");
 });
 
 /** The `reload` method of `ui/data_table.js`, lifted from its source: the class needs a DOM. */

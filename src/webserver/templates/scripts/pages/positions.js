@@ -81,6 +81,10 @@ const ACTION_DCA_TYPES = new Set(["position_dca"]);
 const BUY_GRACE_MS = 10000;
 // How long a failed buy lingers as a red row before it disappears.
 const FAILED_LINGER_MS = 8000;
+// A full sale's action completes while its position is still listed; the row reads
+// "closing" from then until the position leaves the Open list (or this window ends), so it
+// never flashes back to an ordinary open row between the sale and the next poll.
+const SALE_GRACE_MS = 10000;
 // A closed position keeps its arrival highlight for this long after exit.
 const JUST_CLOSED_MS = 12000;
 
@@ -88,6 +92,10 @@ const JUST_CLOSED_MS = 12000;
 const shortStep = (step) => stepShortLabel(step || "unknown");
 
 const actionMint = (n) => n?.entity_id || n?.metadata?.mint || "";
+// A sale of the whole position: the Auto Trader's close, or a manual sell of 100%.
+const isFullSale = (n) =>
+  n?.action_type === "position_close" ||
+  (n?.action_type === "swap_sell" && Number(n?.metadata?.percentage) >= 100);
 const parseTs = (v) => {
   const t = v ? Date.parse(v) : NaN;
   return Number.isFinite(t) ? t : NaN;
@@ -593,6 +601,7 @@ function createLifecycle() {
     const now = Date.now();
     const buyByMint = new Map();
     const sellByMint = new Map();
+    const soldByMint = new Map();
     const dcaByMint = new Map();
 
     const considerBuy = (n, kind) => {
@@ -651,6 +660,14 @@ function createLifecycle() {
       keepNewest(sellByMint, n, mint, { step: shortStep(n.state?.current_step) });
     };
 
+    const considerFinishedSale = (n) => {
+      if (!isFullSale(n)) return;
+      const mint = actionMint(n);
+      const finishedAt = parseTs(n.completed_at);
+      if (!mint || !Number.isFinite(finishedAt) || now - finishedAt > SALE_GRACE_MS) return;
+      keepNewest(soldByMint, n, mint, {});
+    };
+
     const considerDca = (n) => {
       if (!ACTION_DCA_TYPES.has(n?.action_type)) return;
       const mint = actionMint(n);
@@ -666,6 +683,7 @@ function createLifecycle() {
       });
       notificationManager.getCompleted({ includeDismissed: false }).forEach((n) => {
         considerBuy(n, "completed");
+        considerFinishedSale(n);
       });
       notificationManager.getFailed({ includeDismissed: false }).forEach((n) => {
         considerBuy(n, "failed");
@@ -674,7 +692,7 @@ function createLifecycle() {
       console.warn("[Positions] deriveLive failed:", err);
     }
 
-    return { buyByMint, sellByMint, dcaByMint };
+    return { buyByMint, sellByMint, soldByMint, dcaByMint };
   };
 
   // Merge live action state into the server rows: annotate real rows with their
@@ -693,18 +711,22 @@ function createLifecycle() {
       });
     }
 
-    const { buyByMint, sellByMint, dcaByMint } = deriveLive();
+    const { buyByMint, sellByMint, soldByMint, dcaByMint } = deriveLive();
     const presentMints = new Set(base.map((r) => r.mint));
 
     const annotated = base.map((r) => {
       let st = "open";
       let step = null;
       const sell = sellByMint.get(r.mint);
+      const sold = soldByMint.get(r.mint);
       const dca = dcaByMint.get(r.mint);
       if (sell) {
         st = "selling";
         step = sell.step;
       } else if (r.exit_transaction_signature && !r.transaction_exit_verified) {
+        st = "closing";
+      } else if (sold && sold._startedAt >= Number(r.entry_time) * 1000) {
+        // The sale of THIS round finished; the position is on its way out.
         st = "closing";
       } else if (dca) {
         // An add is in flight. Its SOL and tokens only land on the row once the DCA is
@@ -934,7 +956,7 @@ function createLifecycle() {
     state.book = book;
     state.lastServerRows = [];
     if (table) {
-      table.setData([], { preserveScroll: false });
+      table.setData([], { resetScroll: true });
       table.reload({ reason: "view-change", resetScroll: true }).catch(() => {});
     }
     updateToolbar();
@@ -1043,12 +1065,13 @@ function createLifecycle() {
           "data-management": row?.management || "auto_trader",
           "data-origin-kind": row?.origin?.kind || "auto",
         }),
-        // Animate rows leaving the Open list as they finish closing or a pending
-        // buy resolves into a real position.
-        rowExitAnimation: (tr) =>
-          tr.classList.contains("pos-row-selling") ||
-          tr.classList.contains("pos-row-closing") ||
-          tr.classList.contains("pos-row-buying"),
+        // On the Open list a token has one row: a pending buy and the position it opens
+        // are the same subject, so the pending row turns into the position in place. A
+        // row on its way out is never the start of another.
+        rowContinuityKey: (row) =>
+          state.view === "open" && row?._state !== "selling" && row?._state !== "closing"
+            ? row?.mint || null
+            : null,
         pagination: {
           threshold: 160,
           maxRows: 5000,

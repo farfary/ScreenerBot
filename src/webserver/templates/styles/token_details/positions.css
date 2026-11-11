@@ -177,7 +177,10 @@
 }
 
 /* The rule of the section that follows closes the facts: their last row draws no line
-   of its own. A wide fact only ever comes last and is a row by itself. */
+   of its own. A wide fact only ever comes last and is a row by itself. Every positional
+   subject names `.position-fact`: under a `:has()` ancestor a bare `:nth-child()` or `*`
+   subject makes the browser restyle the whole document on every text change anywhere,
+   which every live table update pays. */
 .position-section:has(+ .position-section) .position-facts > .wide:last-child {
   border-bottom: 0;
 }
@@ -185,11 +188,11 @@
 @media (width > 800px) {
   .position-section:has(+ .position-section)
     .position-facts:not(:has(> .wide:last-child))
-    > :nth-child(3n + 1):nth-last-child(-n + 3),
+    > .position-fact:nth-child(3n + 1):nth-last-child(-n + 3),
   .position-section:has(+ .position-section)
     .position-facts:not(:has(> .wide:last-child))
-    > :nth-child(3n + 1):nth-last-child(-n + 3)
-    ~ * {
+    > .position-fact:nth-child(3n + 1):nth-last-child(-n + 3)
+    ~ .position-fact {
     border-bottom: 0;
   }
 }
@@ -203,11 +206,11 @@
 @media (width > 500px) and (width <= 800px) {
   .position-section:has(+ .position-section)
     .position-facts:not(:has(> .wide:last-child))
-    > :nth-child(odd):nth-last-child(-n + 2),
+    > .position-fact:nth-child(odd):nth-last-child(-n + 2),
   .position-section:has(+ .position-section)
     .position-facts:not(:has(> .wide:last-child))
-    > :nth-child(odd):nth-last-child(-n + 2)
-    + * {
+    > .position-fact:nth-child(odd):nth-last-child(-n + 2)
+    + .position-fact {
     border-bottom: 0;
   }
 }
@@ -236,7 +239,7 @@
     grid-template-columns: 1fr;
   }
 
-  .position-section:has(+ .position-section) .position-facts > :last-child {
+  .position-section:has(+ .position-section) .position-facts > .position-fact:last-child {
     border-bottom: 0;
   }
 }
