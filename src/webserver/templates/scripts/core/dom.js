@@ -70,6 +70,12 @@ export function paintHtml(element, html) {
   return true;
 }
 
+// Record markup that reached an element another way (as part of its parent's markup), so
+// the next paintHtml of the same markup keeps the children that write created
+export function rememberPaint(element, html) {
+  if (element) paintedHtml.set(element, html);
+}
+
 // Drop the remembered markup, so the next paintHtml writes even unchanged markup (for a
 // caller that replaced the element's content another way)
 export function forgetPaint(element) {

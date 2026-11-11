@@ -31,6 +31,8 @@ mod security;
 mod tracking;
 
 #[cfg(test)]
+mod assembly_tests;
+#[cfg(test)]
 mod authority_tests;
 #[cfg(test)]
 mod market_tests;

@@ -70,6 +70,32 @@ fn parse_json_list<T: serde::de::DeserializeOwned>(raw: Option<&str>) -> Vec<T> 
         .unwrap_or_default()
 }
 
+/// The tables a token row is assembled from, by the alias its columns are read through.
+/// Each is keyed by chain and mint, so a join adds at most one row per token and never
+/// removes one.
+const TOKEN_ROW_JOINS: [(&str, &str); 5] = [
+    (
+        "sr",
+        "LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint",
+    ),
+    (
+        "bl",
+        "LEFT JOIN blacklist bl ON t.chain_id = bl.chain_id AND t.mint = bl.mint",
+    ),
+    (
+        "ut",
+        "LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint",
+    ),
+    (
+        "d",
+        "LEFT JOIN market_dexscreener d ON t.chain_id = d.chain_id AND t.mint = d.mint",
+    ),
+    (
+        "g",
+        "LEFT JOIN market_geckoterminal g ON t.chain_id = g.chain_id AND t.mint = g.mint",
+    ),
+];
+
 impl TokenDatabase {
     /// Assemble a complete token record with market data from the specified source
     pub fn get_full_token_for_source(
@@ -193,7 +219,8 @@ impl TokenDatabase {
     /// If require_market_data=true, only returns tokens that have DexScreener OR GeckoTerminal data.
     /// This significantly reduces memory usage for filtering (144k -> ~56k tokens).
     ///
-    /// PERFORMANCE: Uses LEFT JOINs to fetch all data in a single query, avoiding N+1 problem.
+    /// Rows are assembled with LEFT JOINs in one read (no query per token); a page first
+    /// reads its mints in order and then only those rows.
 
     pub fn get_all_tokens_optional_market(
         &self,
@@ -276,13 +303,7 @@ impl TokenDatabase {
                 sr.transfer_fee_authority, sr.risks, sr.top_holders, sr.creator
         "#;
 
-        let joins = r#"
-            LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint
-            LEFT JOIN blacklist bl ON t.chain_id = bl.chain_id AND t.mint = bl.mint
-            LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint
-            LEFT JOIN market_dexscreener d ON t.chain_id = d.chain_id AND t.mint = d.mint
-            LEFT JOIN market_geckoterminal g ON t.chain_id = g.chain_id AND t.mint = g.mint
-        "#;
+        let joins = TOKEN_ROW_JOINS.map(|(_, join)| join).join(" ");
 
         // PERF: When require_market_data=true, only load tokens with market data AND
         // exclude tokens whose market data is stale (maintenance.stale_token_days,
@@ -299,23 +320,25 @@ impl TokenDatabase {
         //
         // The candidate subquery fully encodes the old predicate (a mint appears iff it has
         // a fresh-enough row in either market table), so no WHERE clause is needed with it.
-        let from_clause = if require_market_data {
-            let stale_days = crate::config::with_config(|cfg| cfg.maintenance.stale_token_days);
-            let freshness = if stale_days > 0 {
-                let cutoff_secs =
-                    chrono::Utc::now().timestamp() - (stale_days as i64 * 24 * 60 * 60);
-                format!(" AND market_data_last_fetched_at > {cutoff_secs}")
-            } else {
-                String::new()
-            };
+        let from_with = |joins: &str| -> String {
+            if require_market_data {
+                let stale_days = crate::config::with_config(|cfg| cfg.maintenance.stale_token_days);
+                let freshness = if stale_days > 0 {
+                    let cutoff_secs =
+                        chrono::Utc::now().timestamp() - (stale_days as i64 * 24 * 60 * 60);
+                    format!(" AND market_data_last_fetched_at > {cutoff_secs}")
+                } else {
+                    String::new()
+                };
 
-            format!(
-                " FROM (SELECT mint FROM market_dexscreener WHERE chain_id = ?1{freshness} \
+                format!(
+                    " FROM (SELECT mint FROM market_dexscreener WHERE chain_id = ?1{freshness} \
                    UNION SELECT mint FROM market_geckoterminal WHERE chain_id = ?1{freshness}) c \
-                 JOIN tokens t ON t.chain_id = ?1 AND t.mint = c.mint{joins}"
-            )
-        } else {
-            format!(" FROM tokens t{joins} WHERE t.chain_id = ?1")
+                 JOIN tokens t ON t.chain_id = ?1 AND t.mint = c.mint {joins}"
+                )
+            } else {
+                format!(" FROM tokens t {joins} WHERE t.chain_id = ?1")
+            }
         };
 
         // Stable tiebreaker: many tokens share the same (or NULL) value for the
@@ -325,17 +348,60 @@ impl TokenDatabase {
         // duplicate and skip rows (and the "updated" order looks wrong/jittery).
         // `t.mint` is the primary key, so appending it makes the total order fully
         // deterministic across every page request.
-        let query = if limit == 0 {
-            format!(
-                "{}{} ORDER BY {} {}, t.mint ASC",
-                select_base, from_clause, order_column, direction
-            )
+        let order = format!("{order_column} {direction}, t.mint ASC");
+        // A page is read in two steps: its mints in order, then the full rows of those mints.
+        // Sorting the full rows carried every column of every token through the sort to keep
+        // 100 of them: on 599k tokens the default liquidity page took 6.3 s and a page at
+        // offset 100k 22 s. The first step joins only the tables the sort reads, which every
+        // row has at most one of (each is keyed by chain and mint), so it orders exactly the
+        // same rows: 2.1 s and 3.2 s, and 0.2 s by symbol. The second step reads 100 rows by
+        // key in milliseconds.
+        let page_mints = if limit == 0 {
+            None
         } else {
-            format!(
-                "{}{} ORDER BY {} {}, t.mint ASC LIMIT {} OFFSET {}",
-                select_base, from_clause, order_column, direction, limit, offset
-            )
+            let key_joins = TOKEN_ROW_JOINS
+                .iter()
+                .filter(|(alias, _)| order_column.contains(&format!("{alias}.")))
+                .map(|(_, join)| *join)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let page_query = format!(
+                "SELECT t.mint{} ORDER BY {order} LIMIT {limit} OFFSET {offset}",
+                from_with(&key_joins)
+            );
+            let mints = conn
+                .prepare(&page_query)
+                .and_then(|mut stmt| {
+                    stmt.query_map(params![self.chain_id()], |row| row.get::<_, String>(0))?
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "Failed to read the token page order".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
+            if mints.is_empty() {
+                return Ok(Vec::new());
+            }
+            Some(mints)
         };
+
+        let query = match &page_mints {
+            None => format!("{select_base}{} ORDER BY {order}", from_with(&joins)),
+            Some(_) => format!(
+                "{select_base} FROM tokens t {joins} \
+                 WHERE t.chain_id = ?1 AND t.mint IN (SELECT value FROM json_each(?2))"
+            ),
+        };
+        let page_json = page_mints
+            .as_ref()
+            .map(|mints| serde_json::Value::from(mints.clone()).to_string());
+        let chain_id = self.chain_id();
+        let mut bound: Vec<&dyn rusqlite::ToSql> = vec![&chain_id];
+        if let Some(json) = &page_json {
+            bound.push(json);
+        }
 
         let mut stmt = conn.prepare(&query).map_err(|e| {
             Error::Database(DatabaseError::Query {
@@ -346,7 +412,7 @@ impl TokenDatabase {
 
         // Parse row data
         let tokens_iter = stmt
-            .query_map(params![self.chain_id()], |row| {
+            .query_map(bound.as_slice(), |row| {
                 let mint: String = row.get(0)?;
                 let symbol: Option<String> = row.get(1)?;
                 let name: Option<String> = row.get(2)?;
@@ -972,6 +1038,14 @@ impl TokenDatabase {
             tokens.push(token);
         }
 
+        if let Some(mints) = &page_mints {
+            let position: std::collections::HashMap<&str, usize> = mints
+                .iter()
+                .enumerate()
+                .map(|(index, mint)| (mint.as_str(), index))
+                .collect();
+            tokens.sort_by_key(|token| position.get(token.mint.as_str()).copied());
+        }
         tokens.shrink_to_fit(); // reclaim over-allocated Vec capacity
         Ok(tokens)
     }

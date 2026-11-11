@@ -425,7 +425,6 @@ body.dt-column-resizing * {
   border-bottom: 1px solid var(--border-color);
   transition:
     background-color var(--transition-fast),
-    box-shadow var(--transition-fast),
     --dt-row-wash var(--transition-normal);
   min-height: 44px;
 }
@@ -434,9 +433,10 @@ body.dt-column-resizing * {
   min-height: 36px;
 }
 
+/* A hovered row is tinted, never lifted: a row's shadow falls on the next row, whose
+   opaque pinned cells cover it, so it stopped in a step at the pinned edge. */
 .data-table tbody tr:hover {
   background-color: var(--bg-hover);
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
 }
 
 /* Selection is the user's own action and outranks any row state's tint. */
@@ -712,6 +712,9 @@ body.dt-column-resizing * {
  */
 .data-table th.dt-col-sticky,
 .data-table td.dt-col-sticky {
+  /* Width of the pinned edge drawn past the last pinned cell. */
+  --dt-pin-edge: 14px;
+
   position: sticky;
   inset-inline-start: var(--dt-pin-left-0, 0);
   z-index: 3;
@@ -803,7 +806,7 @@ body.dt-column-resizing * {
   top: 0;
   inset-inline-end: 0;
   bottom: 0;
-  width: 14px;
+  width: var(--dt-pin-edge);
   transform: translateX(calc(var(--dir-sign) * 100%));
   background:
     linear-gradient(var(--to-inline-end), var(--dt-pin-shadow), transparent),
@@ -817,6 +820,14 @@ body.dt-column-resizing * {
 .data-table-wrapper.is-pinned-scrolled .data-table th.dt-col-sticky-last::after,
 .data-table-wrapper.is-pinned-scrolled .data-table td.dt-col-sticky-last::after {
   opacity: 1;
+}
+
+/* A uniform-height cell clips its content, and the pinned edge is drawn just past the
+   cell: the body's last pinned cell clips with a margin as wide as the edge, so the
+   edge shows on every row and not only in the header. */
+.data-table.uniform-rows td.dt-col-sticky-last {
+  overflow: clip;
+  overflow-clip-margin: var(--dt-pin-edge);
 }
 
 /* Freshly pinned highlight — quick slide-in + accent flash. */

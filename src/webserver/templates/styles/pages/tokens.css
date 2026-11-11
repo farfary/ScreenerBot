@@ -241,7 +241,7 @@
 }
 
 .backfill-bar.progress-partial::after {
-  background: var(--badge-warning);
+  background: var(--warning-color);
 }
 
 .backfill-bar.progress-low::after {
@@ -276,7 +276,7 @@
 
 /* Warning value for gaps */
 .value-warning {
-  color: var(--badge-warning);
+  color: var(--warning-color);
   font-weight: 600;
   font-family: var(--font-data);
 }

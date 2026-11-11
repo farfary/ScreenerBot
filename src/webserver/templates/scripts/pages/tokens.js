@@ -30,6 +30,7 @@ import {
   DEFAULT_FILTERS,
   DEFAULT_SUMMARY,
   PAGE_LIMIT,
+  RISK_BAND_TONES,
   PRICE_HIGHLIGHT_DURATION_MS,
   getDefaultFiltersForView,
   getServerSortKey,
@@ -328,7 +329,7 @@ function createLifecycle() {
     const summaryBlacklisted =
       typeof state.summary?.blacklisted === "number" && Number.isFinite(state.summary.blacklisted)
         ? state.summary.blacklisted
-        : rows.filter((r) => r.blacklisted).length;
+        : rows.filter((r) => r.is_blacklisted).length;
 
     table.updateToolbarSummary([
       {
@@ -669,7 +670,7 @@ function createLifecycle() {
         blacklisted:
           blacklistedTotal !== null
             ? blacklistedTotal
-            : rowsWithPriceMeta.filter((row) => row.blacklisted).length,
+            : rowsWithPriceMeta.filter((row) => row.is_blacklisted).length,
       };
 
       state.hasLoadedOnce = true;
@@ -811,7 +812,7 @@ function createLifecycle() {
         blacklisted:
           blacklistedTotal !== null
             ? blacklistedTotal
-            : rowsWithPriceMeta.filter((row) => row.blacklisted).length,
+            : rowsWithPriceMeta.filter((row) => row.is_blacklisted).length,
       };
 
       state.hasLoadedOnce = true;
@@ -918,6 +919,45 @@ function createLifecycle() {
     render: (_v, row) => tokenCell(row),
   });
 
+  // The Rejected and Blacklisted views list why each token is there; the reason sits right
+  // after the token, where it is read first and never scrolls out of sight.
+  const reasonColumn = () => {
+    if (state.view === "rejected") {
+      return {
+        id: "reject_reason",
+        label: I18n.t("tokens-column-reject-reason"),
+        sortable: false,
+        minWidth: 220,
+        wrap: true,
+        render: (value) => {
+          if (!value) return "—";
+          const displayLabel = getRejectionDisplayLabel(value);
+          // Clamp long reasons; reveal the full label + raw code on hover.
+          const raw = String(value);
+          const full = displayLabel && displayLabel !== raw ? `${displayLabel}\n${raw}` : raw;
+          return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${Utils.escapeHtml(displayLabel)}</div>`;
+        },
+      };
+    }
+    if (state.view === "blacklisted") {
+      return {
+        id: "blacklist_reason",
+        label: I18n.t("tokens-column-blacklist-reason"),
+        sortable: false,
+        minWidth: 250,
+        wrap: true,
+        render: (_v, row) => {
+          const summary = summarizeBlacklistReasons(row.blacklist_reasons);
+          if (!summary) return "—";
+          // One reason per line in the hover tooltip for readability.
+          const full = summarizeBlacklistReasons(row.blacklist_reasons, "\n");
+          return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${Utils.escapeHtml(summary)}</div>`;
+        },
+      };
+    }
+    return null;
+  };
+
   const firstSeenColumn = () => ({
     id: "first_seen_at",
     label: I18n.t("tokens-column-first-seen"),
@@ -929,7 +969,9 @@ function createLifecycle() {
       if (!timestamp) return "—";
 
       const timestampSeconds =
-        typeof timestamp === "string" ? Math.floor(new Date(timestamp).getTime() / 1000) : timestamp;
+        typeof timestamp === "string"
+          ? Math.floor(new Date(timestamp).getTime() / 1000)
+          : timestamp;
 
       return timeAgoCell(timestampSeconds);
     },
@@ -969,8 +1011,10 @@ function createLifecycle() {
 
   const buildColumns = () => {
     if (state.view === "no_market") return buildNoMarketColumns();
+    const reason = reasonColumn();
     return [
       tokenColumn(),
+      ...(reason ? [reason] : []),
       {
         id: "price_sol",
         label: I18n.t("tokens-column-price-sol"),
@@ -1097,54 +1141,15 @@ function createLifecycle() {
         sortable: true,
         minWidth: 90,
         wrap: false,
-        render: (v) => {
-          if (v == null) return "—";
-          // Raw rugcheck score: lower = safer, higher = more risky
-          const num = Utils.formatNumber(v, 0);
-          if (v <= 1000) return `<span style="color: var(--success)">${num}</span>`;
-          if (v <= 10000) return `<span style="color: var(--warning)">${num}</span>`;
-          return `<span style="color: var(--error)">${num}</span>`;
+        // The raw Rugcheck score the sort and the risk filter compare (higher is riskier),
+        // toned by the backend's band of the normalised score.
+        render: (_v, row) => {
+          if (row.security_score == null) return "—";
+          const tone = RISK_BAND_TONES[row.security_band];
+          const num = Utils.formatNumber(row.security_score, 0);
+          return tone ? `<span class="${tone}">${num}</span>` : num;
         },
       },
-      // Conditionally add reject_reason column only for rejected view
-      ...(state.view === "rejected"
-        ? [
-            {
-              id: "reject_reason",
-              label: I18n.t("tokens-column-reject-reason"),
-              sortable: false,
-              minWidth: 220,
-              wrap: true,
-              render: (value) => {
-                if (!value) return "—";
-                const displayLabel = getRejectionDisplayLabel(value);
-                // Clamp long reasons; reveal the full label + raw code on hover.
-                const raw = String(value);
-                const full = displayLabel && displayLabel !== raw ? `${displayLabel}\n${raw}` : raw;
-                return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${Utils.escapeHtml(displayLabel)}</div>`;
-              },
-            },
-          ]
-        : []),
-      // Conditionally add blacklist_reason column only for blacklisted view
-      ...(state.view === "blacklisted"
-        ? [
-            {
-              id: "blacklist_reason",
-              label: I18n.t("tokens-column-blacklist-reason"),
-              sortable: false,
-              minWidth: 250,
-              wrap: true,
-              render: (_v, row) => {
-                const summary = summarizeBlacklistReasons(row.blacklist_reasons);
-                if (!summary) return "—";
-                // One reason per line in the hover tooltip for readability.
-                const full = summarizeBlacklistReasons(row.blacklist_reasons, "\n");
-                return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${Utils.escapeHtml(summary)}</div>`;
-              },
-            },
-          ]
-        : []),
       {
         id: "status",
         label: I18n.t("tokens-column-status"),
@@ -1153,14 +1158,13 @@ function createLifecycle() {
         wrap: false,
         render: (_v, row) => {
           const flags = [];
-          const badge = (cls, text) =>
-            `<span class="${cls}">${Utils.escapeHtml(text)}</span>`;
+          const badge = (cls, text) => `<span class="${cls}">${Utils.escapeHtml(text)}</span>`;
           if (row.has_pool_price) flags.push(badge("badge info", I18n.t("tokens-badge-price")));
           if (row.has_ohlcv) flags.push(badge("badge", I18n.t("tokens-badge-ohlcv")));
           if (row.has_open_position) {
             flags.push(badge("badge success", I18n.t("tokens-badge-position")));
           }
-          if (row.blacklisted) {
+          if (row.is_blacklisted) {
             const summary = summarizeBlacklistReasons(row.blacklist_reasons);
             const tooltip = summary
               ? I18n.t("tokens-badge-blacklisted-reasons", { reasons: summary })
@@ -1929,6 +1933,25 @@ function createLifecycle() {
         tabBar.show({ force: true });
       }
 
+      // Created before the OHLCV and Favorites branches return: leaving either view starts
+      // this poller (`deps.poller`), and a page opened on one of them otherwise had none, so
+      // every list view it switched to stayed frozen until the page was left.
+      if (!poller) {
+        poller = deps.poller = ctx.managePoller(
+          new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
+            // l10n-ignore: poller name for diagnostics
+            label: "Tokens",
+            // An All Tokens page still sorts every stored token by its key (about
+            // 2 s on 600k tokens). Polling faster than that just queues reloads
+            // that abort each other and pegs a core. Floor the interval at 4s so the
+            // table stays live (each poll completes, newest-updated bubbles to top)
+            // without hammering. The in-flight guard in shouldSkipPollReload still
+            // skips ticks while a fetch is running.
+            getInterval: () => Math.max(4000, getGlobalPollInterval() || 4000),
+          })
+        );
+      }
+
       // Handle OHLCV view specially - it has its own poller
       if (state.view === "ohlcv") {
         ohlcv.showOhlcvView();
@@ -1941,21 +1964,6 @@ function createLifecycle() {
         return;
       }
 
-      if (!poller) {
-        poller = deps.poller = ctx.managePoller(
-          new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
-            // l10n-ignore: poller name for diagnostics
-            label: "Tokens",
-            // The tokens/list query scans the full token DB (300k+ rows, COALESCE
-            // sort) and takes ~2-4s. Polling faster than that just queues reloads
-            // that abort each other and pegs a core. Floor the interval at 4s so the
-            // table stays live (each poll completes, newest-updated bubbles to top)
-            // without hammering. The in-flight guard in shouldSkipPollReload still
-            // skips ticks while a fetch is running.
-            getInterval: () => Math.max(4000, getGlobalPollInterval() || 4000),
-          })
-        );
-      }
       poller.start();
       if ((table?.getData?.() ?? []).length === 0) {
         requestReload("initial", { silent: false, resetScroll: true }).catch(() => {});

@@ -4,7 +4,7 @@
 //! Type definitions for the tokens API routes.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     filtering::{
@@ -19,7 +19,8 @@ use crate::{
 // RESPONSE TYPES
 // =============================================================================
 
-/// One row of a token list: the token and the moment its displayed age counts from.
+/// One row of a token list: the token, the moment its displayed age counts from, its
+/// risk band, and the live state its columns and row actions read.
 #[derive(Debug, Serialize)]
 pub struct TokenListItem {
     #[serde(flatten)]
@@ -27,12 +28,35 @@ pub struct TokenListItem {
     /// Unix seconds of the token's on-chain or pool creation; `None` when only its
     /// discovery by this install is known, which is not an age.
     pub age_origin: Option<i64>,
+    /// Band of the normalised Rugcheck score, which tones the Risk column; `None` while
+    /// the token has no report.
+    pub security_band: Option<SecurityRiskBand>,
+    #[serde(flatten)]
+    pub state: TokenRowState,
 }
 
-impl From<crate::tokens::types::Token> for TokenListItem {
-    fn from(token: crate::tokens::types::Token) -> Self {
+/// What is live about a listed token beyond its stored record. The names match
+/// `TokenDetailResponse`, so a row and the details dialog read the same fields.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct TokenRowState {
+    /// The pool service holds a live price for the token.
+    pub has_pool_price: bool,
+    /// A position in the token is open, so the row offers add and sell instead of buy.
+    pub has_open_position: bool,
+    /// Candles are stored for the token.
+    pub has_ohlcv: bool,
+}
+
+impl TokenListItem {
+    pub fn new(token: crate::tokens::types::Token, state: TokenRowState) -> Self {
         let age_origin = token.created_at().age_origin().map(|at| at.timestamp());
-        Self { token, age_origin }
+        let security_band = SecurityRiskBand::of_optional(token.security_score_normalised);
+        Self {
+            token,
+            age_origin,
+            security_band,
+            state,
+        }
     }
 }
 
@@ -700,7 +724,26 @@ pub(super) fn build_token_list_response(
         Some(start_index.saturating_sub(result.page_size))
     };
 
-    let items = result.items.into_iter().map(TokenListItem::from).collect();
+    let priced: HashSet<&str> = result.priced_mints.iter().map(String::as_str).collect();
+    let open: HashSet<&str> = result
+        .open_position_mints
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let with_ohlcv: HashSet<&str> = result.ohlcv_mints.iter().map(String::as_str).collect();
+    let items = result
+        .items
+        .into_iter()
+        .map(|token| {
+            let mint = token.mint.as_str();
+            let state = TokenRowState {
+                has_pool_price: priced.contains(mint),
+                has_open_position: open.contains(mint),
+                has_ohlcv: with_ohlcv.contains(mint),
+            };
+            TokenListItem::new(token, state)
+        })
+        .collect();
 
     TokenListResponse {
         items,

@@ -38,22 +38,25 @@ pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
     match listed {
         Ok((chain, favorites)) => {
             let total = favorites.len();
-            // Enrich each favorite with the FULL assembled token (market data,
-            // price, txns, etc.) so the favorites subtab renders the exact same
-            // columns as the all/passed token lists. Fall back to the favorite's
-            // stored metadata when the token isn't in the store (columns then show
-            // "—" for the missing market fields). Merge in trading-state flags and
-            // the favorite extras so row actions and the details dialog work.
+            // Each favorite is the full token-list row (market data, price, txns and the
+            // live row state), so the subtab renders the same columns and row actions as
+            // the other token views. A favorite the store does not hold falls back to its
+            // stored metadata; its market columns then show "—".
             let mut rows = Vec::with_capacity(total);
             for favorite in favorites {
                 let has_open_position =
                     crate::positions::state::is_open_position(&favorite.mint).await;
-                let blacklisted = crate::trader::safety::is_blacklisted(&favorite.mint).await;
 
                 let mut row = match crate::tokens::get_full_token_async(chain, &favorite.mint).await
                 {
                     Ok(Some(token)) => {
-                        serde_json::to_value(super::types::TokenListItem::from(token))
+                        let state = TokenRowState {
+                            has_pool_price: crate::pools::get_pool_price(chain, &favorite.mint)
+                                .is_some(),
+                            has_open_position,
+                            has_ohlcv: has_candles(chain, &favorite.mint).await,
+                        };
+                        serde_json::to_value(TokenListItem::new(token, state))
                             .unwrap_or_else(|_| serde_json::json!({}))
                     }
                     _ => serde_json::json!({
@@ -61,6 +64,9 @@ pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
                         "symbol": favorite.symbol,
                         "name": favorite.name,
                         "logo_url": favorite.logo_url,
+                        "has_open_position": has_open_position,
+                        "is_blacklisted":
+                            crate::trader::safety::is_blacklisted(&favorite.mint).await,
                     }),
                 };
 
@@ -72,11 +78,6 @@ pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
                         "favorite_created_at".to_owned(),
                         serde_json::json!(favorite.created_at),
                     );
-                    map.insert(
-                        "has_open_position".to_owned(),
-                        serde_json::json!(has_open_position),
-                    );
-                    map.insert("blacklisted".to_owned(), serde_json::json!(blacklisted));
                 }
 
                 rows.push(row);
@@ -97,6 +98,20 @@ pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
                 ids::ERRORS_TOKENS_FAVORITES_FETCH_FAILED,
             )
             .details(e.to_string()))
+        }
+    }
+}
+
+/// Whether candles are stored for `mint`; a failed lookup is logged and counts as none.
+async fn has_candles(chain: crate::chains::ChainId, mint: &str) -> bool {
+    match crate::ohlcvs::has_data(chain, mint).await {
+        Ok(found) => found,
+        Err(e) => {
+            logger::info(
+                LogTag::Webserver,
+                &format!("Failed to determine OHLCV availability for {mint}: {e}"),
+            );
+            false
         }
     }
 }

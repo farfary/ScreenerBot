@@ -34,7 +34,7 @@ use crate::filtering::{
     BlacklistReasonInfo, FilteringQuery, FilteringView, SortDirection, TokenSortKey,
 };
 use crate::tokens::types::{DataSource, Priority, SecurityRisk, Token};
-use crate::webserver::routes::tokens::types::{TokenListItem, TokenListResponse};
+use crate::webserver::routes::tokens::types::{TokenListItem, TokenListResponse, TokenRowState};
 
 use super::data::{
     PROMO_BLACKLISTED, PROMO_CLOSED_TOKENS, PROMO_OPEN_TOKENS, PROMO_TOKENS_TRACKED,
@@ -524,6 +524,18 @@ struct PromoToken {
     has_market_data: bool,
 }
 
+impl PromoToken {
+    /// The live row state the list sends; candles exist for the tokens that passed, as
+    /// `get_promo_tokens_stats` counts them.
+    fn row_state(&self) -> TokenRowState {
+        TokenRowState {
+            has_pool_price: self.has_pool_price,
+            has_open_position: self.has_position,
+            has_ohlcv: self.passed,
+        }
+    }
+}
+
 static UNIVERSE: LazyLock<Vec<PromoToken>> = LazyLock::new(build_universe);
 
 fn build_universe() -> Vec<PromoToken> {
@@ -812,12 +824,13 @@ pub fn get_promo_tokens_list(query: &FilteringQuery) -> TokenListResponse {
         .filter(|entry| entry.token.is_blacklisted)
         .count();
 
-    let items: Vec<Token> = selected
+    let listed: Vec<&PromoToken> = selected
         .iter()
         .skip(start)
         .take(page_size)
-        .map(|entry| entry.token.clone())
+        .copied()
         .collect();
+    let items: Vec<Token> = listed.iter().map(|entry| entry.token.clone()).collect();
 
     let blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = items
         .iter()
@@ -862,7 +875,11 @@ pub fn get_promo_tokens_list(query: &FilteringQuery) -> TokenListResponse {
     };
 
     TokenListResponse {
-        items: items.into_iter().map(TokenListItem::from).collect(),
+        items: items
+            .into_iter()
+            .zip(&listed)
+            .map(|(token, entry)| TokenListItem::new(token, entry.row_state()))
+            .collect(),
         page,
         page_size,
         total,
@@ -919,21 +936,14 @@ pub fn get_promo_favorites() -> Vec<serde_json::Value> {
         .enumerate()
         .map(|(index, entry)| {
             let mut row =
-                serde_json::to_value(&entry.token).unwrap_or_else(|_| serde_json::json!({}));
+                serde_json::to_value(TokenListItem::new(entry.token.clone(), entry.row_state()))
+                    .unwrap_or_else(|_| serde_json::json!({}));
             if let serde_json::Value::Object(map) = &mut row {
                 map.insert("is_favorite".to_owned(), serde_json::json!(true));
                 map.insert("notes".to_owned(), serde_json::json!(null));
                 map.insert(
                     "favorite_created_at".to_owned(),
                     serde_json::json!((Utc::now() - Duration::days(index as i64 + 2)).to_rfc3339()),
-                );
-                map.insert(
-                    "has_open_position".to_owned(),
-                    serde_json::json!(entry.has_position),
-                );
-                map.insert(
-                    "blacklisted".to_owned(),
-                    serde_json::json!(entry.token.is_blacklisted),
                 );
             }
             row

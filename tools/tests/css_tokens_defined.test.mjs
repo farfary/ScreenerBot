@@ -3,7 +3,8 @@
 //
 
 /**
- * Guard: every custom property a dashboard stylesheet reads without a fallback is defined.
+ * Guard: every custom property a dashboard stylesheet, script or page markup reads without
+ * a fallback is defined.
  *
  * A `var(--name)` with no definition makes the whole declaration invalid at computed-value
  * time, so the property silently falls back to its inherited or initial value: a hover
@@ -14,8 +15,9 @@
  * A property whose own value reads `var(--same-name`) is a dependency cycle: it computes
  * as invalid and every declaration that reads it fails with it.
  *
- * The files below still read a property nothing defines; each fix removes its entry, and
- * the list only shrinks.
+ * The stylesheets below still read a property nothing defines; each fix removes its entry,
+ * and the list only shrinks. Scripts and markup have no entry: an inline `style="color:
+ * var(--error)"` in a column renderer left a high risk score uncoloured.
  *
  * Run with `npm run test:js`.
  */
@@ -34,7 +36,6 @@ const UNDEFINED_ALLOWED = {
   "pages/assistant/instructions.css": ["--info"],
   "pages/assistant/providers.css": ["--danger-color"],
   "pages/filtering/results_explorer.css": ["--accent-bg", "--accent-color", "--border-hover"],
-  "pages/tokens.css": ["--badge-warning"],
   "token_details/base.css": ["--accent-primary"],
 };
 
@@ -42,17 +43,30 @@ const UNDEFINED_ALLOWED = {
 const withoutComments = (source) =>
   source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
 
-test("every custom property read without a fallback is defined under the templates", async () => {
-  const sources = (await walk(TEMPLATES_ROOT)).filter((path) => /\.(?:css|html|js|mjs)$/.test(path));
+/** A script with its block and line comments blanked; `://` in a URL is not a comment. */
+const withoutScriptComments = (source) =>
+  withoutComments(source).replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+/** Every custom property the templates define, by declaration or `setProperty`. */
+async function definedProperties() {
+  const sources = (await walk(TEMPLATES_ROOT)).filter((path) =>
+    /\.(?:css|html|js|mjs)$/.test(path)
+  );
   const defined = new Set();
   for (const path of sources) {
     const source = withoutComments(readFileSync(path, "utf8"));
     for (const match of source.matchAll(/(--[\w-]+)\s*:/g)) defined.add(match[1]);
     for (const match of source.matchAll(/setProperty\(\s*["'`](--[\w-]+)/g)) defined.add(match[1]);
   }
+  return { sources, defined };
+}
 
+test("every custom property read without a fallback is defined under the templates", async () => {
+  const { sources, defined } = await definedProperties();
   const undefinedReads = {};
-  for (const path of sources.filter((file) => file.startsWith(STYLES_ROOT) && file.endsWith(".css"))) {
+  for (const path of sources.filter(
+    (file) => file.startsWith(STYLES_ROOT) && file.endsWith(".css")
+  )) {
     const source = withoutComments(readFileSync(path, "utf8"));
     const names = new Set();
     for (const match of source.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)) {
@@ -68,8 +82,27 @@ test("every custom property read without a fallback is defined under the templat
   );
 });
 
+test("no script or page markup reads a custom property nothing defines", async () => {
+  const { sources, defined } = await definedProperties();
+  const undefinedReads = [];
+  for (const path of sources.filter((file) => !file.endsWith(".css"))) {
+    const source = withoutScriptComments(readFileSync(path, "utf8"));
+    for (const match of source.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)) {
+      if (!defined.has(match[1]))
+        undefinedReads.push(`${relative(TEMPLATES_ROOT, path)}: ${match[1]}`);
+    }
+  }
+  assert.deepEqual(
+    undefinedReads,
+    [],
+    "an inline style that reads an undefined property is dropped: use a defined token or a class"
+  );
+});
+
 test("no custom property is defined by a value that reads itself", async () => {
-  const sources = (await walk(TEMPLATES_ROOT)).filter((path) => /\.(?:css|html|js|mjs)$/.test(path));
+  const sources = (await walk(TEMPLATES_ROOT)).filter((path) =>
+    /\.(?:css|html|js|mjs)$/.test(path)
+  );
   const cycles = [];
   for (const path of sources) {
     const source = withoutComments(readFileSync(path, "utf8"));
@@ -77,5 +110,9 @@ test("no custom property is defined by a value that reads itself", async () => {
       cycles.push(`${relative(TEMPLATES_ROOT, path)}: ${match[1]}`);
     }
   }
-  assert.deepEqual(cycles, [], "a custom property that reads itself is invalid; give the default to the element above");
+  assert.deepEqual(
+    cycles,
+    [],
+    "a custom property that reads itself is invalid; give the default to the element above"
+  );
 });

@@ -19,6 +19,8 @@ mod detail_tests;
 mod favorites;
 mod identity;
 mod list;
+#[cfg(test)]
+mod list_tests;
 mod ohlcv;
 mod source_status;
 #[cfg(test)]

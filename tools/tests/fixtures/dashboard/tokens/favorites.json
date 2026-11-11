@@ -79,7 +79,9 @@
       "notes": "Watch the 1h trend",
       "favorite_created_at": "2026-10-06T00:00:00.000Z",
       "has_open_position": true,
-      "blacklisted": false
+      "security_band": "low",
+      "has_pool_price": true,
+      "has_ohlcv": true
     },
     {
       "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
@@ -160,7 +162,9 @@
       "notes": null,
       "favorite_created_at": "2026-10-05T00:00:00.000Z",
       "has_open_position": true,
-      "blacklisted": false
+      "security_band": "low",
+      "has_pool_price": true,
+      "has_ohlcv": true
     },
     {
       "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
@@ -241,7 +245,9 @@
       "notes": null,
       "favorite_created_at": "2026-10-04T00:00:00.000Z",
       "has_open_position": true,
-      "blacklisted": false
+      "security_band": "low",
+      "has_pool_price": true,
+      "has_ohlcv": true
     }
   ],
   "total": 3

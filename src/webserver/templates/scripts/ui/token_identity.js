@@ -163,6 +163,36 @@ async function fetchIdentities(mints) {
   }
 }
 
+// Logo URLs that failed to load, with when they failed. A logo rendered again within
+// FAILED_LOGO_RETRY_MS shows the letter avatar without requesting the image: tables rebuild
+// rows on every sort, search and page, and a gateway that refused a logo (public IPFS
+// gateways answer 429 under load) refuses each repeat as well, while the slot stays blank
+// for as long as the request takes.
+const failedLogos = new Map();
+const FAILED_LOGO_RETRY_MS = 5 * 60 * 1000;
+
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "error",
+    (event) => {
+      const img = event.target;
+      if (img?.tagName !== "IMG" || !img.classList.contains("token-logo-artwork")) return;
+      const url = img.getAttribute("src");
+      if (url) failedLogos.set(url, Date.now());
+    },
+    true
+  );
+}
+
+/** Whether `url` failed to load within the retry window. */
+function logoFailedRecently(url) {
+  const failedAt = failedLogos.get(url);
+  if (failedAt === undefined) return false;
+  if (Date.now() - failedAt < FAILED_LOGO_RETRY_MS) return true;
+  failedLogos.delete(url);
+  return false;
+}
+
 /**
  * Letter avatar for an asset with no logo: the first grapheme of its symbol (else
  * its mint) uppercased, or a bare coin glyph when there is no text. The glyph
@@ -180,8 +210,9 @@ function logoPlaceholder(identity) {
 /**
  * Asset logo. `size` is one of xs | sm | md | lg | table (the token column of a
  * table). A broken provider image falls back to the letter avatar rather than a
- * broken-image glyph. `enlarge` makes loaded artwork open the image lightbox
- * (`.clickable-logo`, read by the page's delegated click handler).
+ * broken-image glyph, and one that failed recently is not requested again. `enlarge`
+ * makes loaded artwork open the image lightbox (`.clickable-logo`, read by the page's
+ * delegated click handler).
  *
  * A brand asset (the Solana logomark) is NOT a square token avatar: it is a 101x88
  * glyph on a transparent canvas, so it gets `ti-logo-brand` and remains inset rather
@@ -197,9 +228,10 @@ export function renderTokenLogo(mintOrIdentity, options = {}) {
   const enlarge = options.enlarge
     ? ` clickable-logo" data-logo-url="${src}" data-token-symbol="${Utils.escapeHtml(identity.symbol || "")}" data-token-name="${Utils.escapeHtml(identity.name || "")}" data-token-mint="${Utils.escapeHtml(identity.mint || "")}" title="${Utils.escapeHtml(I18n.t("tokens-cell-logo-enlarge"))}`
     : "";
-  const inner = identity.logoUrl
-    ? `<img class="token-logo-artwork${enlarge}" src="${src}" alt="${alt}" loading="lazy" onerror="this.remove()" />${logoPlaceholder(identity)}`
-    : logoPlaceholder(identity);
+  const inner =
+    identity.logoUrl && !logoFailedRecently(identity.logoUrl)
+      ? `<img class="token-logo-artwork${enlarge}" src="${src}" alt="${alt}" loading="lazy" onerror="this.remove()" />${logoPlaceholder(identity)}`
+      : logoPlaceholder(identity);
   return `<span class="ti-logo ti-logo-${size}${brand} token-logo-frame" data-field="logo">${inner}</span>`;
 }
 

@@ -152,7 +152,7 @@
 /* global queueMicrotask */
 
 import * as AppState from "../core/app_state.js";
-import { $, scrollStart } from "../core/dom.js";
+import { $, dirSign, paintHtml, rememberPaint, scrollStart } from "../core/dom.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { menuBounds } from "../core/menu_manager.js";
 import { escapeHtml } from "../core/utils.js";
@@ -298,6 +298,7 @@ export class DataTable {
     this.resizing = null;
     this._pendingRAF = null;
     this.scrollThrottle = null;
+    this._settleTimer = null;
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
     this._pagination = this._initializePagination(this.options.pagination);
     this._paginationScrollRAF = null;
@@ -582,6 +583,7 @@ export class DataTable {
       this.options.zebra ? "zebra" : ""
     } ${uniformRowsLines ? "uniform-rows" : ""}`.trim();
     const tableStyle = uniformRowsLines ? `style="--dt-row-lines: ${uniformRowsLines};"` : "";
+    const bodyCells = [];
 
     this._renderedHeaderMarkup = null;
     this._renderedColgroupMarkup = null;
@@ -621,7 +623,7 @@ export class DataTable {
           <table class="${tableClasses}" ${tableStyle}>
             ${this._renderColgroup()}
             <tbody>
-              ${this._renderBody()}
+              ${this._renderBody(bodyCells)}
             </tbody>
           </table>
         </div>
@@ -641,6 +643,10 @@ export class DataTable {
     this.elements.table = this.elements.scrollContainer?.querySelector(".data-table");
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
+    this._rememberCellMarkup(
+      Array.from(this.elements.tbody?.querySelectorAll(":scope > tr[data-row-id]") ?? []),
+      bodyCells
+    );
     this.elements.scrollLoader = container.querySelector(".dt-scroll-loader");
     this.elements.blockingState = container.querySelector(".data-table-blocking-state");
     this.elements.blockingStateSpinner = container.querySelector(
@@ -1064,9 +1070,10 @@ export class DataTable {
   }
 
   /**
-   * Render table body rows
+   * Render table body rows. `cells`, when given, receives each data row's cell markup
+   * (`_renderRow`), in row order.
    */
-  _renderBody() {
+  _renderBody(cells = null) {
     if (this.state.isLoading && this.state.filteredData.length === 0) {
       return `
         <tr>
@@ -1086,6 +1093,8 @@ export class DataTable {
     return data
       .map((row, index) => {
         const rowId = this._getRowId(row, index);
+        const rowCells = [];
+        cells?.push(rowCells);
         const isSelected = this.state.selectedRows.has(rowId);
         const customClass = this._computeRowClass(row);
         const customAttributes = this._computeRowAttributes(row);
@@ -1099,7 +1108,7 @@ export class DataTable {
             continuity === null ? "" : ` data-dt-continuity="${escapeHtml(continuity)}"`
           }
         >
-          ${this._renderRow(row, index)}
+          ${this._renderRow(row, index, rowCells)}
         </tr>
       `;
       })
@@ -1211,7 +1220,7 @@ export class DataTable {
   }
 
   /**
-   * Render cell content (helper for _renderRow and _updateTableBody)
+   * A column's rendered content for one row, before clamping (`_cellMarkup`).
    */
   _renderCellContent(col, row) {
     let value = row[col.id];
@@ -1260,14 +1269,11 @@ export class DataTable {
       const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
       if (!td) return;
 
-      const cellContent = this._renderCellContent(col, row);
-      const newContent = this._clampsCell(col)
-        ? `<div class="dt-cell-clamp">${cellContent}</div>`
-        : cellContent;
-
-      if (td.innerHTML !== newContent) {
-        td.innerHTML = newContent;
-      }
+      // Compared with the markup last written, never with `td.innerHTML`: the browser
+      // serializes markup its own way (`<img …>` for `<img … />`) and a failed image
+      // removes itself, so a serialized cell never equals its render and every update
+      // rebuilt it, refetching its logo and replacing its buttons under the pointer.
+      paintHtml(td, this._cellMarkup(col, row));
       if (td.dataset.rowId !== rowIdStr) {
         td.dataset.rowId = rowIdStr;
       }
@@ -1383,7 +1389,9 @@ export class DataTable {
       this._syncRowClass(tr, slot.row);
       this._syncRowAttributes(tr, slot.row);
       this._syncRowContinuity(tr, slot.row);
-      tr.innerHTML = this._renderRow(slot.row, slot.index);
+      const contents = [];
+      tr.innerHTML = this._renderRow(slot.row, slot.index, contents);
+      this._rememberCellMarkup([tr], [contents]);
       slot.tr = tr;
       entered.push(tr);
     });
@@ -1402,17 +1410,35 @@ export class DataTable {
     }
   }
 
+  /** A cell's markup: the column's render, clamped where the table clamps it. */
+  _cellMarkup(col, row) {
+    const content = this._renderCellContent(col, row);
+    return this._clampsCell(col) ? `<div class="dt-cell-clamp">${content}</div>` : content;
+  }
+
   /**
-   * Render individual row cells
+   * Record the markup each cell of `rows` was created with (`contents[i]` lists row i's
+   * cells in column order), so the first update that leaves a cell unchanged keeps it.
    */
-  _renderRow(row, rowIndex = 0) {
+  _rememberCellMarkup(rows, contents) {
+    rows.forEach((tr, index) => {
+      const cells = contents[index];
+      if (!tr || !cells) return;
+      Array.from(tr.cells).forEach((td, cellIndex) => rememberPaint(td, cells[cellIndex]));
+    });
+  }
+
+  /**
+   * Render a row's cells. `contents`, when given, receives each cell's markup in column
+   * order for `_rememberCellMarkup`.
+   */
+  _renderRow(row, rowIndex = 0, contents = null) {
     const visibleColumns = this._getOrderedColumns();
     const floatingCount = this._getFloatingColumnCount(visibleColumns);
     const rowId = this._getRowId(row, rowIndex);
 
     return visibleColumns
       .map((col, index) => {
-        const cellContent = this._renderCellContent(col, row);
         let cellClass = col.className || "";
 
         // Handle different column types
@@ -1428,17 +1454,11 @@ export class DataTable {
         // Sticky markers for floating/pinned-left columns
         const sticky = this._stickyCellParts(index, floatingCount);
 
-        const content = this._clampsCell(col)
-          ? `<div class="dt-cell-clamp">${cellContent}</div>`
-          : cellContent;
+        const content = this._cellMarkup(col, row);
+        contents?.push(content);
 
-        return `
-        <td data-column-id="${col.id}"${this._columnTypeAttr(col)}
-            class="${cellClass} ${wrapClass} ${sticky.classes}${this._underPinClass(col)}"${sticky.attr}
-            data-row-id="${rowId}">
-          ${content}
-        </td>
-      `;
+        // No whitespace around the content: the cell holds exactly what is recorded for it.
+        return `<td data-column-id="${col.id}"${this._columnTypeAttr(col)} class="${cellClass} ${wrapClass} ${sticky.classes}${this._underPinClass(col)}"${sticky.attr} data-row-id="${rowId}">${content}</td>`;
       })
       .join("");
   }
@@ -2241,38 +2261,49 @@ export class DataTable {
   }
 
   /**
-   * Hide the content of any column that is partly scrolled under the pinned
-   * columns. Pinned cells are opaque, but the part of a scrolled column that sticks
-   * out past their edge would otherwise show cut-off glyph ends as stray marks,
-   * however wide that part is. Positions come from `state.columnWidths` (the same
-   * source the pin offsets use), so a scroll reads no layout. Only columns whose
-   * membership changed are touched; rendered cells take the class from
-   * `_underPinClass`.
+   * The column that the pinned edge cuts at the current sideways scroll, with the scroll
+   * distances that would put its start (`startScroll`) or its end (`endScroll`) at that
+   * edge; null when no column is cut. Positions come from `state.columnWidths` (the same
+   * source the pin offsets use), so a scroll reads no layout.
    */
-  _maskColumnsUnderPin() {
+  _columnCutByPin() {
     const container = this.elements.scrollContainer;
-    const wrapper = this.elements.wrapper;
-    if (!container || !wrapper) return;
-
+    if (!container) return null;
     const ordered = this._getOrderedColumns();
     const floatingCount = this._getFloatingColumnCount(ordered);
-    const under = new Set();
     const scrolled = scrollStart(container);
-    if (floatingCount > 0 && scrolled > 0) {
-      const widthOf = (col) => {
-        const width = this.state.columnWidths[col.id];
-        return Number.isFinite(width) ? width : 0;
-      };
-      const pinEdge = ordered.slice(0, floatingCount).reduce((sum, col) => sum + widthOf(col), 0);
-      const visibleFrom = scrolled + pinEdge;
-      let start = pinEdge;
-      for (const col of ordered.slice(floatingCount)) {
-        const end = start + widthOf(col);
-        if (start < visibleFrom && end > visibleFrom) under.add(col.id);
-        if (start >= visibleFrom) break;
-        start = end;
+    if (floatingCount === 0 || scrolled <= 0) return null;
+
+    const widthOf = (col) => {
+      const width = this.state.columnWidths[col.id];
+      return Number.isFinite(width) ? width : 0;
+    };
+    // Scroll distance at which each column's start reaches the pinned edge.
+    let startScroll = 0;
+    for (const col of ordered.slice(floatingCount)) {
+      const endScroll = startScroll + widthOf(col);
+      if (startScroll < scrolled && endScroll > scrolled) {
+        return { id: col.id, startScroll, endScroll };
       }
+      if (startScroll >= scrolled) break;
+      startScroll = endScroll;
     }
+    return null;
+  }
+
+  /**
+   * Hide the content of the column partly scrolled under the pinned columns. Pinned
+   * cells are opaque, but the part of a scrolled column that sticks out past their edge
+   * would otherwise show cut-off glyph ends as stray marks, or the tail of a number that
+   * reads as another value. Only columns whose membership changed are touched; rendered
+   * cells take the class from `_underPinClass`.
+   */
+  _maskColumnsUnderPin() {
+    const wrapper = this.elements.wrapper;
+    if (!this.elements.scrollContainer || !wrapper) return;
+
+    const cut = this._columnCutByPin();
+    const under = new Set(cut ? [cut.id] : []);
 
     const previous = this._underPinColumns || new Set();
     this._underPinColumns = under;
@@ -2282,6 +2313,28 @@ export class DataTable {
         .querySelectorAll(`:is(th, td)[data-column-id="${CSS.escape(String(id))}"]`)
         .forEach((cell) => cell.classList.toggle("dt-col-under", under.has(id)));
     }
+  }
+
+  /**
+   * Bring a sideways scroll that came to rest on a cut column to the nearer edge of that
+   * column, so the gap a hidden column leaves (`_maskColumnsUnderPin`) never stays beside
+   * the pinned group. A target past the far end is the end, which stays reachable.
+   */
+  _settleOnColumnEdge() {
+    const container = this.elements.scrollContainer;
+    const cut = this._columnCutByPin();
+    if (!container || !cut) return;
+    const scrolled = scrollStart(container);
+    const end = container.scrollWidth - container.clientWidth;
+    if (scrolled >= end - 1) return;
+    const nearer =
+      scrolled - cut.startScroll <= cut.endScroll - scrolled ? cut.startScroll : cut.endScroll;
+    const target = Math.min(end, nearer);
+    if (Math.abs(target - scrolled) < 1) return;
+    container.scrollTo({
+      left: target * dirSign(),
+      behavior: this._prefersReducedMotion() ? "auto" : "smooth",
+    });
   }
 
   reload(options = {}) {
@@ -3818,6 +3871,8 @@ export class DataTable {
       clearTimeout(this.scrollThrottle);
       this.scrollThrottle = null;
     }
+    clearTimeout(this._settleTimer);
+    this._settleTimer = null;
 
     // Clear data arrays to release memory
     this.state.data = [];

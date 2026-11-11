@@ -114,7 +114,7 @@ export function tokenCell(row) {
     ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="${Utils.escapeHtml(I18n.t("tokens-boost-title", { boosts: boostCount }))}"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${boostCount}</span></span>`
     : "";
   const mint = Utils.escapeHtml(row.mint || "");
-  const disabledAttr = row.blacklisted ? ' disabled aria-disabled="true"' : "";
+  const disabledAttr = row.is_blacklisted ? ' disabled aria-disabled="true"' : "";
   const actionAttrs = (title, label) =>
     `title="${Utils.escapeHtml(title)}" aria-label="${Utils.escapeHtml(label)}"`;
   const tradeActions = row.has_open_position

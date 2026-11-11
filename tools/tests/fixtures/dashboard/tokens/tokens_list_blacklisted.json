@@ -74,7 +74,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": true,
-      "priority": "Background"
+      "priority": "Background",
+      "security_band": "low",
+      "has_pool_price": false,
+      "has_open_position": false,
+      "has_ohlcv": false
     },
     {
       "mint": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
@@ -150,7 +154,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": true,
-      "priority": "Background"
+      "priority": "Background",
+      "security_band": "low",
+      "has_pool_price": false,
+      "has_open_position": false,
+      "has_ohlcv": false
     }
   ],
   "page": 1,

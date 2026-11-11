@@ -21,6 +21,8 @@
 //! * [`opening_the_filtering_tab_never_waits_for_a_snapshot`] — every read the tab issues on
 //!   activation, run concurrently with NO snapshot built. This is the front delay itself:
 //!   the wall-clock time between the click and the tab having its numbers.
+//! * [`an_all_tokens_page_sorts_only_its_key`] — the Tokens page's All view, its default
+//!   tab, re-read on every poll: one page of every stored token, sorted by liquidity.
 //!
 //! # Safety
 //!
@@ -59,6 +61,12 @@ const ANALYTICS_READS_CEILING: Duration = Duration::from_millis(1_500);
 /// page is; without it, every page re-sorts every rejected row (measured ~45 ms each, and
 /// the "last page" control fires up to seven of them in series).
 const EXPLORE_PAGE_CEILING: Duration = Duration::from_millis(400);
+
+/// One All Tokens page, sorted by liquidity. Sorting the full rows carried every column of
+/// all 599k tokens through the sort to keep 100: 6.3 s in sqlite3, 8.6-10.2 s from the debug
+/// build's endpoint. Reading the page's mints first, joined only to the market tables the
+/// sort reads, measured 2.1 s and 3.0-5.0 s (the debug build compiles SQLite unoptimised).
+const ALL_TOKENS_PAGE_CEILING: Duration = Duration::from_secs(6);
 
 /// Everything the tab asks for when it is opened, issued concurrently, with no snapshot.
 /// This is what the user experiences as "the filtering tab takes a while to come up".
@@ -303,5 +311,35 @@ async fn opening_the_filtering_tab_never_waits_for_a_snapshot() {
         "opening the filtering tab cost {elapsed:?} of database work, ceiling \
          {TAB_OPEN_CEILING:?} — the tab is back to waiting on full table scans (or the \
          requests have been re-serialised behind one another)",
+    );
+}
+
+/// The Tokens page opens on All, sorted by liquidity, and re-reads that page on every poll.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "real-data tier"]
+async fn an_all_tokens_page_sorts_only_its_key() {
+    let Some(_env) = setup() else { return };
+    let page = || {
+        screenerbot::tokens::get_all_tokens_optional_market_async(
+            CHAIN,
+            100,
+            0,
+            Some("liquidity_usd".to_owned()),
+            Some("desc".to_owned()),
+        )
+    };
+
+    // Warm pass, so the measurement is of the plan rather than the filesystem.
+    let _ = page().await;
+    let started = Instant::now();
+    let rows = page().await.expect("all tokens page");
+    let elapsed = started.elapsed();
+
+    eprintln!("all tokens page: {} rows in {elapsed:?}", rows.len());
+    assert_eq!(rows.len(), 100);
+    assert!(
+        elapsed < ALL_TOKENS_PAGE_CEILING,
+        "an All Tokens page took {elapsed:?}, ceiling {ALL_TOKENS_PAGE_CEILING:?} — the page \
+         is sorting full token rows instead of reading its mints first",
     );
 }

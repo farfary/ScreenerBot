@@ -74,7 +74,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": false,
-      "priority": "OpenPosition"
+      "priority": "OpenPosition",
+      "security_band": "low",
+      "has_pool_price": true,
+      "has_open_position": true,
+      "has_ohlcv": true
     },
     {
       "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
@@ -150,7 +154,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": false,
-      "priority": "FilterPassed"
+      "priority": "FilterPassed",
+      "security_band": "low",
+      "has_pool_price": true,
+      "has_open_position": false,
+      "has_ohlcv": true
     },
     {
       "mint": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
@@ -226,7 +234,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": false,
-      "priority": "FilterPassed"
+      "priority": "FilterPassed",
+      "security_band": "low",
+      "has_pool_price": true,
+      "has_open_position": false,
+      "has_ohlcv": true
     },
     {
       "mint": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE",
@@ -302,7 +314,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": false,
-      "priority": "FilterPassed"
+      "priority": "FilterPassed",
+      "security_band": "low",
+      "has_pool_price": true,
+      "has_open_position": false,
+      "has_ohlcv": false
     },
     {
       "mint": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
@@ -378,7 +394,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": false,
-      "priority": "FilterPassed"
+      "priority": "FilterPassed",
+      "security_band": "low",
+      "has_pool_price": false,
+      "has_open_position": false,
+      "has_ohlcv": false
     },
     {
       "mint": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
@@ -454,7 +474,11 @@
       "transfer_fee_max_amount": null,
       "transfer_fee_authority": null,
       "is_blacklisted": false,
-      "priority": "FilterPassed"
+      "priority": "FilterPassed",
+      "security_band": "low",
+      "has_pool_price": false,
+      "has_open_position": false,
+      "has_ohlcv": false
     }
   ],
   "page": 1,

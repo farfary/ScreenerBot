@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 
 import { SCRIPTS_ROOT, walk } from "../lib/dashboard_ui.mjs";
 
-const { paintHtml, paintText, forgetPaint } = await import(
+const { paintHtml, paintText, forgetPaint, rememberPaint } = await import(
   new URL("../../src/webserver/templates/scripts/core/dom.js", import.meta.url)
 );
 
@@ -51,6 +51,15 @@ test("forgetPaint makes the next paint write unchanged markup", () => {
   forgetPaint(a);
   assert.equal(paintHtml(a, "x"), true);
   assert.equal(a.writes, 2);
+});
+
+test("rememberPaint makes markup written through a parent count as painted", () => {
+  const cell = element();
+  rememberPaint(cell, "<img src=a />");
+  assert.equal(paintHtml(cell, "<img src=a />"), false, "the parent's write is the paint");
+  assert.equal(cell.writes, 0);
+  assert.equal(paintHtml(cell, "<img src=b />"), true);
+  rememberPaint(null, "x");
 });
 
 test("paintText leaves an unchanged text in place", () => {

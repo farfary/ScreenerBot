@@ -10,6 +10,11 @@
 import { scrollStart } from "../../core/dom.js";
 import { openMenu, closeMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 
+// Whether the browser reports the end of a scroll, momentum included. Where it does not,
+// a sideways scroll settles on a column edge once it has idled for SETTLE_IDLE_MS.
+const settlesOnScrollEnd = typeof window !== "undefined" && "onscrollend" in window;
+const SETTLE_IDLE_MS = 160;
+
 export function applyEventHandlersMixin(DataTable) {
   const proto = DataTable.prototype;
 
@@ -790,8 +795,19 @@ export function applyEventHandlersMixin(DataTable) {
           );
         }
         this._maskColumnsUnderPin();
+        if (!settlesOnScrollEnd) {
+          clearTimeout(this._settleTimer);
+          this._settleTimer = setTimeout(() => this._settleOnColumnEdge(), SETTLE_IDLE_MS);
+        }
       };
       this._addEventListener(this.elements.scrollContainer, "scroll", hScrollSync);
+      // A sideways scroll that ends on a column cut by the pinned edge glides to that
+      // column's nearer edge. Without `scrollend` the scroll settles once it idles.
+      if (settlesOnScrollEnd) {
+        this._addEventListener(this.elements.scrollContainer, "scrollend", () =>
+          this._settleOnColumnEdge()
+        );
+      }
     }
 
     // Attach client pagination events

@@ -79,6 +79,14 @@ export const DEFAULT_FILTERS = {
 };
 export const DEFAULT_SUMMARY = { priced: 0, positions: 0, blacklisted: 0 };
 
+// Ids are the backend's `SecurityRiskBand` of the Rugcheck normalised score; a row without
+// a report has none and its score is shown untoned.
+export const RISK_BAND_TONES = Object.freeze({
+  low: "value-positive",
+  medium: "value-warning",
+  high: "value-negative",
+});
+
 export const getDefaultFiltersForView = (view) => {
   const filters = { ...DEFAULT_FILTERS };
   if (view === "positions") {
