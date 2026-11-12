@@ -483,8 +483,29 @@ async fn clear_pending(subject: Subject, signature: &str) {
     }
 }
 
+/// The decode of one watched wallet's live signature, run before the wallet's
+/// worker reaches it so the signatures of a burst decode side by side. `None`
+/// leaves the decode to `process_signature`: the signature is handled already or
+/// its dedupe state is unreadable. Reads only; the funnel still owns every write.
+pub(super) async fn decode_ahead(
+    chain_runtime: Arc<dyn WalletWatchRuntime>,
+    address: String,
+    signature: String,
+) -> Option<Result<crate::transactions::types::Transaction, crate::wallets::Error>> {
+    let subject = chain_runtime.resolve_subject(&address).ok()?;
+    if dedupe::has_seen(subject, &signature).await.unwrap_or(true) {
+        return None;
+    }
+    Some(
+        chain_runtime
+            .decode_transaction(&address, &signature, false)
+            .await,
+    )
+}
+
 /// The one funnel every trigger feeds: durable dedupe, pure decode, classify,
-/// record, dedupe-commit, broadcast.
+/// record, dedupe-commit, broadcast. `decoded` carries a decode that already ran
+/// (Helius pages, `decode_ahead`); `None` decodes here.
 pub(super) async fn process_signature(
     chain_runtime: &Arc<dyn WalletWatchRuntime>,
     target: &WatchTarget,
@@ -492,7 +513,7 @@ pub(super) async fn process_signature(
     signature: &str,
     detected_at: chrono::DateTime<Utc>,
     backfill: bool,
-    predecoded: Option<crate::transactions::types::Transaction>,
+    decoded: Option<Result<crate::transactions::types::Transaction, crate::wallets::Error>>,
 ) -> ProcessOutcome {
     let Ok(subject) = chain_runtime.resolve_subject(&target.address) else {
         return ProcessOutcome::Terminal;
@@ -518,8 +539,8 @@ pub(super) async fn process_signature(
 
     let is_own = target.sources.contains(&WatchSource::OwnWallet);
 
-    let transaction = match predecoded {
-        Some(transaction) => Ok(transaction),
+    let transaction = match decoded {
+        Some(result) => result,
         None => {
             chain_runtime
                 .decode_transaction(&target.address, signature, is_own)
@@ -724,7 +745,7 @@ async fn poll_high_activity_target(
                         &item.signature,
                         Utc::now(),
                         true,
-                        Some(transaction),
+                        Some(Ok(transaction)),
                     )
                     .await
                 }

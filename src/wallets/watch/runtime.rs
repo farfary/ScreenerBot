@@ -196,6 +196,8 @@ pub(crate) mod test_support {
         /// The page size of each signature page request, in request order.
         pub page_sizes: Vec<usize>,
         pub decoded: Vec<(String, String, bool)>,
+        /// The most decodes running at once, measured while a decode delay is set.
+        pub peak_decodes: usize,
         pub classified: Vec<String>,
     }
 
@@ -279,6 +281,8 @@ pub(crate) mod test_support {
             Mutex<std::collections::HashMap<String, (ActivityKind, Option<&'static str>)>>,
         fetch_blocks: Mutex<std::collections::HashMap<String, Arc<FetchBlock>>>,
         fetch_failures: Mutex<std::collections::HashMap<String, usize>>,
+        decode_delay: Mutex<Option<std::time::Duration>>,
+        decodes_running: std::sync::atomic::AtomicUsize,
         pub calls: Mutex<FakeCalls>,
     }
 
@@ -297,6 +301,8 @@ pub(crate) mod test_support {
                 classify_results: Mutex::new(std::collections::HashMap::new()),
                 fetch_blocks: Mutex::new(std::collections::HashMap::new()),
                 fetch_failures: Mutex::new(std::collections::HashMap::new()),
+                decode_delay: Mutex::new(None),
+                decodes_running: std::sync::atomic::AtomicUsize::new(0),
                 calls: Mutex::new(FakeCalls::default()),
             })
         }
@@ -377,6 +383,12 @@ pub(crate) mod test_support {
                 .lock()
                 .unwrap()
                 .insert(signature.to_owned(), result);
+        }
+
+        /// Make every decode take `delay`, as a provider's `getTransaction` does,
+        /// and count how many run at once in `calls.peak_decodes`.
+        pub fn set_decode_delay(&self, delay: std::time::Duration) {
+            *self.decode_delay.lock().unwrap() = Some(delay);
         }
 
         pub fn set_classify_result(
@@ -512,6 +524,17 @@ pub(crate) mod test_support {
                 signature.to_owned(),
                 is_own,
             ));
+            let delay = *self.decode_delay.lock().unwrap();
+            if let Some(delay) = delay {
+                use std::sync::atomic::Ordering::SeqCst;
+                let running = self.decodes_running.fetch_add(1, SeqCst) + 1;
+                {
+                    let mut calls = self.calls.lock().unwrap();
+                    calls.peak_decodes = calls.peak_decodes.max(running);
+                }
+                tokio::time::sleep(delay).await;
+                self.decodes_running.fetch_sub(1, SeqCst);
+            }
             self.decode_results
                 .lock()
                 .unwrap()

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Wallet watch service tests - cursor durability, baseline establishment and target reload isolation.
+//! Wallet watch service tests - cursor durability, baseline establishment, target reload isolation and live decode ordering.
 
 use super::*;
 use crate::wallets::watch::runtime::test_support::FakeRuntime;
@@ -869,4 +869,81 @@ async fn seven_targets_read_their_ranges_independently() {
             );
         }
     }
+}
+
+#[tokio::test]
+async fn a_burst_of_live_signatures_decodes_side_by_side_and_publishes_in_arrival_order() {
+    use crate::wallets::watch::{ActivityKind, WatchNotification};
+    crate::config::utils::install_default_config();
+    let store_dir = tempfile::tempdir().expect("temp dir");
+    let store = crate::transactions::database::TransactionDatabase::new_with_path(
+        store_dir.path().join("transactions.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .await
+    .expect("transaction store");
+    crate::transactions::database::install_transaction_database(Arc::new(store)).await;
+
+    let address = "BurstTarget1111";
+    let own_address = "OwnBurstWorker1111";
+    let burst: Vec<String> = (0..super::super::service_targets::DECODES_AHEAD)
+        .map(|n| format!("burst-{n}"))
+        .collect();
+    let fake = FakeRuntime::new(vec![own_address.to_owned(), address.to_owned()]);
+    fake.queue_page(address, vec!["baseline".to_owned()]);
+    fake.queue_notifications(
+        address,
+        burst
+            .iter()
+            .map(|signature| WatchNotification {
+                signature: signature.clone(),
+                failed: false,
+            })
+            .collect(),
+    );
+    for signature in &burst {
+        let mut transaction = crate::transactions::types::Transaction::new(signature.clone());
+        transaction.success = true;
+        fake.set_decode_result(signature, Ok(transaction));
+        fake.set_classify_result(signature, ActivityKind::Other, None);
+    }
+    fake.set_decode_delay(Duration::from_millis(200));
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = fake.clone();
+    let (watch_db, _dir) = temp_watch_db();
+    watch_db.insert_alert_target(address, None).await.unwrap();
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, own_address).unwrap(),
+    );
+    let mut activity = subscribe_activity();
+    let mut workers = HashMap::new();
+    super::super::service_targets::reload_targets(
+        &mut workers,
+        &chain_runtime,
+        &watch_db,
+        own,
+        true,
+    )
+    .await;
+
+    let mut published = Vec::new();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while published.len() < burst.len() {
+            let event = activity.recv().await.expect("activity channel stays open");
+            if event.subject == address {
+                published.push(event.signature);
+            }
+        }
+    })
+    .await
+    .expect("the whole burst is published");
+    assert_eq!(
+        published, burst,
+        "published in the order the stream delivered them"
+    );
+    assert_eq!(
+        fake.calls.lock().unwrap().peak_decodes,
+        burst.len(),
+        "each signature of the burst decoded beside the others, not after them"
+    );
+    super::super::service_targets::stop_all(workers).await;
 }

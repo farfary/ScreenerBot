@@ -39,6 +39,13 @@ pub async fn init_transaction_database() -> crate::transactions::Result<Arc<Tran
     Ok(db_arc)
 }
 
+/// Install `db` as the global transaction database: a store opened at a test path,
+/// for tests that run the watch funnel without a configured wallet.
+#[cfg(test)]
+pub(crate) async fn install_transaction_database(db: Arc<TransactionDatabase>) {
+    *GLOBAL_TRANSACTION_DATABASE.lock().await = Some(db);
+}
+
 /// Get global transaction database instance
 pub async fn get_transaction_database() -> Option<Arc<TransactionDatabase>> {
     let global = GLOBAL_TRANSACTION_DATABASE.lock().await;

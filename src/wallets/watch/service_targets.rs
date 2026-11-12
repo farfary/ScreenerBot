@@ -4,16 +4,18 @@
 //! Per-target workers and target-set reconciliation for wallet watch.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use futures::stream::{FuturesOrdered, StreamExt};
 use tokio::sync::{mpsc, watch, Notify};
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
-use crate::transactions::types::Subject;
+use crate::transactions::types::{Subject, Transaction};
 
 use super::database::WatchDatabase;
 use super::poller;
@@ -26,6 +28,10 @@ use super::types::{
 
 const TARGET_EVENT_CAPACITY: usize = 64;
 const TARGET_COMMAND_CAPACITY: usize = 8;
+/// Live signatures of one target decoding at once. Decoded one after another, a
+/// burst of a busy wallet's swaps reached the funnel each a decode later than the
+/// one before; results are still handled in arrival order.
+pub(super) const DECODES_AHEAD: usize = 4;
 
 /// Per-target state is only accessed by its worker, preserving its cursor and
 /// dedupe ordering while other targets process independently.
@@ -209,24 +215,74 @@ fn retry_due(retry: &WsRetry) -> Option<Instant> {
     service_state::ws_retry_delay(retry.attempt).map(|delay| Instant::now() + delay)
 }
 
-async fn process_event(
+/// A live signature the worker took from its stream, with the decode started for it.
+struct Admitted {
+    event: WatchNotification,
+    detected_at: DateTime<Utc>,
+    decoded: Option<Result<Transaction, crate::wallets::Error>>,
+}
+
+/// Whether the worker handles a live signature now. A target in high-activity
+/// mode reads it on its next poll instead.
+fn takes_live_event(runtime: &mut TargetRuntime, failed: bool) -> bool {
+    if !runtime.target.enabled || service::skip_known_failed_external(&runtime.target, failed) {
+        return false;
+    }
+    if runtime.high_activity {
+        runtime.high_activity_dirty = true;
+        return false;
+    }
+    true
+}
+
+/// Take a live signature and start its decode as its own task, so it proceeds
+/// while the worker polls or handles the signatures before it. The own wallet
+/// decodes in the funnel as before. A worker that stops leaves its read-only
+/// decodes to finish unread.
+fn admit(
     runtime: &mut TargetRuntime,
     event: WatchNotification,
+    chain: &Arc<dyn WalletWatchRuntime>,
+) -> Option<impl Future<Output = Admitted>> {
+    if !takes_live_event(runtime, event.failed) {
+        return None;
+    }
+    let detected_at = Utc::now();
+    let decode = (!runtime.target.sources.contains(&WatchSource::OwnWallet)).then(|| {
+        tokio::spawn(service::decode_ahead(
+            Arc::clone(chain),
+            runtime.target.address.clone(),
+            event.signature.clone(),
+        ))
+    });
+    Some(async move {
+        let decoded = match decode {
+            Some(task) => task.await.ok().flatten(),
+            None => None,
+        };
+        Admitted {
+            event,
+            detected_at,
+            decoded,
+        }
+    })
+}
+
+async fn process_event(
+    runtime: &mut TargetRuntime,
+    admitted: Admitted,
     chain: &Arc<dyn WalletWatchRuntime>,
     own: &Subject,
     retries: &mut Vec<PendingRetry>,
 ) {
-    if !runtime.target.enabled {
+    let Admitted {
+        event,
+        detected_at,
+        decoded,
+    } = admitted;
+    if !takes_live_event(runtime, event.failed) {
         return;
     }
-    if service::skip_known_failed_external(&runtime.target, event.failed) {
-        return;
-    }
-    if runtime.high_activity {
-        runtime.high_activity_dirty = true;
-        return;
-    }
-    let detected_at = Utc::now();
     if service::process_signature(
         chain,
         &runtime.target,
@@ -234,7 +290,7 @@ async fn process_event(
         &event.signature,
         detected_at,
         false,
-        None,
+        decoded,
     )
     .await
         == ProcessOutcome::Retryable
@@ -311,6 +367,7 @@ async fn run_worker(
     let mut tick = tokio::time::interval(Duration::from_millis(100));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut retries = Vec::new();
+    let mut ahead = FuturesOrdered::new();
     loop {
         tokio::select! {
             _ = cancel.notified() => break,
@@ -322,7 +379,12 @@ async fn run_worker(
                     sync_stream_mode(&stream_mode, runtime.stream_mode);
                 }
             },
-            Some(event) = events.recv() => process_event(&mut runtime, event, &chain, &own, &mut retries).await,
+            Some(event) = events.recv(), if ahead.len() < DECODES_AHEAD => {
+                if let Some(admitted) = admit(&mut runtime, event, &chain) {
+                    ahead.push_back(admitted);
+                }
+            }
+            Some(admitted) = ahead.next(), if !ahead.is_empty() => process_event(&mut runtime, admitted, &chain, &own, &mut retries).await,
             _ = tick.tick() => {
                 process_retries(&mut runtime, &chain, &own, &mut retries).await;
                 let now = Instant::now();

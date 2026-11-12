@@ -45,4 +45,6 @@ pub use operations::TransactionDatabase;
 pub(crate) use schema::SCHEMA;
 
 // Re-export global instance functions
+#[cfg(test)]
+pub(crate) use global::install_transaction_database;
 pub use global::{get_transaction_database, init_transaction_database};
