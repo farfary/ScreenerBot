@@ -138,6 +138,8 @@ export const EVENT_SUBTYPE_LABELS = Object.freeze({
   token_rejected: "events-subtype-token-rejected",
   token_discovered: "events-subtype-token-discovered",
   token_blacklisted: "events-subtype-token-blacklisted",
+  token_blacklist_cleared: "events-subtype-token-blacklist-cleared",
+  token_blacklist_lifted: "events-subtype-token-blacklist-lifted",
   discovery_run_complete: "events-subtype-discovery-run-complete",
   discovery_run_failed: "events-subtype-discovery-run-failed",
   force_update_complete: "events-subtype-force-update-complete",

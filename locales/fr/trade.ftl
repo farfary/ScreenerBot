@@ -165,3 +165,8 @@ trade-entry-block-paper-balance-exhausted = Le solde simulé ne couvre pas la tr
 trade-entry-block-check-failed = Un contrôle de sécurité n'a pas pu aboutir
 
 trade-quick-no-token = Aucun token sélectionné
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = Ce token est en liste noire
+trade-blacklist-message = { $symbol } ne peut pas être acheté tant qu'il figure en liste noire. Une fois retiré, le bot ne le remettra pas de lui-même.
+trade-blacklist-remove = Retirer de la liste noire

@@ -3,6 +3,7 @@
 menu-token-buy = Купить токен
 menu-token-sell = Продать токен
 menu-token-blacklist = Добавить токен в чёрный список
+menu-token-unblacklist = Убрать из чёрного списка
 menu-token-refresh = Обновить данные
 menu-view-details = Подробнее
 menu-favorite-add = Добавить в избранное
@@ -51,7 +52,6 @@ menu-favorite-update-failed = Не удалось обновить избран�
 menu-blacklist-confirm-message = Добавить { $symbol } в чёрный список? Этот токен будет исключён из торговли.
 menu-blacklist-confirm-action = В чёрный список
 menu-blacklist-done = { $symbol } добавлен в чёрный список
-menu-blacklist-request-failed = Не удалось добавить токен в чёрный список
 menu-blacklist-failed = Не удалось добавить в чёрный список
 menu-refresh-done = Данные токена обновлены
 menu-refresh-request-failed = Не удалось обновить данные токена

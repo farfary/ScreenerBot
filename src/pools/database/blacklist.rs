@@ -278,6 +278,51 @@ impl PoolsDatabase {
         .map_err(InternalError::from)?
     }
 
+    /// Remove every pool and account blacklist row that names `token_mint`, from memory and
+    /// storage, whether or not the row currently blacklists. Returns the pool and account
+    /// rows removed.
+    pub async fn clear_token_blacklists(&self, token_mint: &str) -> Result<(usize, usize), Error> {
+        let pool = self.shared_pool()?;
+        let chain_id = self.chain_id;
+        let mint = token_mint.to_owned();
+        let (pool_ids, account_keys) = tokio::task::spawn_blocking(move || {
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
+            let column = |table: &str, column: &str| -> Result<Vec<String>, DatabaseError> {
+                let mut stmt = conn
+                    .prepare(&format!(
+                        "SELECT {column} FROM {table} WHERE chain_id = ?1 AND token_mint = ?2"
+                    ))
+                    .map_err(|e| {
+                        DatabaseError::classify_sqlite_failure("prepare blacklist rows by token", e)
+                    })?;
+                let rows = stmt
+                    .query_map(params![chain_id.as_str(), &mint], |row| row.get(0))
+                    .map_err(|e| {
+                        DatabaseError::classify_sqlite_failure("query blacklist rows by token", e)
+                    })?;
+                rows.collect::<Result<Vec<String>, _>>().map_err(|e| {
+                    DatabaseError::classify_sqlite_failure("read blacklist rows by token", e)
+                })
+            };
+            Ok::<_, DatabaseError>((
+                column("blacklist_pools", "pool_id")?,
+                column("blacklist_accounts", "account_pubkey")?,
+            ))
+        })
+        .await
+        .map_err(InternalError::from)??;
+        for pool_id in &pool_ids {
+            self.remove_pool_from_blacklist(pool_id).await?;
+        }
+        for account in &account_keys {
+            self.remove_account_from_blacklist(account).await?;
+        }
+        Ok((pool_ids.len(), account_keys.len()))
+    }
+
     /// Get blacklist statistics: currently blacklisted accounts and pools
     pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), Error> {
         let now = unix_now();
@@ -298,13 +343,18 @@ impl PoolsDatabase {
         Ok((accounts, pools))
     }
 
-    /// List blacklisted accounts with optional limit, ordered by most recent first
+    /// List accounts currently blacklisted under `policy` (latest failure within the TTL, the
+    /// rule `add_account_to_blacklist` and `is_account_blacklisted` apply; an account
+    /// blacklists on its first failure, so there is no failure-count threshold), most recent
+    /// first. Rows past the TTL stay in the table and are not listed.
     pub async fn list_blacklisted_accounts(
         &self,
         limit: Option<usize>,
+        policy: PoolBlacklistPolicy,
     ) -> Result<Vec<BlacklistedAccountRecord>, Error> {
         let pool = self.shared_pool()?;
         let chain_id = self.chain_id;
+        let failed_after = unix_now().saturating_sub(policy.ttl_secs);
         tokio::task::spawn_blocking(move || {
             let conn = pool.get().map_err(|e| DatabaseError::Query {
                 operation: "get pooled connection".to_owned(),
@@ -317,14 +367,14 @@ impl PoolsDatabase {
         let mut stmt = conn
           .prepare(
             "SELECT account_pubkey, reason, source, pool_id, token_mint, error_count, first_failed_at, last_failed_at, added_at \
-             FROM blacklist_accounts WHERE chain_id = ? \
+             FROM blacklist_accounts WHERE chain_id = ? AND last_failed_at > ? \
              ORDER BY last_failed_at DESC \
              LIMIT ?",
           )
           .map_err(|e| DatabaseError::Query { operation: "prepare blacklist_accounts query".to_owned(), message: e.to_string() })?;
 
         let rows = stmt
-          .query_map(params![chain_id.as_str(), limit_value], |row| {
+          .query_map(params![chain_id.as_str(), failed_after, limit_value], |row| {
             Ok(BlacklistedAccountRecord {
               chain_id,
               account_pubkey: row.get(0)?,
@@ -347,13 +397,13 @@ impl PoolsDatabase {
         let mut stmt = conn
           .prepare(
             "SELECT account_pubkey, reason, source, pool_id, token_mint, error_count, first_failed_at, last_failed_at, added_at \
-             FROM blacklist_accounts WHERE chain_id = ? \
+             FROM blacklist_accounts WHERE chain_id = ? AND last_failed_at > ? \
              ORDER BY last_failed_at DESC",
           )
           .map_err(|e| DatabaseError::Query { operation: "prepare blacklist_accounts query".to_owned(), message: e.to_string() })?;
 
         let rows = stmt
-          .query_map([chain_id.as_str()], |row| {
+          .query_map(params![chain_id.as_str(), failed_after], |row| {
             Ok(BlacklistedAccountRecord {
               chain_id,
               account_pubkey: row.get(0)?,
@@ -584,6 +634,76 @@ mod tests {
             .insert("AccountA".to_owned(), unix_now() - 1);
         assert!(!db.is_account_blacklisted("AccountA").await.unwrap());
         assert_eq!(db.get_blacklist_stats().await.unwrap().0, 0);
+    }
+
+    #[tokio::test]
+    async fn an_account_row_past_the_ttl_is_not_listed() {
+        let (db, _dir) = pooled_legacy_database("blacklist-account-list-ttl");
+        for account in ["AccountFresh", "AccountStale"] {
+            db.add_account_to_blacklist(
+                account,
+                "account_not_found_threshold",
+                None,
+                None,
+                Some("MintD"),
+                POLICY,
+            )
+            .await
+            .expect("record account failure");
+        }
+        let stale = unix_now() - POLICY.ttl_secs - 1;
+        db.shared_pool()
+            .expect("test pool")
+            .get()
+            .expect("checkout test connection")
+            .execute(
+                "UPDATE blacklist_accounts SET last_failed_at = ?1 WHERE account_pubkey = 'AccountStale'",
+                [stale],
+            )
+            .expect("backdate the row");
+
+        let listed = db.list_blacklisted_accounts(None, POLICY).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].account_pubkey, "AccountFresh");
+        let limited = db.list_blacklisted_accounts(Some(5), POLICY).await.unwrap();
+        assert_eq!(limited.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn clearing_a_token_removes_only_its_pool_and_account_rows() {
+        let (db, _dir) = pooled_legacy_database("blacklist-clear-token");
+        for (pool, account, mint) in [
+            ("PoolE", "AccountE", "MintE"),
+            ("PoolF", "AccountF", "MintF"),
+        ] {
+            db.add_pool_to_blacklist(pool, "decoder_failed", Some(mint), None, 2, POLICY)
+                .await
+                .expect("blacklist the pool");
+            db.add_account_to_blacklist(
+                account,
+                "account_not_found_threshold",
+                None,
+                Some(pool),
+                Some(mint),
+                POLICY,
+            )
+            .await
+            .expect("blacklist the account");
+        }
+
+        let cleared = db.clear_token_blacklists("MintE").await.expect("clear");
+        assert_eq!(cleared, (1, 1));
+        assert!(!db.is_pool_blacklisted("PoolE").await.unwrap());
+        assert!(!db.is_account_blacklisted("AccountE").await.unwrap());
+        assert!(db.is_pool_blacklisted("PoolF").await.unwrap());
+        assert!(db.is_account_blacklisted("AccountF").await.unwrap());
+        let pools = db.list_blacklisted_pools(None, POLICY).await.unwrap();
+        assert_eq!(pools.len(), 1);
+        assert_eq!(pools[0].pool_id, "PoolF");
+        let accounts = db.list_blacklisted_accounts(None, POLICY).await.unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].account_pubkey, "AccountF");
+        assert_eq!(db.clear_token_blacklists("MintE").await.unwrap(), (0, 0));
     }
 
     #[tokio::test]

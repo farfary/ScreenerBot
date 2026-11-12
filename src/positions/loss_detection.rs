@@ -101,8 +101,13 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
                     // Unreachable: External returns Ok(()) above before this branch.
                     PositionOrigin::External => "PoorPerformance:external".to_owned(),
                 };
-                match cleanup::blacklist_token(&position.mint, &reason, "auto_loss", &db) {
-                    Ok(_) => {
+                match cleanup::blacklist_token(
+                    &position.mint,
+                    &reason,
+                    crate::tokens::BlacklistSource::AutoLoss.code(),
+                    &db,
+                ) {
+                    Ok(crate::tokens::BlacklistWrite::Written) => {
                         logger::info(
                             LogTag::Positions,
                             &format!(
@@ -111,6 +116,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<()> 
                             ),
                         );
                     }
+                    Ok(_) => {}
                     Err(e) => {
                         logger::warning(
                             LogTag::Positions,

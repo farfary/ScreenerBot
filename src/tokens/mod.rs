@@ -68,9 +68,12 @@ pub use database::{
     get_tokens_no_market_async,
     // Per-chain database handles
     install_database,
+    is_automatic_source,
     list_blacklisted_tokens_async,
     record_filter_build_async,
     uninstall_databases,
+    BlacklistSource,
+    BlacklistWrite,
     FilterBuildWrite,
     FilterOutcome,
     FilterRejectionRecord,

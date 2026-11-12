@@ -3,6 +3,7 @@
 menu-token-buy = 买入代币
 menu-token-sell = 卖出代币
 menu-token-blacklist = 将代币加入黑名单
+menu-token-unblacklist = 从黑名单中移除
 menu-token-refresh = 刷新数据
 menu-view-details = 查看详情
 menu-favorite-add = 添加到收藏
@@ -51,7 +52,6 @@ menu-favorite-update-failed = 更新收藏失败
 menu-blacklist-confirm-message = 确定要将 { $symbol } 加入黑名单吗？该代币将被排除在交易之外。
 menu-blacklist-confirm-action = 加入黑名单
 menu-blacklist-done = 已将 { $symbol } 加入黑名单
-menu-blacklist-request-failed = 将代币加入黑名单失败
 menu-blacklist-failed = 加入黑名单失败
 menu-refresh-done = 代币数据已刷新
 menu-refresh-request-failed = 刷新代币数据失败

@@ -7,6 +7,7 @@
 menu-token-buy = Buy Token
 menu-token-sell = Sell Token
 menu-token-blacklist = Blacklist Token
+menu-token-unblacklist = Remove from Blacklist
 menu-token-refresh = Refresh Data
 menu-view-details = View Details
 menu-favorite-add = Add to Favorites
@@ -58,7 +59,6 @@ menu-favorite-update-failed = Failed to update favorites
 menu-blacklist-confirm-message = Are you sure you want to blacklist { $symbol }? This token will be excluded from trading.
 menu-blacklist-confirm-action = Blacklist
 menu-blacklist-done = { $symbol } blacklisted
-menu-blacklist-request-failed = Failed to blacklist token
 menu-blacklist-failed = Failed to blacklist
 menu-refresh-done = Token data refreshed
 menu-refresh-request-failed = Failed to refresh token data

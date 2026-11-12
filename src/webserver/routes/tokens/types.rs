@@ -609,10 +609,9 @@ pub struct FavoriteResponse {
 // BLACKLIST TYPES
 // =============================================================================
 
-/// Request to add a token to blacklist
+/// Optional body of a manual blacklist request; the token is named by the path.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AddBlacklistRequest {
-    pub mint: String,
     #[serde(default = "default_blacklist_reason")]
     pub reason: String,
 }
@@ -621,12 +620,33 @@ pub(super) fn default_blacklist_reason() -> String {
     "Manual blacklist via UI".to_owned()
 }
 
-/// Response for blacklist operations
+/// Response for blacklist operations. A status read of a blacklisted token also carries the
+/// entry: why it exists, who filed it (`BlacklistSource` code) and when (unix seconds).
 #[derive(Debug, Serialize)]
 pub struct BlacklistResponse {
     pub success: bool,
     pub mint: String,
     pub is_blacklisted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub added_at: Option<i64>,
+}
+
+impl BlacklistResponse {
+    /// A successful answer that carries only the flag.
+    pub fn flag(mint: String, is_blacklisted: bool) -> Self {
+        Self {
+            success: true,
+            mint,
+            is_blacklisted,
+            reason: None,
+            source: None,
+            added_at: None,
+        }
+    }
 }
 
 // =============================================================================

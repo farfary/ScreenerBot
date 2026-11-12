@@ -3,6 +3,7 @@
 menu-token-buy = Comprar token
 menu-token-sell = Vender token
 menu-token-blacklist = Añadir token a la lista negra
+menu-token-unblacklist = Quitar de la lista negra
 menu-token-refresh = Actualizar datos
 menu-view-details = Ver detalles
 menu-favorite-add = Añadir a favoritos
@@ -51,7 +52,6 @@ menu-favorite-update-failed = No se pudieron actualizar los favoritos
 menu-blacklist-confirm-message = ¿Seguro que quieres añadir { $symbol } a la lista negra? Este token se excluirá del trading.
 menu-blacklist-confirm-action = Añadir a la lista negra
 menu-blacklist-done = { $symbol } añadido a la lista negra
-menu-blacklist-request-failed = No se pudo añadir el token a la lista negra
 menu-blacklist-failed = No se pudo añadir a la lista negra
 menu-refresh-done = Datos del token actualizados
 menu-refresh-request-failed = No se pudieron actualizar los datos del token

@@ -167,3 +167,8 @@ trade-entry-block-paper-balance-exhausted = Saldo paper tidak cukup untuk transa
 trade-entry-block-check-failed = Pemeriksaan keamanan tidak dapat diselesaikan
 
 trade-quick-no-token = Tidak ada token yang dipilih
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = Token ini ada di daftar hitam
+trade-blacklist-message = { $symbol } tidak bisa dibeli selama masih di daftar hitam. Setelah dihapus, bot tidak akan memasukkannya lagi dengan sendirinya.
+trade-blacklist-remove = Hapus dari daftar hitam

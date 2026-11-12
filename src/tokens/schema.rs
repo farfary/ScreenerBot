@@ -188,6 +188,19 @@ pub const CREATE_TABLES: &[&str] = &[
         PRIMARY KEY (chain_id, mint)
     )
     "#,
+    // A blacklist entry the user removed. While a row exists no automatic rule files the token
+    // again; a manual blacklist deletes it. No foreign key: the decision outlives the token's
+    // data, which the retention sweep evicts.
+    r#"
+    CREATE TABLE IF NOT EXISTS blacklist_cleared (
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
+        cleared_at INTEGER NOT NULL,
+        previous_reason TEXT,
+        previous_source TEXT,
+        PRIMARY KEY (chain_id, mint)
+    )
+    "#,
     // Update tracking and priority
     r#"
     CREATE TABLE IF NOT EXISTS update_tracking (

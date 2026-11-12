@@ -3,6 +3,7 @@
 menu-token-buy = टोकन खरीदें
 menu-token-sell = टोकन बेचें
 menu-token-blacklist = टोकन ब्लैकलिस्ट करें
+menu-token-unblacklist = ब्लैकलिस्ट से हटाएँ
 menu-token-refresh = डेटा रीफ़्रेश करें
 menu-view-details = विवरण देखें
 menu-favorite-add = पसंदीदा में जोड़ें
@@ -43,7 +44,6 @@ menu-favorite-update-failed = पसंदीदा अपडेट करना
 menu-blacklist-confirm-message = क्या आप वाकई { $symbol } को ब्लैकलिस्ट करना चाहते हैं? यह टोकन ट्रेडिंग से बाहर रखा जाएगा।
 menu-blacklist-confirm-action = ब्लैकलिस्ट करें
 menu-blacklist-done = ब्लैकलिस्ट किया गया: { $symbol }
-menu-blacklist-request-failed = टोकन ब्लैकलिस्ट करना विफल
 menu-blacklist-failed = ब्लैकलिस्ट करना विफल
 menu-refresh-done = टोकन डेटा रीफ़्रेश हो गया
 menu-refresh-request-failed = टोकन डेटा रीफ़्रेश करना विफल

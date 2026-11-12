@@ -165,3 +165,8 @@ trade-entry-block-paper-balance-exhausted = Sanal bakiye işlemi karşılamıyor
 trade-entry-block-check-failed = Bir güvenlik kontrolü tamamlanamadı
 
 trade-quick-no-token = Token seçilmedi
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = Bu token kara listede
+trade-blacklist-message = { $symbol } kara listedeyken satın alınamaz. Kaldırırsanız bot onu kendiliğinden yeniden kara listeye eklemez.
+trade-blacklist-remove = Kara listeden kaldır

@@ -312,6 +312,7 @@ tokens-dialog-badge-immutable = Không thể thay đổi
 tokens-dialog-badge-mutable = Có thể thay đổi
 tokens-dialog-badge-position = Vị thế
 tokens-dialog-badge-blacklisted = Trong danh sách đen
+tokens-dialog-badge-blacklisted-remove = Xóa khỏi danh sách đen
 
 tokens-view-favorites = Yêu thích
 tokens-view-pool = Dịch vụ pool
@@ -447,6 +448,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = Mua vị thế
     .aria-label = Mua token
+tokens-cell-action-unblacklist =
+    .title = Xóa khỏi danh sách đen
+    .aria-label = Xóa token khỏi danh sách đen
 tokens-cell-external-links =
     .title = Liên kết bên ngoài
     .aria-label = Liên kết bên ngoài
@@ -691,3 +695,18 @@ tokens-rugcheck-risk-mint-authority-locked = Quyền mint đã khóa
     .description = Việc mint token mới đã bị khóa.
 tokens-rugcheck-risk-high-transfer-fee = Phí chuyển cao
     .description = Mỗi lần chuyển token này đều bị đánh thuế cao.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = Bạn
+tokens-blacklist-source-auto-cleanup = Kiểm tra quyền hạn
+tokens-blacklist-source-auto-loss = Quy tắc lỗ
+tokens-blacklist-source-auto-llm-analysis = Phân tích AI
+tokens-blacklist-source-auto-swap-route = Kiểm tra tuyến swap
+tokens-blacklist-fact-reason = Lý do
+tokens-blacklist-fact-source = Thêm bởi
+tokens-blacklist-fact-added = Thời điểm thêm
+tokens-blacklist-remove-title = Xóa khỏi danh sách đen
+tokens-blacklist-remove-message = Xóa { $symbol } khỏi danh sách đen? Bot sẽ không tự đưa token này vào danh sách đen lần nữa. Bạn vẫn có thể tự đưa vào thủ công.
+tokens-blacklist-removed = Đã xóa { $symbol } khỏi danh sách đen
+tokens-blacklist-remove-failed = Không thể xóa token khỏi danh sách đen

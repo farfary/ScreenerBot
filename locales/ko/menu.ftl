@@ -3,6 +3,7 @@
 menu-token-buy = 토큰 매수
 menu-token-sell = 토큰 매도
 menu-token-blacklist = 토큰 블랙리스트 추가
+menu-token-unblacklist = 블랙리스트에서 제거
 menu-token-refresh = 데이터 새로고침
 menu-view-details = 상세 보기
 menu-favorite-add = 즐겨찾기에 추가
@@ -51,7 +52,6 @@ menu-favorite-update-failed = 즐겨찾기 업데이트에 실패했습니다
 menu-blacklist-confirm-message = 다음 토큰을 블랙리스트에 추가하시겠습니까? 거래에서 제외됩니다. 토큰: { $symbol }
 menu-blacklist-confirm-action = 블랙리스트 추가
 menu-blacklist-done = 블랙리스트에 추가됨: { $symbol }
-menu-blacklist-request-failed = 토큰 블랙리스트 추가에 실패했습니다
 menu-blacklist-failed = 블랙리스트 추가에 실패했습니다
 menu-refresh-done = 토큰 데이터를 새로고침했습니다
 menu-refresh-request-failed = 토큰 데이터 새로고침에 실패했습니다

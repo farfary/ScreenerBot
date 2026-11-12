@@ -151,13 +151,24 @@
 
       items.push({ type: "separator" });
 
-      items.push({
-        type: "item",
-        label: I18n.t("menu-token-blacklist"),
-        icon: "ban",
-        className: "danger",
-        action: () => this._blacklistToken(context),
-      });
+      // The right-click reads the token's entry first (`show`), so the menu offers the one
+      // action that applies.
+      items.push(
+        context.blacklist
+          ? {
+              type: "item",
+              label: I18n.t("menu-token-unblacklist"),
+              icon: "listX",
+              action: () => this._unblacklistToken(context),
+            }
+          : {
+              type: "item",
+              label: I18n.t("menu-token-blacklist"),
+              icon: "ban",
+              className: "danger",
+              action: () => this._blacklistToken(context),
+            }
+      );
 
       items.push({
         type: "item",

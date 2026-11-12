@@ -76,6 +76,19 @@
   color: var(--text-secondary);
 }
 
+/* A badge that is also the control removing what it names (the blacklist badge in token
+   details): the badge's own shape as a button, ending in a bare close glyph. */
+button.badge {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.badge:hover,
+button.badge:focus-visible {
+  filter: brightness(1.15);
+}
+
 /* The paper or live mode of a task or strategy (`tradingModeMarker`): Paper is a bare
    glyph inline with its label in the label's colour, Live is the label alone. */
 .mode-marker {

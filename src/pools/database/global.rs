@@ -149,7 +149,19 @@ pub async fn is_pool_blacklisted(chain: ChainId, pool_id: &str) -> Result<bool, 
         .await
 }
 
-/// List blacklisted accounts with an optional limit.
+/// Remove every pool and account blacklist row that names `token_mint`, so the token leaves
+/// the Blacklisted view; returns the pool and account rows removed (global helper).
+pub async fn clear_token_blacklists(
+    chain: ChainId,
+    token_mint: &str,
+) -> Result<(usize, usize), Error> {
+    let Some(db) = database(chain) else {
+        return Ok((0, 0));
+    };
+    db.clear_token_blacklists(token_mint).await
+}
+
+/// List accounts currently blacklisted under the configured policy, with an optional limit.
 pub async fn list_blacklisted_accounts(
     chain: ChainId,
     limit: Option<usize>,
@@ -157,7 +169,8 @@ pub async fn list_blacklisted_accounts(
     let Some(db) = database(chain) else {
         return Ok(Vec::new());
     };
-    db.list_blacklisted_accounts(limit).await
+    db.list_blacklisted_accounts(limit, PoolBlacklistPolicy::from_config())
+        .await
 }
 
 /// List pools currently blacklisted under the configured policy, with an optional limit.

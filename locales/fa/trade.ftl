@@ -202,3 +202,8 @@ trade-entry-block-check-failed = یک بررسی ایمنی کامل نشد
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = توکنی انتخاب نشده است
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = این توکن در فهرست سیاه است
+trade-blacklist-message = تا زمانی که { $symbol } در فهرست سیاه است، خرید آن ممکن نیست. اگر آن را حذف کنید، ربات دیگر خودش آن را به فهرست سیاه اضافه نمی‌کند.
+trade-blacklist-remove = حذف از فهرست سیاه

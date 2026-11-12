@@ -165,3 +165,8 @@ trade-entry-block-paper-balance-exhausted = पेपर बैलेंस इ�
 trade-entry-block-check-failed = एक सुरक्षा जाँच पूरी नहीं हो सकी
 
 trade-quick-no-token = कोई टोकन नहीं चुना गया
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = यह टोकन ब्लैकलिस्ट में है
+trade-blacklist-message = { $symbol } ब्लैकलिस्ट में रहते हुए खरीदा नहीं जा सकता। हटाने के बाद बॉट इसे अपने आप दोबारा ब्लैकलिस्ट नहीं करेगा।
+trade-blacklist-remove = ब्लैकलिस्ट से हटाएँ

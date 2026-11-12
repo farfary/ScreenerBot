@@ -472,7 +472,7 @@ pub(super) async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &s
                     crate::tokens::cleanup::blacklist_token(
                         &mint_clone,
                         "Blacklisted via Telegram",
-                        "manual",
+                        crate::tokens::BlacklistSource::Manual.code(),
                         &db,
                     )
                 } else {

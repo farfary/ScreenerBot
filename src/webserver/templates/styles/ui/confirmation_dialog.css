@@ -145,6 +145,26 @@
   text-align: start;
 }
 
+/* Facts a confirmation restates before the user commits, as a term and its value per row. */
+.confirmation-dialog__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--spacing-xs) var(--spacing-md);
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgb(255, 255, 255, 0.8);
+}
+
+.confirmation-dialog__facts dt {
+  color: rgb(255, 255, 255, 0.55);
+}
+
+.confirmation-dialog__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .confirmation-dialog__checkbox {
   /* Centred row inside its own padded card. */
   --control-line-offset: 0px;

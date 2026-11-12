@@ -202,3 +202,8 @@ trade-entry-block-check-failed = 安全检查未能完成
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = 未选择代币
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = 该代币在黑名单中
+trade-blacklist-message = { $symbol } 在黑名单中时无法买入。移除后，机器人不会再自行将其加入黑名单。
+trade-blacklist-remove = 从黑名单中移除

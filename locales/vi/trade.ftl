@@ -165,3 +165,8 @@ trade-entry-block-paper-balance-exhausted = Số dư thử nghiệm không đủ
 trade-entry-block-check-failed = Không thể hoàn tất một bước kiểm tra an toàn
 
 trade-quick-no-token = Chưa chọn token
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = Token này nằm trong danh sách đen
+trade-blacklist-message = Không thể mua { $symbol } khi token này còn trong danh sách đen. Sau khi xóa, bot sẽ không tự đưa nó vào lại.
+trade-blacklist-remove = Xóa khỏi danh sách đen

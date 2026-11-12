@@ -35,6 +35,8 @@ mod assembly_tests;
 #[cfg(test)]
 mod authority_tests;
 #[cfg(test)]
+mod blacklist_tests;
+#[cfg(test)]
 mod market_tests;
 #[cfg(test)]
 mod metadata_tests;
@@ -147,4 +149,7 @@ impl TokenDatabase {
 // Re-export all public items from submodules
 pub use async_api::*;
 pub use authority::CreatorReputationRow;
+pub use blacklist::{
+    is_automatic_source, BlacklistSource, BlacklistWrite, ROUTE_ENTRY_LIFETIME_SECS,
+};
 pub use rejections::{FilterBuildWrite, FilterOutcome, FilterRejectionRecord, RecentRejectionRow};

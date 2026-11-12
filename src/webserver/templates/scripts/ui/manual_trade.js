@@ -25,6 +25,7 @@ import { tradeToastKey } from "../core/action_toasts.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
 import { setupRequired } from "./access_gate.js";
+import { fetchBlacklistEntry } from "./token_blacklist.js";
 
 // One dialog instance shared by every caller — it is modal, so there is never a
 // reason for two of them to exist.
@@ -256,9 +257,13 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
     // Explore Mode has no wallet to read: the dialog opens as a notice that trading
     // needs setup, with every amount control and the confirm disabled.
     const gated = setupRequired();
-    const [position, walletBalance] = await Promise.all([
+    // A blacklisted token cannot be bought or added to, so the dialog says so and offers
+    // the removal; a sell is never blocked by the blacklist.
+    const buying = action !== "sell" && !gated;
+    const [position, walletBalance, blacklist] = await Promise.all([
       fetchPosition(mint),
-      action === "sell" || gated ? Promise.resolve(null) : fetchWalletBalance(),
+      buying ? fetchWalletBalance() : Promise.resolve(null),
+      buying ? fetchBlacklistEntry(mint) : Promise.resolve(null),
     ]);
 
     // Only pay for a second lookup when the position did not supply identity.
@@ -288,6 +293,7 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
       currentSize: position?.currentSize ?? null,
       positionManagement: position?.positionManagement ?? null,
       setupRequired: gated,
+      blacklist,
     };
 
     if (action !== "sell") {

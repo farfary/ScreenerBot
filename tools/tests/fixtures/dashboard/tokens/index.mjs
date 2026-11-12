@@ -120,6 +120,13 @@ export const endpoints = [
     record: null,
   },
   {
+    method: "GET",
+    path: "/api/tokens/{mint}/blacklist",
+    fixture: "token_blacklist.json",
+    rust: "src/webserver/routes/tokens/types.rs::BlacklistResponse",
+    record: null,
+  },
+  {
     method: "POST",
     path: "/api/tokens/{mint}/focus",
     fixture: "token_focus.json",

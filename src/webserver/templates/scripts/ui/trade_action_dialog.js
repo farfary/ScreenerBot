@@ -21,6 +21,7 @@ import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 import { fetchMainWalletAddress, needsFunding, renderFundingNotice } from "./funding_notice.js";
 import { renderAccessGate } from "./access_gate.js";
 import { renderNotice } from "./notice.js";
+import { removeFromBlacklist } from "./token_blacklist.js";
 import { renderSegmented, setSegmentedValue } from "./segmented.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 
@@ -139,6 +140,7 @@ export class TradeActionDialog {
     this._isOpen = false;
     this._isLoading = false;
     this._impactWarningPending = false;
+    this._removingBlacklist = false;
     this._previousActiveElement = null;
     this._resolveOpen = null;
     this._settingInputProgrammatically = false; // Prevent input handler during programmatic changes
@@ -852,7 +854,36 @@ export class TradeActionDialog {
     const gated = Boolean(context.setupRequired);
     this._presetButtons.forEach((btn) => (btn.disabled = gated));
     this.maxBtn.disabled = gated;
-    this.confirmBtn.title = gated ? I18n.t("trade-setup-required-title") : "";
+    this.confirmBtn.title = gated
+      ? I18n.t("trade-setup-required-title")
+      : this._blacklistBlocks(this.currentAction, context)
+        ? I18n.t("trade-blacklist-title")
+        : "";
+  }
+
+  /**
+   * A blacklisted token cannot be bought or added to; selling it is never blocked. The
+   * context carries the token's blacklist entry (`manualTrade`, quick trade) or null.
+   */
+  _blacklistBlocks(action, context) {
+    return (action === "buy" || action === "add") && Boolean(context?.blacklist);
+  }
+
+  /** Remove the token from the blacklist, then let the trade go on. */
+  async _removeBlacklist() {
+    const context = this.currentContext;
+    if (!context?.mint || this._removingBlacklist) return;
+    this._removingBlacklist = true;
+    try {
+      const removed = await removeFromBlacklist(context.mint, this._currentSymbol);
+      if (!removed || !this._isOpen || this.currentContext !== context) return;
+      context.blacklist = null;
+      this._renderContext(this.currentAction, this._currentSymbol, context);
+      this._syncSetupGate(context);
+      this._updateConfirmButton();
+    } finally {
+      this._removingBlacklist = false;
+    }
   }
 
   /**
@@ -1080,13 +1111,29 @@ export class TradeActionDialog {
         ? `<div class="trade-action-funding">${renderFundingNotice(this._fundingAddress)}</div>`
         : "";
     const setup = context.setupRequired ? `<div class="trade-action-setup"></div>` : "";
+    const blacklist =
+      !context.setupRequired && this._blacklistBlocks(action, context)
+        ? `<div class="trade-action-blacklist">${renderNotice({
+            variant: "warning",
+            title: I18n.t("trade-blacklist-title"),
+            message: I18n.t("trade-blacklist-message", { symbol }),
+            extraHtml: Utils.escapeHtml(context.blacklist.reason || ""),
+            action: { id: "remove-blacklist", label: I18n.t("trade-blacklist-remove") },
+          })}</div>`
+        : "";
 
     this.contextEl.innerHTML = `
       ${this._renderIdentity(symbol, context)}
       <div class="trade-action-context-grid">${rows.join("")}</div>
       ${funding}
+      ${blacklist}
       ${setup}
     `;
+    if (blacklist) {
+      on(this.contextEl.querySelector('[data-action="remove-blacklist"]'), "click", () =>
+        this._removeBlacklist()
+      );
+    }
     if (setup) {
       const gate = this.contextEl.querySelector(".trade-action-setup");
       // The balance stays above it, so the requirement is a notice, not a card in the panel.
@@ -1745,6 +1792,12 @@ export class TradeActionDialog {
 
     // Explore Mode: nothing can be traded until setup connects a wallet and RPC.
     if (context.setupRequired) {
+      this.confirmBtn.disabled = true;
+      return;
+    }
+
+    // The trade API refuses a buy of a blacklisted token; the notice offers the removal.
+    if (this._blacklistBlocks(action, context)) {
       this.confirmBtn.disabled = true;
       return;
     }

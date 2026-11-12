@@ -472,7 +472,7 @@ pub(super) async fn execute_token_blacklist(
             crate::tokens::cleanup::blacklist_token(
                 &mint_clone,
                 "Blacklisted via Telegram",
-                "manual",
+                crate::tokens::BlacklistSource::Manual.code(),
                 &db,
             )
         } else {
@@ -484,7 +484,7 @@ pub(super) async fn execute_token_blacklist(
     .await;
 
     match blacklist_result {
-        Ok(Ok(())) => {
+        Ok(Ok(_)) => {
             let msg = row(
                 "🚫",
                 UiText::new(ids::TELEGRAM_TOKEN_BLACKLISTED)

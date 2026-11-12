@@ -338,6 +338,7 @@ tokens-dialog-badge-immutable = 변경 불가
 tokens-dialog-badge-mutable = 변경 가능
 tokens-dialog-badge-position = 포지션
 tokens-dialog-badge-blacklisted = 블랙리스트
+tokens-dialog-badge-blacklisted-remove = 블랙리스트에서 제거
 
 # Tokens page: sub-tabs (scripts/pages/tokens/constants.js)
 # Ids are the view values of /api/tokens/list.
@@ -478,6 +479,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = 포지션 매수
     .aria-label = 토큰 매수
+tokens-cell-action-unblacklist =
+    .title = 블랙리스트에서 제거
+    .aria-label = 토큰을 블랙리스트에서 제거
 tokens-cell-external-links =
     .title = 외부 링크
     .aria-label = 외부 링크
@@ -738,3 +742,18 @@ tokens-rugcheck-risk-mint-authority-locked = 민트 권한 잠김
     .description = 새 토큰 발행이 잠겨 있습니다.
 tokens-rugcheck-risk-high-transfer-fee = 높은 전송 수수료
     .description = 이 토큰은 전송할 때마다 높은 세금이 부과됩니다.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = 사용자
+tokens-blacklist-source-auto-cleanup = 권한 점검
+tokens-blacklist-source-auto-loss = 손실 규칙
+tokens-blacklist-source-auto-llm-analysis = AI 분석
+tokens-blacklist-source-auto-swap-route = 스왑 경로 점검
+tokens-blacklist-fact-reason = 사유
+tokens-blacklist-fact-source = 추가한 주체
+tokens-blacklist-fact-added = 추가 시점
+tokens-blacklist-remove-title = 블랙리스트에서 제거
+tokens-blacklist-remove-message = 다음 토큰을 블랙리스트에서 제거하시겠습니까? 봇이 스스로 다시 블랙리스트에 추가하지 않습니다. 직접 다시 추가할 수는 있습니다. 토큰: { $symbol }
+tokens-blacklist-removed = 블랙리스트에서 제거됨: { $symbol }
+tokens-blacklist-remove-failed = 토큰을 블랙리스트에서 제거하지 못했습니다

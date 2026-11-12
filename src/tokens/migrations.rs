@@ -30,6 +30,7 @@ pub(super) const TOKEN_TABLES: &[&str] = &[
     "token_pools",
     "security_rugcheck",
     "blacklist",
+    "blacklist_cleared",
     "update_tracking",
     "token_favorites",
     "rejection_history",

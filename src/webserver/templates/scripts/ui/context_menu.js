@@ -21,6 +21,7 @@ import { menuBounds } from "../core/menu_manager.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { escapeHtml, showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
 import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
+import { fetchBlacklistEntry } from "./token_blacklist.js";
 
 // Icon mapping to Lucide font classes
 const ICONS = {
@@ -31,6 +32,7 @@ const ICONS = {
   trendingDown: "icon-trending-down",
   trendingUp: "icon-trending-up",
   ban: "icon-ban",
+  listX: "icon-list-x",
   eye: "icon-eye",
   info: "icon-info",
   code: "icon-code",
@@ -385,6 +387,10 @@ class ContextMenuManager {
       // Load favorites cache for token/position contexts
       if (context.type === "token" || context.type === "position") {
         await this._loadFavoritesCache();
+      }
+      // A token's menu offers either the blacklist or its removal.
+      if (context.type === "token") {
+        context.blacklist = await fetchBlacklistEntry(context.mint);
       }
 
       // Double-check we're still supposed to show (hide()/another show() could have

@@ -264,38 +264,31 @@
      * Blacklist a token
      */
     manager._blacklistToken = async function (context) {
-      try {
-        const { ConfirmationDialog } = await import("../confirmation_dialog.js");
+      const { ConfirmationDialog } = await import("../confirmation_dialog.js");
+      const { addToBlacklist } = await import("../token_blacklist.js");
 
-        const result = await ConfirmationDialog.show({
-          title: I18n.t("menu-token-blacklist"),
-          message: I18n.t("menu-blacklist-confirm-message", { symbol: context.symbol }),
-          confirmLabel: I18n.t("menu-blacklist-confirm-action"),
-          cancelLabel: I18n.t("common-action-cancel"),
-          variant: "danger",
-        });
+      const result = await ConfirmationDialog.show({
+        title: I18n.t("menu-token-blacklist"),
+        message: I18n.t("menu-blacklist-confirm-message", { symbol: context.symbol }),
+        confirmLabel: I18n.t("menu-blacklist-confirm-action"),
+        cancelLabel: I18n.t("common-action-cancel"),
+        variant: "danger",
+      });
+      if (!result.confirmed) return;
 
-        if (!result.confirmed) return;
+      await addToBlacklist(context.mint, context.symbol);
+    };
 
-        const response = await fetch(`/api/tokens/${context.mint}/blacklist`, {
-          method: "POST",
-        });
-
-        if (!response.ok) {
-          throw new Error(I18n.t("menu-blacklist-request-failed"));
-        }
-
-        this._showToast(I18n.t("menu-blacklist-done", { symbol: context.symbol }), "success");
-
-        // Emit event for UI refresh
-        window.dispatchEvent(
-          new CustomEvent("screenerbot:token-blacklisted", {
-            detail: { mint: context.mint },
-          })
-        );
-      } catch (error) {
-        this._showToast(error.message || I18n.t("menu-blacklist-failed"), "error");
-      }
+    /**
+     * Remove a token from the blacklist, after the user confirms the entry it names.
+     */
+    manager._unblacklistToken = async function (context) {
+      const { confirmRemoveFromBlacklist } = await import("../token_blacklist.js");
+      await confirmRemoveFromBlacklist({
+        mint: context.mint,
+        symbol: context.symbol,
+        entry: context.blacklist ?? undefined,
+      });
     };
 
     /**

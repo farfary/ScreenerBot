@@ -165,3 +165,8 @@ trade-entry-block-paper-balance-exhausted = Виртуального балан�
 trade-entry-block-check-failed = Не удалось завершить проверку безопасности
 
 trade-quick-no-token = Токен не выбран
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = Этот токен в чёрном списке
+trade-blacklist-message = Пока { $symbol } в чёрном списке, купить его нельзя. После удаления бот не будет сам вносить его туда снова.
+trade-blacklist-remove = Убрать из чёрного списка

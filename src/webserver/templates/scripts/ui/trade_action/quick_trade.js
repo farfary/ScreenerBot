@@ -7,6 +7,7 @@ import * as Utils from "../../core/utils.js";
 import { pushEscapeHandler } from "../../core/escape_stack.js";
 import { formatPriceSubscript, withSolUnit } from "../../core/format.js";
 import { renderAddress, tokenLabel } from "../token_identity.js";
+import { fetchBlacklistEntry } from "../token_blacklist.js";
 
 /**
  * Quick Trade Mode Mixin for TradeActionDialog
@@ -403,8 +404,15 @@ export function applyQuickTradeMixin(TradeActionDialog) {
         return;
       }
     } else {
-      // For buy, just set the mint
+      // For buy, set the mint and read whether the blacklist blocks it, so the trade step
+      // opens with the removal on offer.
+      this._quickContinueBtnEl.classList.add("loading");
+      this._quickContinueBtnEl.disabled = true;
+      const blacklist = await fetchBlacklistEntry(mint);
+      if (!this._isOpen) return;
+      this._quickContinueBtnEl.classList.remove("loading");
       this.currentContext.mint = mint;
+      this.currentContext.blacklist = blacklist;
     }
 
     // Update symbol

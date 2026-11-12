@@ -202,3 +202,8 @@ trade-entry-block-check-failed = Перевірку безпеки не вдал
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = Токен не вибрано
+
+# Notice in the Buy and Add dialogs for a blacklisted token (ui/trade_action_dialog.js).
+trade-blacklist-title = Цей токен у чорному списку
+trade-blacklist-message = Доки { $symbol } у чорному списку, його не можна купити. Після видалення бот не вноситиме його туди знову самостійно.
+trade-blacklist-remove = Прибрати з чорного списку

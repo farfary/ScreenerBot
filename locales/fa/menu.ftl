@@ -3,6 +3,7 @@
 menu-token-buy = خرید توکن
 menu-token-sell = فروش توکن
 menu-token-blacklist = افزودن توکن به فهرست سیاه
+menu-token-unblacklist = حذف از فهرست سیاه
 menu-token-refresh = تازه‌سازی داده‌ها
 menu-view-details = مشاهده جزئیات
 menu-favorite-add = افزودن به علاقه‌مندی‌ها
@@ -51,7 +52,6 @@ menu-favorite-update-failed = به‌روزرسانی علاقه‌مندی‌ه
 menu-blacklist-confirm-message = آیا مطمئن هستید که می‌خواهید { $symbol } را به فهرست سیاه اضافه کنید؟ این توکن از معاملات کنار گذاشته می‌شود.
 menu-blacklist-confirm-action = فهرست سیاه
 menu-blacklist-done = { $symbol } به فهرست سیاه اضافه شد
-menu-blacklist-request-failed = افزودن توکن به فهرست سیاه ناموفق بود
 menu-blacklist-failed = افزودن به فهرست سیاه ناموفق بود
 menu-refresh-done = داده‌های توکن تازه‌سازی شد
 menu-refresh-request-failed = تازه‌سازی داده‌های توکن ناموفق بود

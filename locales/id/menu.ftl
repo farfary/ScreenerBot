@@ -3,6 +3,7 @@
 menu-token-buy = Beli Token
 menu-token-sell = Jual Token
 menu-token-blacklist = Masukkan Token ke Daftar Hitam
+menu-token-unblacklist = Hapus dari Daftar Hitam
 menu-token-refresh = Segarkan Data
 menu-view-details = Lihat Detail
 menu-favorite-add = Tambah ke Favorit
@@ -51,7 +52,6 @@ menu-favorite-update-failed = Gagal memperbarui favorit
 menu-blacklist-confirm-message = Yakin ingin memasukkan { $symbol } ke daftar hitam? Token ini akan dikecualikan dari trading.
 menu-blacklist-confirm-action = Daftar Hitam
 menu-blacklist-done = { $symbol } dimasukkan ke daftar hitam
-menu-blacklist-request-failed = Gagal memasukkan token ke daftar hitam
 menu-blacklist-failed = Gagal memasukkan ke daftar hitam
 menu-refresh-done = Data token disegarkan
 menu-refresh-request-failed = Gagal menyegarkan data token

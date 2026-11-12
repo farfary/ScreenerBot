@@ -516,6 +516,7 @@ pub const TOKENS: StoreSpec = per_chain(
     &[
         rule("token_favorites"),
         rule("blacklist"),
+        rule("blacklist_cleared"),
         rule("authority_reputation"),
     ],
     &[
@@ -528,6 +529,7 @@ pub const TOKENS: StoreSpec = per_chain(
         evicted("token_media"),
         keep("token_favorites", UserDecision),
         keep("blacklist", UserDecision),
+        keep("blacklist_cleared", UserDecision),
         keep("authority_reputation", Aggregate),
     ],
 )

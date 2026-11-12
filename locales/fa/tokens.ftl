@@ -357,6 +357,7 @@ tokens-dialog-badge-immutable = غیرقابل تغییر
 tokens-dialog-badge-mutable = قابل تغییر
 tokens-dialog-badge-position = پوزیشن
 tokens-dialog-badge-blacklisted = فهرست سیاه
+tokens-dialog-badge-blacklisted-remove = حذف از فهرست سیاه
 
 # Tokens page: sub-tabs (scripts/pages/tokens/constants.js)
 # Ids are the view values of /api/tokens/list.
@@ -498,6 +499,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = خرید پوزیشن
     .aria-label = خرید توکن
+tokens-cell-action-unblacklist =
+    .title = حذف از فهرست سیاه
+    .aria-label = حذف توکن از فهرست سیاه
 tokens-cell-external-links =
     .title = لینک‌های خارجی
     .aria-label = لینک‌های خارجی
@@ -776,3 +780,18 @@ tokens-rugcheck-risk-mint-authority-locked = اختیار مینت قفل است
     .description = امکان مینت توکن‌های جدید قفل شده است.
 tokens-rugcheck-risk-high-transfer-fee = کارمزد انتقال بالا
     .description = برای هر انتقال این توکن مالیات بالایی گرفته می‌شود.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = شما
+tokens-blacklist-source-auto-cleanup = بررسی اختیارات
+tokens-blacklist-source-auto-loss = قانون زیان
+tokens-blacklist-source-auto-llm-analysis = تحلیل هوش مصنوعی
+tokens-blacklist-source-auto-swap-route = بررسی مسیر سواپ
+tokens-blacklist-fact-reason = دلیل
+tokens-blacklist-fact-source = افزوده‌شده توسط
+tokens-blacklist-fact-added = زمان افزودن
+tokens-blacklist-remove-title = حذف از فهرست سیاه
+tokens-blacklist-remove-message = { $symbol } از فهرست سیاه حذف شود؟ ربات دیگر خودش آن را به فهرست سیاه اضافه نمی‌کند. همچنان می‌توانید آن را دستی به فهرست سیاه اضافه کنید.
+tokens-blacklist-removed = { $symbol } از فهرست سیاه حذف شد
+tokens-blacklist-remove-failed = حذف توکن از فهرست سیاه ناموفق بود

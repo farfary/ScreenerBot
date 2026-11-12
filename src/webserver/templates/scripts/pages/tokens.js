@@ -11,6 +11,7 @@ import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { manualTrade } from "../ui/manual_trade.js";
+import { BLACKLIST_CHANGED_EVENT, confirmRemoveFromBlacklist } from "../ui/token_blacklist.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
 import { BOOSTS_CHANGED_EVENT, boostRowClass, ensureBoosts } from "../core/boosts.js";
@@ -68,6 +69,15 @@ function createLifecycle() {
   const onBoostsChanged = () => {
     table?.repaintRows();
     deps.favoritesTable?.repaintRows();
+  };
+
+  // A token blacklisted or removed anywhere (row action, right-click menu, token details,
+  // trade dialog) changes the Blacklisted view and the actions of every row.
+  const onBlacklistChanged = () => {
+    requestReload("manual", { silent: true, preserveScroll: true }).catch(() => {});
+    if (deps.favoritesTable) {
+      void favorites.fetchFavorites().then(() => favorites.updateFavoritesTable());
+    }
   };
 
   const priceHistory = new Map();
@@ -861,18 +871,29 @@ function createLifecycle() {
   };
 
   /**
-   * Manual trade (buy / add / sell) for every token-list table AND the favorites
-   * table. Delegates to the shared manual-trade flow (ui/manual_trade.js), which owns
-   * the dialog, the payload and the toasts.
+   * A row action (buy / add / sell, or remove from the blacklist) for every token-list
+   * table AND the favorites table. A trade delegates to the shared manual-trade flow
+   * (ui/manual_trade.js), which owns the dialog, the payload and the toasts; a removal
+   * to the shared blacklist flow (ui/token_blacklist.js), which owns the confirmation.
    *
-   * It passes NOTHING from the row: the wallet balance, holdings, decimals, position
+   * A trade passes NOTHING from the row: the wallet balance, holdings, decimals, position
    * size and DCA presets are all resolved live in the shared flow. Handing it this
    * page's cached copies is how the dialog ended up sizing orders against a balance
    * fetched once on tab activate.
    * @param {{action:string, mint:string, row?:object, btn?:HTMLElement, onReload?:Function}} opts
    */
-  const performManualTrade = async ({ action, mint, row = {}, btn = null, onReload }) => {
+  const performRowAction = async ({ action, mint, row = {}, btn = null, onReload }) => {
     if (!action || !mint) return;
+
+    if (action === "unblacklist") {
+      // The removal announces itself (BLACKLIST_CHANGED_EVENT), which reloads the lists.
+      await confirmRemoveFromBlacklist({
+        mint,
+        symbol: row.symbol || "",
+        fallbackReason: summarizeBlacklistReasons(row.blacklist_reasons),
+      });
+      return;
+    }
 
     const placed = await manualTrade({
       action,
@@ -883,9 +904,6 @@ function createLifecycle() {
 
     if (placed && typeof onReload === "function") onReload();
   };
-
-  // Expose the shared trade handler to sub-modules (favorites table reuses it).
-  deps.performManualTrade = performManualTrade;
 
   /**
    * Build columns array based on current view
@@ -1602,7 +1620,7 @@ function createLifecycle() {
     container.addEventListener("click", clickHandler);
   };
 
-  // Delegated Buy/Add/Sell row-action clicks for an arbitrary token table.
+  // Delegated Buy/Add/Sell/Remove-from-blacklist row-action clicks for an arbitrary token table.
   // Generalised from the main table's handler so the Favorites table (same
   // columns) reuses the exact trade flow.
   const attachRowActions = (tbl, onReload) => {
@@ -1622,7 +1640,7 @@ function createLifecycle() {
         Utils.showToast(I18n.t("tokens-row-data-missing"), "error");
         return;
       }
-      await performManualTrade({ action, mint, row, btn, onReload });
+      await performRowAction({ action, mint, row, btn, onReload });
     };
     container._rowActionHandler = handler;
     container.addEventListener("click", handler);
@@ -1653,6 +1671,10 @@ function createLifecycle() {
       // global and a second listener would repaint every row twice per change.
       window.addEventListener(BOOSTS_CHANGED_EVENT, onBoostsChanged);
       eventCleanups.push(() => window.removeEventListener(BOOSTS_CHANGED_EVENT, onBoostsChanged));
+      window.addEventListener(BLACKLIST_CHANGED_EVENT, onBlacklistChanged);
+      eventCleanups.push(() =>
+        window.removeEventListener(BLACKLIST_CHANGED_EVENT, onBlacklistChanged)
+      );
 
       // Initialize tab bar for tokens page
       tabBar = new TabBar({
@@ -1829,7 +1851,7 @@ function createLifecycle() {
           return;
         }
 
-        await performManualTrade({
+        await performRowAction({
           action,
           mint,
           row,

@@ -151,10 +151,16 @@ test("a row reads the live state its actions, Status and Risk show", async (t) =
   );
 
   await showView(page, "blacklisted");
-  const disabled = await page.$$eval(`${ROWS} .row-action[data-action="buy"]`, (buttons) =>
-    buttons.map((button) => button.disabled)
+  assert.equal(
+    await page.locator(`${ROWS} .row-action[data-action="buy"]`).count(),
+    0,
+    "a blacklisted token offers no buy"
   );
-  assert.deepEqual(disabled, [true, true], "a blacklisted token cannot be bought");
+  assert.equal(
+    await page.locator(`${ROWS} .row-action[data-action="unblacklist"]`).count(),
+    2,
+    "each blacklisted row offers its removal from the blacklist in the buy's place"
+  );
 });
 
 test("the Rejected and Blacklisted views show the reason right after the token", async (t) => {

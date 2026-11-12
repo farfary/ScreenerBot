@@ -342,6 +342,7 @@ tokens-dialog-badge-immutable = Imutável
 tokens-dialog-badge-mutable = Mutável
 tokens-dialog-badge-position = Posição
 tokens-dialog-badge-blacklisted = Na lista negra
+tokens-dialog-badge-blacklisted-remove = Remover da lista negra
 
 # Tokens page: sub-tabs (scripts/pages/tokens/constants.js)
 # Ids are the view values of /api/tokens/list.
@@ -482,6 +483,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = Comprar posição
     .aria-label = Comprar token
+tokens-cell-action-unblacklist =
+    .title = Remover da lista negra
+    .aria-label = Remover token da lista negra
 tokens-cell-external-links =
     .title = Links externos
     .aria-label = Links externos
@@ -757,3 +761,18 @@ tokens-rugcheck-risk-mint-authority-locked = Autoridade de mint bloqueada
     .description = A emissão de novos tokens está bloqueada.
 tokens-rugcheck-risk-high-transfer-fee = Taxa de transferência alta
     .description = Cada transferência deste token paga uma taxa alta.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = Você
+tokens-blacklist-source-auto-cleanup = Verificação de autoridades
+tokens-blacklist-source-auto-loss = Regra de perda
+tokens-blacklist-source-auto-llm-analysis = Análise de IA
+tokens-blacklist-source-auto-swap-route = Verificação de rota de swap
+tokens-blacklist-fact-reason = Motivo
+tokens-blacklist-fact-source = Adicionado por
+tokens-blacklist-fact-added = Adicionado
+tokens-blacklist-remove-title = Remover da lista negra
+tokens-blacklist-remove-message = Remover { $symbol } da lista negra? O bot não o colocará de volta na lista negra por conta própria. Você ainda pode adicioná-lo manualmente.
+tokens-blacklist-removed = { $symbol } removido da lista negra
+tokens-blacklist-remove-failed = Falha ao remover o token da lista negra

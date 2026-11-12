@@ -3,6 +3,7 @@
 menu-token-buy = شراء الرمز
 menu-token-sell = بيع الرمز
 menu-token-blacklist = إضافة الرمز إلى القائمة السوداء
+menu-token-unblacklist = إزالة من القائمة السوداء
 menu-token-refresh = تحديث البيانات
 menu-view-details = عرض التفاصيل
 menu-favorite-add = إضافة إلى المفضلة
@@ -51,7 +52,6 @@ menu-favorite-update-failed = فشل تحديث المفضلة
 menu-blacklist-confirm-message = هل أنت متأكد من إضافة { $symbol } إلى القائمة السوداء؟ سيتم استبعاد هذا الرمز من التداول.
 menu-blacklist-confirm-action = إضافة إلى القائمة السوداء
 menu-blacklist-done = تمت إضافة { $symbol } إلى القائمة السوداء
-menu-blacklist-request-failed = فشلت إضافة الرمز إلى القائمة السوداء
 menu-blacklist-failed = فشلت الإضافة إلى القائمة السوداء
 menu-refresh-done = تم تحديث بيانات الرمز
 menu-refresh-request-failed = فشل تحديث بيانات الرمز

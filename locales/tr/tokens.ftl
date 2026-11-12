@@ -336,6 +336,7 @@ tokens-dialog-badge-immutable = Değiştirilemez
 tokens-dialog-badge-mutable = Değiştirilebilir
 tokens-dialog-badge-position = Pozisyon
 tokens-dialog-badge-blacklisted = Kara listede
+tokens-dialog-badge-blacklisted-remove = Kara listeden kaldır
 
 # Tokens page: sub-tabs (scripts/pages/tokens/constants.js)
 # Ids are the view values of /api/tokens/list.
@@ -476,6 +477,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = Pozisyon al
     .aria-label = Tokenı al
+tokens-cell-action-unblacklist =
+    .title = Kara listeden kaldır
+    .aria-label = Token'ı kara listeden kaldır
 tokens-cell-external-links =
     .title = Harici bağlantılar
     .aria-label = Harici bağlantılar
@@ -746,3 +750,18 @@ tokens-rugcheck-risk-mint-authority-locked = Mint yetkisi kilitli
     .description = Yeni token basımı kilitli.
 tokens-rugcheck-risk-high-transfer-fee = Yüksek transfer ücreti
     .description = Bu tokenın her transferinden yüksek vergi alınır.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = Siz
+tokens-blacklist-source-auto-cleanup = Yetki kontrolü
+tokens-blacklist-source-auto-loss = Zarar kuralı
+tokens-blacklist-source-auto-llm-analysis = Yapay zekâ analizi
+tokens-blacklist-source-auto-swap-route = Takas rotası kontrolü
+tokens-blacklist-fact-reason = Neden
+tokens-blacklist-fact-source = Ekleyen
+tokens-blacklist-fact-added = Eklenme zamanı
+tokens-blacklist-remove-title = Kara listeden kaldır
+tokens-blacklist-remove-message = Şu tokenı kara listeden kaldırmak istediğinizden emin misiniz: { $symbol }? Bot onu kendiliğinden yeniden kara listeye eklemez. İsterseniz elle yine ekleyebilirsiniz.
+tokens-blacklist-removed = Kara listeden kaldırıldı: { $symbol }
+tokens-blacklist-remove-failed = Token kara listeden kaldırılamadı

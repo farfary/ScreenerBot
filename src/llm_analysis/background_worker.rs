@@ -111,7 +111,7 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
                                     if let Err(e) = blacklist_token(
                                         &mint,
                                         &blacklist_reason,
-                                        "auto_llm_analysis",
+                                        crate::tokens::BlacklistSource::AutoLlmAnalysis.code(),
                                         &db,
                                     ) {
                                         logger::error(

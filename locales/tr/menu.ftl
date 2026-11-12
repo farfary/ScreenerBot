@@ -3,6 +3,7 @@
 menu-token-buy = Token Al
 menu-token-sell = Token Sat
 menu-token-blacklist = Token'ı Kara Listeye Ekle
+menu-token-unblacklist = Kara Listeden Kaldır
 menu-token-refresh = Verileri Yenile
 menu-view-details = Ayrıntıları Görüntüle
 menu-favorite-add = Favorilere Ekle
@@ -51,7 +52,6 @@ menu-favorite-update-failed = Favoriler güncellenemedi
 menu-blacklist-confirm-message = Şu tokenı kara listeye eklemek istediğinizden emin misiniz: { $symbol }? Bu token işlemlerin dışında bırakılacak.
 menu-blacklist-confirm-action = Kara Listeye Ekle
 menu-blacklist-done = Kara listeye eklendi: { $symbol }
-menu-blacklist-request-failed = Token kara listeye eklenemedi
 menu-blacklist-failed = Kara listeye eklenemedi
 menu-refresh-done = Token verileri yenilendi
 menu-refresh-request-failed = Token verileri yenilenemedi

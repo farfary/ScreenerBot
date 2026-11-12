@@ -338,6 +338,7 @@ tokens-dialog-badge-immutable = 不可变
 tokens-dialog-badge-mutable = 可变
 tokens-dialog-badge-position = 仓位
 tokens-dialog-badge-blacklisted = 已加入黑名单
+tokens-dialog-badge-blacklisted-remove = 从黑名单中移除
 
 # Tokens page: sub-tabs (scripts/pages/tokens/constants.js)
 # Ids are the view values of /api/tokens/list.
@@ -478,6 +479,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = 买入仓位
     .aria-label = 买入代币
+tokens-cell-action-unblacklist =
+    .title = 从黑名单中移除
+    .aria-label = 将代币从黑名单中移除
 tokens-cell-external-links =
     .title = 外部链接
     .aria-label = 外部链接
@@ -743,3 +747,18 @@ tokens-rugcheck-risk-mint-authority-locked = 增发权限已锁定
     .description = 增发新代币已被锁定。
 tokens-rugcheck-risk-high-transfer-fee = 转账税高
     .description = 此代币的每笔转账都需缴纳高额税费。
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = 你
+tokens-blacklist-source-auto-cleanup = 权限检查
+tokens-blacklist-source-auto-loss = 亏损规则
+tokens-blacklist-source-auto-llm-analysis = AI 分析
+tokens-blacklist-source-auto-swap-route = 兑换路由检查
+tokens-blacklist-fact-reason = 原因
+tokens-blacklist-fact-source = 添加者
+tokens-blacklist-fact-added = 添加时间
+tokens-blacklist-remove-title = 从黑名单中移除
+tokens-blacklist-remove-message = 确定将 { $symbol } 从黑名单中移除吗？机器人不会再自行将其加入黑名单，你仍可手动加入。
+tokens-blacklist-removed = 已将 { $symbol } 从黑名单中移除
+tokens-blacklist-remove-failed = 无法将代币从黑名单中移除

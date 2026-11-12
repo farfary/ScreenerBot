@@ -114,14 +114,37 @@ export function tokenCell(row) {
     ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="${Utils.escapeHtml(I18n.t("tokens-boost-title", { boosts: boostCount }))}"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${boostCount}</span></span>`
     : "";
   const mint = Utils.escapeHtml(row.mint || "");
-  const disabledAttr = row.is_blacklisted ? ' disabled aria-disabled="true"' : "";
   const actionAttrs = (title, label) =>
     `title="${Utils.escapeHtml(title)}" aria-label="${Utils.escapeHtml(label)}"`;
+  const rowAction = (action, icon, title, label) =>
+    `<button class="btn-icon row-action" data-action="${action}" data-mint="${mint}" ${actionAttrs(title, label)}><i class="${icon}"></i></button>`;
+  // A blacklisted token cannot be bought or added to, so the row offers its removal in
+  // that place; a sell is never blocked by the blacklist.
+  const entryAction = row.is_blacklisted
+    ? rowAction(
+        "unblacklist",
+        "icon-list-x",
+        I18n.attr("tokens-cell-action-unblacklist", "title"),
+        I18n.attr("tokens-cell-action-unblacklist", "aria-label")
+      )
+    : row.has_open_position
+      ? rowAction(
+          "add",
+          "icon-circle-plus",
+          I18n.attr("tokens-cell-action-add", "title"),
+          I18n.attr("tokens-cell-action-add", "aria-label")
+        )
+      : rowAction(
+          "buy",
+          "icon-shopping-cart",
+          I18n.attr("tokens-cell-action-buy", "title"),
+          I18n.attr("tokens-cell-action-buy", "aria-label")
+        );
   const tradeActions = row.has_open_position
     ? `
-      <button class="btn-icon row-action" data-action="add" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-add", "title"), I18n.attr("tokens-cell-action-add", "aria-label"))}${disabledAttr}><i class="icon-circle-plus"></i></button>
-      <button class="btn-icon row-action" data-action="sell" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-sell", "title"), I18n.attr("tokens-cell-action-sell", "aria-label"))}${disabledAttr}><i class="icon-trending-down"></i></button>`
-    : `<button class="btn-icon row-action" data-action="buy" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-buy", "title"), I18n.attr("tokens-cell-action-buy", "aria-label"))}${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
+      ${entryAction}
+      ${rowAction("sell", "icon-trending-down", I18n.attr("tokens-cell-action-sell", "title"), I18n.attr("tokens-cell-action-sell", "aria-label"))}`
+    : entryAction;
 
   return renderTokenRowCell(row.mint, {
     symbol: row.symbol,

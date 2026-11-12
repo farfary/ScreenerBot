@@ -318,6 +318,7 @@ tokens-dialog-badge-immutable = Незмінний
 tokens-dialog-badge-mutable = Змінюваний
 tokens-dialog-badge-position = Позиція
 tokens-dialog-badge-blacklisted = У чорному списку
+tokens-dialog-badge-blacklisted-remove = Прибрати з чорного списку
 
 tokens-view-favorites = Обране
 tokens-view-pool = Сервіс пулів
@@ -453,6 +454,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = Купити позицію
     .aria-label = Купити токен
+tokens-cell-action-unblacklist =
+    .title = Прибрати з чорного списку
+    .aria-label = Прибрати токен з чорного списку
 tokens-cell-external-links =
     .title = Зовнішні посилання
     .aria-label = Зовнішні посилання
@@ -712,3 +716,18 @@ tokens-rugcheck-risk-mint-authority-locked = Повноваження мінта
     .description = Випуск нових токенів заблоковано.
 tokens-rugcheck-risk-high-transfer-fee = Висока комісія за переказ
     .description = З кожного переказу цього токена стягується високий податок.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = Ви
+tokens-blacklist-source-auto-cleanup = Перевірка повноважень
+tokens-blacklist-source-auto-loss = Правило збитку
+tokens-blacklist-source-auto-llm-analysis = Аналіз ШІ
+tokens-blacklist-source-auto-swap-route = Перевірка маршруту свопу
+tokens-blacklist-fact-reason = Причина
+tokens-blacklist-fact-source = Хто додав
+tokens-blacklist-fact-added = Коли додано
+tokens-blacklist-remove-title = Прибрати з чорного списку
+tokens-blacklist-remove-message = Прибрати { $symbol } з чорного списку? Бот не вноситиме його туди знову самостійно. Ви й надалі можете додати його вручну.
+tokens-blacklist-removed = { $symbol } прибрано з чорного списку
+tokens-blacklist-remove-failed = Не вдалося прибрати токен з чорного списку

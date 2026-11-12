@@ -316,6 +316,7 @@ tokens-dialog-badge-immutable = Tidak Dapat Diubah
 tokens-dialog-badge-mutable = Dapat Diubah
 tokens-dialog-badge-position = Posisi
 tokens-dialog-badge-blacklisted = Daftar Hitam
+tokens-dialog-badge-blacklisted-remove = Hapus dari daftar hitam
 
 tokens-view-favorites = Favorit
 tokens-view-pool = Pool Service
@@ -451,6 +452,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = Beli posisi
     .aria-label = Beli token
+tokens-cell-action-unblacklist =
+    .title = Hapus dari daftar hitam
+    .aria-label = Hapus token dari daftar hitam
 tokens-cell-external-links =
     .title = Tautan eksternal
     .aria-label = Tautan eksternal
@@ -695,3 +699,18 @@ tokens-rugcheck-risk-mint-authority-locked = Otoritas mint terkunci
     .description = Pencetakan token baru terkunci.
 tokens-rugcheck-risk-high-transfer-fee = Biaya transfer tinggi
     .description = Setiap transfer token ini dikenai pajak tinggi.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = Anda
+tokens-blacklist-source-auto-cleanup = Pemeriksaan otoritas
+tokens-blacklist-source-auto-loss = Aturan kerugian
+tokens-blacklist-source-auto-llm-analysis = Analisis AI
+tokens-blacklist-source-auto-swap-route = Pemeriksaan rute swap
+tokens-blacklist-fact-reason = Alasan
+tokens-blacklist-fact-source = Ditambahkan oleh
+tokens-blacklist-fact-added = Ditambahkan
+tokens-blacklist-remove-title = Hapus dari daftar hitam
+tokens-blacklist-remove-message = Hapus { $symbol } dari daftar hitam? Bot tidak akan memasukkannya lagi ke daftar hitam dengan sendirinya. Anda tetap bisa memasukkannya secara manual.
+tokens-blacklist-removed = { $symbol } dihapus dari daftar hitam
+tokens-blacklist-remove-failed = Gagal menghapus token dari daftar hitam

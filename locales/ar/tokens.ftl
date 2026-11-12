@@ -365,6 +365,7 @@ tokens-dialog-badge-immutable = غير قابل للتعديل
 tokens-dialog-badge-mutable = قابل للتعديل
 tokens-dialog-badge-position = مركز
 tokens-dialog-badge-blacklisted = في القائمة السوداء
+tokens-dialog-badge-blacklisted-remove = إزالة من القائمة السوداء
 
 # Tokens page: sub-tabs (scripts/pages/tokens/constants.js)
 # Ids are the view values of /api/tokens/list.
@@ -506,6 +507,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = شراء مركز
     .aria-label = شراء الرمز
+tokens-cell-action-unblacklist =
+    .title = إزالة من القائمة السوداء
+    .aria-label = إزالة الرمز من القائمة السوداء
 tokens-cell-external-links =
     .title = روابط خارجية
     .aria-label = روابط خارجية
@@ -789,3 +793,18 @@ tokens-rugcheck-risk-mint-authority-locked = صلاحية الإصدار مقف�
     .description = إصدار رموز جديدة مقفل.
 tokens-rugcheck-risk-high-transfer-fee = رسوم تحويل مرتفعة
     .description = تُفرض ضريبة مرتفعة على كل تحويل لهذا الرمز.
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = أنت
+tokens-blacklist-source-auto-cleanup = فحص الصلاحيات
+tokens-blacklist-source-auto-loss = قاعدة الخسارة
+tokens-blacklist-source-auto-llm-analysis = تحليل الذكاء الاصطناعي
+tokens-blacklist-source-auto-swap-route = فحص مسار المبادلة
+tokens-blacklist-fact-reason = السبب
+tokens-blacklist-fact-source = أضافه
+tokens-blacklist-fact-added = تاريخ الإضافة
+tokens-blacklist-remove-title = إزالة من القائمة السوداء
+tokens-blacklist-remove-message = هل تريد إزالة { $symbol } من القائمة السوداء؟ لن يعيد البوت إدراجه في القائمة السوداء من تلقاء نفسه. يمكنك إدراجه يدويًا في أي وقت.
+tokens-blacklist-removed = تمت إزالة { $symbol } من القائمة السوداء
+tokens-blacklist-remove-failed = تعذّرت إزالة الرمز من القائمة السوداء

@@ -1,6 +1,7 @@
 menu-token-buy = Mua token
 menu-token-sell = Bán token
 menu-token-blacklist = Đưa token vào danh sách đen
+menu-token-unblacklist = Xóa khỏi danh sách đen
 menu-token-refresh = Làm mới dữ liệu
 menu-view-details = Xem chi tiết
 menu-favorite-add = Thêm vào yêu thích
@@ -41,7 +42,6 @@ menu-favorite-update-failed = Không thể cập nhật yêu thích
 menu-blacklist-confirm-message = Bạn có chắc muốn đưa { $symbol } vào danh sách đen? Token này sẽ bị loại khỏi giao dịch.
 menu-blacklist-confirm-action = Đưa vào danh sách đen
 menu-blacklist-done = Đã đưa { $symbol } vào danh sách đen
-menu-blacklist-request-failed = Không thể đưa token vào danh sách đen
 menu-blacklist-failed = Không thể đưa vào danh sách đen
 menu-refresh-done = Đã làm mới dữ liệu token
 menu-refresh-request-failed = Không thể làm mới dữ liệu token

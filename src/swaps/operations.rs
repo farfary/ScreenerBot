@@ -1255,14 +1255,20 @@ fn retire_token(mint: &str, symbol: &str, reason: &str, cause: &QuoteError) {
     if crate::tokens::cleanup::is_exempt_from_auto_blacklist(db.chain(), mint) {
         return;
     }
-    match crate::tokens::cleanup::blacklist_token(mint, reason, "auto_swap_route", &db) {
-        Ok(()) => logger::info(
+    match crate::tokens::cleanup::blacklist_token(
+        mint,
+        reason,
+        crate::tokens::BlacklistSource::AutoSwapRoute.code(),
+        &db,
+    ) {
+        Ok(crate::tokens::BlacklistWrite::Written) => logger::info(
             LogTag::Swap,
             &format!(
                 "Blacklisted {symbol} ({}) as {reason}: {cause}",
                 short_mint(mint)
             ),
         ),
+        Ok(_) => {}
         Err(e) => logger::warning(
             LogTag::Swap,
             &format!(

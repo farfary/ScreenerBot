@@ -15,6 +15,7 @@ import * as Hints from "../core/hints.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { HintTrigger } from "./hint_popover.js";
 import { showImageLightbox } from "./image_lightbox.js";
+import { confirmRemoveFromBlacklist } from "./token_blacklist.js";
 import { explorerMenuButton, openExplorerMenu } from "./context_menu.js";
 import {
   renderOverviewTab,
@@ -832,6 +833,13 @@ export class TokenDetailsDialog {
           this._retryHandler = null;
         }
 
+        if (this._blacklistBadgeHandler) {
+          this.dialogEl
+            .querySelector("#headerBadges")
+            ?.removeEventListener("click", this._blacklistBadgeHandler);
+          this._blacklistBadgeHandler = null;
+        }
+
         // Clean up buy/sell button handlers
         if (this._buyHandler) {
           const buyBtn = this.dialogEl.querySelector("#headerBuyBtn");
@@ -1143,8 +1151,9 @@ export class TokenDetailsDialog {
         );
       }
       if (token.blacklisted) {
+        const removeLabel = esc(I18n.t("tokens-dialog-badge-blacklisted-remove"));
         badges.push(
-          `<span class="badge error">${esc(I18n.t("tokens-dialog-badge-blacklisted"))}</span>`
+          `<button type="button" class="badge error" data-action="remove-blacklist" title="${removeLabel}" aria-label="${removeLabel}">${esc(I18n.t("tokens-dialog-badge-blacklisted"))}<i class="icon-x" aria-hidden="true"></i></button>`
         );
       }
 
@@ -1237,6 +1246,19 @@ export class TokenDetailsDialog {
       // Check initial favorite state once
       this._checkFavoriteState();
     }
+  }
+
+  /** Remove the token from the blacklist after the user confirms, then repaint the badge. */
+  async _removeFromBlacklist() {
+    const token = this.fullTokenData;
+    if (!token?.mint) return;
+    const removed = await confirmRemoveFromBlacklist({
+      mint: token.mint,
+      symbol: token.symbol || "",
+    });
+    if (!removed || this.fullTokenData !== token) return;
+    token.blacklisted = false;
+    this._updateHeader(token);
   }
 
   /**
@@ -1531,6 +1553,15 @@ export class TokenDetailsDialog {
       }
     };
     window.addEventListener("screenerbot:favorites-changed", this._favoritesChangedHandler);
+
+    // The blacklist badge is the control that removes the token from the blacklist.
+    const badges = this.dialogEl.querySelector("#headerBadges");
+    if (badges) {
+      this._blacklistBadgeHandler = (event) => {
+        if (event.target.closest('[data-action="remove-blacklist"]')) this._removeFromBlacklist();
+      };
+      badges.addEventListener("click", this._blacklistBadgeHandler);
+    }
 
     // Delegated retry handler for the initial-load error state's Retry button.
     if (body) {

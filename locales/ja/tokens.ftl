@@ -316,6 +316,7 @@ tokens-dialog-badge-immutable = 変更不可
 tokens-dialog-badge-mutable = 変更可能
 tokens-dialog-badge-position = ポジション
 tokens-dialog-badge-blacklisted = ブラックリスト登録済み
+tokens-dialog-badge-blacklisted-remove = ブラックリストから削除
 
 tokens-view-favorites = お気に入り
 tokens-view-pool = プールサービス
@@ -451,6 +452,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = ポジションを購入
     .aria-label = トークンを購入
+tokens-cell-action-unblacklist =
+    .title = ブラックリストから削除
+    .aria-label = トークンをブラックリストから削除
 tokens-cell-external-links =
     .title = 外部リンク
     .aria-label = 外部リンク
@@ -695,3 +699,18 @@ tokens-rugcheck-risk-mint-authority-locked = ミント権限がロック済み
     .description = 新しいトークンのミントはロックされています。
 tokens-rugcheck-risk-high-transfer-fee = 送金手数料が高い
     .description = このトークンは送金のたびに高い税がかかります。
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = あなた
+tokens-blacklist-source-auto-cleanup = 権限チェック
+tokens-blacklist-source-auto-loss = 損失ルール
+tokens-blacklist-source-auto-llm-analysis = AI分析
+tokens-blacklist-source-auto-swap-route = スワップルート確認
+tokens-blacklist-fact-reason = 理由
+tokens-blacklist-fact-source = 追加元
+tokens-blacklist-fact-added = 追加日時
+tokens-blacklist-remove-title = ブラックリストから削除
+tokens-blacklist-remove-message = { $symbol } をブラックリストから削除しますか？ボットが自動で再びブラックリストに追加することはありません。手動ではいつでも追加できます。
+tokens-blacklist-removed = { $symbol } をブラックリストから削除しました
+tokens-blacklist-remove-failed = トークンをブラックリストから削除できませんでした

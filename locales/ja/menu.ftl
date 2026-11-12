@@ -3,6 +3,7 @@
 menu-token-buy = トークンを購入
 menu-token-sell = トークンを売却
 menu-token-blacklist = トークンをブラックリストに追加
+menu-token-unblacklist = ブラックリストから削除
 menu-token-refresh = データを更新
 menu-view-details = 詳細を表示
 menu-favorite-add = お気に入りに追加
@@ -51,7 +52,6 @@ menu-favorite-update-failed = お気に入りの更新に失敗しました
 menu-blacklist-confirm-message = { $symbol } をブラックリストに追加しますか？このトークンは取引の対象から除外されます。
 menu-blacklist-confirm-action = ブラックリストに追加
 menu-blacklist-done = { $symbol } をブラックリストに追加しました
-menu-blacklist-request-failed = トークンのブラックリスト追加に失敗しました
 menu-blacklist-failed = ブラックリストへの追加に失敗しました
 menu-refresh-done = トークンデータを更新しました
 menu-refresh-request-failed = トークンデータの更新に失敗しました

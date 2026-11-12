@@ -314,6 +314,7 @@ tokens-dialog-badge-immutable = अपरिवर्तनीय
 tokens-dialog-badge-mutable = बदलने योग्य
 tokens-dialog-badge-position = पोज़िशन
 tokens-dialog-badge-blacklisted = ब्लैकलिस्टेड
+tokens-dialog-badge-blacklisted-remove = ब्लैकलिस्ट से हटाएँ
 
 tokens-view-favorites = पसंदीदा
 tokens-view-pool = पूल सर्विस
@@ -449,6 +450,9 @@ tokens-cell-action-sell =
 tokens-cell-action-buy =
     .title = पोज़िशन खरीदें
     .aria-label = टोकन खरीदें
+tokens-cell-action-unblacklist =
+    .title = ब्लैकलिस्ट से हटाएँ
+    .aria-label = टोकन को ब्लैकलिस्ट से हटाएँ
 tokens-cell-external-links =
     .title = बाहरी लिंक
     .aria-label = बाहरी लिंक
@@ -698,3 +702,18 @@ tokens-rugcheck-risk-mint-authority-locked = मिंट अथॉरिटी 
     .description = नए टोकन मिंट करना लॉक है।
 tokens-rugcheck-risk-high-transfer-fee = ऊँची ट्रांसफ़र फ़ीस
     .description = इस टोकन के हर ट्रांसफ़र पर ऊँचा टैक्स लगता है।
+
+# Removing a token from the blacklist (ui/token_blacklist.js). The source labels name who filed an
+# entry, keyed by the stored source code.
+tokens-blacklist-source-manual = आप
+tokens-blacklist-source-auto-cleanup = अथॉरिटी जाँच
+tokens-blacklist-source-auto-loss = नुकसान नियम
+tokens-blacklist-source-auto-llm-analysis = AI विश्लेषण
+tokens-blacklist-source-auto-swap-route = स्वैप रूट जाँच
+tokens-blacklist-fact-reason = कारण
+tokens-blacklist-fact-source = जोड़ने वाला
+tokens-blacklist-fact-added = जोड़ा गया
+tokens-blacklist-remove-title = ब्लैकलिस्ट से हटाएँ
+tokens-blacklist-remove-message = क्या { $symbol } को ब्लैकलिस्ट से हटाएँ? बॉट इसे अपने आप दोबारा ब्लैकलिस्ट नहीं करेगा। आप चाहें तो इसे हाथ से फिर ब्लैकलिस्ट कर सकते हैं।
+tokens-blacklist-removed = ब्लैकलिस्ट से हटाया गया: { $symbol }
+tokens-blacklist-remove-failed = टोकन को ब्लैकलिस्ट से हटाना विफल
