@@ -26,6 +26,12 @@ const DETAIL_POSITIONS = [
   },
 ];
 
+// The paper rounds whose details the paper views open: the first row of each list.
+const PAPER_DETAIL_POSITIONS = [
+  { id: 7, status: "open" },
+  { id: 8, status: "closed" },
+];
+
 export const endpoints = [
   {
     method: "GET",
@@ -54,6 +60,24 @@ export const endpoints = [
     rust: "src/webserver/routes/positions/types.rs::PositionResponse",
     record: "/api/positions?status=archived&limit=0",
   },
+  // The paper book's rounds and the details of one open and one closed round. Their ids
+  // are not the ids of the live rounds, which name different rounds in the live book.
+  ...["open", "closed"].map((status) => ({
+    method: "GET",
+    path: "/api/positions/paper",
+    query: { status },
+    fixture: `positions_paper_${status}.json`,
+    empty: "positions_list.empty.json",
+    rust: "src/webserver/routes/positions/types.rs::PositionResponse",
+    record: null,
+  })),
+  ...PAPER_DETAIL_POSITIONS.map(({ id, status }) => ({
+    method: "GET",
+    path: `/api/positions/paper/${id}/details`,
+    fixture: `position_details_paper_${status}.json`,
+    rust: "src/webserver/routes/positions/types.rs::PositionDetailResponse",
+    record: null,
+  })),
   ...DETAIL_POSITIONS.flatMap(({ id, status }) => [
     {
       method: "GET",

@@ -412,6 +412,7 @@ positions-event-native-amount = Jumlah { -sol }
 positions-event-cost-basis = Harga pokok
 positions-event-usd-value = Nilai USD
 positions-event-network-fee = Biaya jaringan
+positions-event-strategy = Strategi
 positions-event-router = Router
 positions-event-slot = Slot
 positions-event-chain-status = Status chain

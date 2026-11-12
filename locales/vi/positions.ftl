@@ -410,6 +410,7 @@ positions-event-native-amount = Số lượng { -sol }
 positions-event-cost-basis = Giá vốn
 positions-event-usd-value = Giá trị USD
 positions-event-network-fee = Phí mạng
+positions-event-strategy = Chiến lược
 positions-event-router = Router
 positions-event-slot = Slot
 positions-event-chain-status = Trạng thái chuỗi

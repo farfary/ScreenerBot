@@ -11,7 +11,7 @@
  * - A tripped loss limit is one notice with Resume, the reset beside the meter; a force
  *   stop is one error notice and hides the force stop it already applied.
  * - An empty window shows one empty state and no breakdown.
- * - A live recent close opens its position details; a paper close has none to open.
+ * - A recent close opens its position details from the book it is listed in.
  * - The paper book adds its cash and the reset of its run, and only it reads the run.
  * - The tab never scrolls sideways, and no heading carries a glyph.
  *
@@ -271,7 +271,7 @@ test("an empty window shows one empty state and hides the breakdowns", async () 
   }
 });
 
-test("a live recent row opens the position details and a paper row does not", async () => {
+test("a recent row opens the position details of the book it is listed in", async () => {
   const { tab, close } = await openStats({
     overrides: { "/api/positions/paper/account": ACCOUNT },
   });
@@ -279,22 +279,27 @@ test("a live recent row opens the position details and a paper row does not", as
     await tab.evaluate(() => {
       window.__openedPositions = [];
       window.addEventListener("screenerbot:open-position-details", (event) =>
-        window.__openedPositions.push(event.detail.id)
+        window.__openedPositions.push({ id: event.detail.id, book: event.detail.book })
       );
     });
     const firstRow = tab.locator("#recent-rounds tbody tr").first();
     await firstRow.waitFor();
     await firstRow.click();
     await tab.waitForFunction(() => window.__openedPositions.length === 1);
-    assert.deepEqual(await tab.evaluate(() => window.__openedPositions), [812]);
+    assert.deepEqual(await tab.evaluate(() => window.__openedPositions), [
+      { id: 812, book: "live" },
+    ]);
     await tab.keyboard.press("Escape");
 
     await bookOption(tab, "paper").click();
     await tab.locator("#stats-paper-reset:not([hidden])").waitFor();
     await tab.locator("#recent-rounds tbody tr").first().waitFor();
     await tab.locator("#recent-rounds tbody tr").first().click();
-    await tab.waitForTimeout(300);
-    assert.deepEqual(await tab.evaluate(() => window.__openedPositions), [812]);
+    await tab.waitForFunction(() => window.__openedPositions.length === 2);
+    assert.deepEqual(await tab.evaluate(() => window.__openedPositions), [
+      { id: 812, book: "live" },
+      { id: 812, book: "paper" },
+    ]);
   } finally {
     await close();
   }

@@ -186,23 +186,29 @@
      * Build menu items for position context
      */
     manager._buildPositionMenu = function (items, context) {
-      items.push({
-        type: "item",
-        label: I18n.t("menu-position-sell", { symbol: context.symbol }),
-        icon: "trendingDown",
-        className: "danger",
-        action: () => this._sellToken(context),
-      });
+      // Sell, add and management act on the live book by mint, so a paper round's row
+      // never offers them: it closes at a paper fill from its row or its details.
+      const live = (context.element?.dataset?.book || "live") === "live";
 
-      items.push({
-        type: "item",
-        label: I18n.t("menu-position-add"),
-        icon: "plus",
-        className: "success",
-        action: () => this._addToPosition(context),
-      });
+      if (live) {
+        items.push({
+          type: "item",
+          label: I18n.t("menu-position-sell", { symbol: context.symbol }),
+          icon: "trendingDown",
+          className: "danger",
+          action: () => this._sellToken(context),
+        });
 
-      items.push({ type: "separator" });
+        items.push({
+          type: "item",
+          label: I18n.t("menu-position-add"),
+          icon: "plus",
+          className: "success",
+          action: () => this._addToPosition(context),
+        });
+
+        items.push({ type: "separator" });
+      }
 
       items.push({
         type: "item",
@@ -211,24 +217,26 @@
         action: () => this._viewPositionDetails(context),
       });
 
-      const management = context.element?.dataset?.management || "auto_trader";
-      const modes = ["auto_trader", "user_only"];
-      if (context.element?.dataset?.originKind === "copy") {
-        modes.push("copy_task", "hybrid");
-      }
-      items.push({
-        type: "item",
-        label: I18n.t("menu-position-management"),
-        icon: "shield",
-        submenu: modes.map((value) => ({
+      if (live) {
+        const management = context.element?.dataset?.management || "auto_trader";
+        const modes = ["auto_trader", "user_only"];
+        if (context.element?.dataset?.originKind === "copy") {
+          modes.push("copy_task", "hybrid");
+        }
+        items.push({
           type: "item",
-          label:
-            value === management
-              ? `✓ ${I18n.label(positionManagementLabels, value)}`
-              : I18n.label(positionManagementLabels, value),
-          action: () => this._setPositionManagement(context, value),
-        })),
-      });
+          label: I18n.t("menu-position-management"),
+          icon: "shield",
+          submenu: modes.map((value) => ({
+            type: "item",
+            label:
+              value === management
+                ? `✓ ${I18n.label(positionManagementLabels, value)}`
+                : I18n.label(positionManagementLabels, value),
+            action: () => this._setPositionManagement(context, value),
+          })),
+        });
+      }
 
       // Favorites toggle
       const isFavorite = this._isFavorite(context.mint);

@@ -543,6 +543,7 @@ positions-event-native-amount = مبلغ { -sol }
 positions-event-cost-basis = تكلفة الأساس
 positions-event-usd-value = القيمة بالدولار
 positions-event-network-fee = رسوم الشبكة
+positions-event-strategy = الاستراتيجية
 positions-event-router = موجّه
 positions-event-slot = الفتحة
 positions-event-chain-status = حالة السلسلة

@@ -3,10 +3,13 @@
 
 //! Position route types — data structures for position API responses.
 
-use crate::chains::RawAmount;
+use crate::chains::{adapter_for, ChainId, RawAmount};
 use crate::config::TrailingStopBand;
+use crate::positions::db::PaperLegRecord;
 use crate::positions::state::is_position_open;
-use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
+use crate::positions::{
+    Book, EntryRecord, ExitRecord, Position, PositionManagement, PositionOrigin, PriceSource,
+};
 use crate::tokens::security::SecurityRiskBand;
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -129,32 +132,8 @@ pub struct PaperAccountResponse {
     pub cash_native: f64,
 }
 
-/// One fill of a paper round: the entry, add, partial or exit record it booked, with the
-/// strategy that decided it and the quotes it filled at. A paper fill sends no
-/// transaction, so it carries no signature.
-#[derive(Debug, Serialize)]
-pub struct PaperFillResponse {
-    pub kind: String,
-    pub timestamp: i64,
-    #[serde(serialize_with = "raw_amount_number")]
-    pub amount: RawAmount,
-    pub price: f64,
-    /// SOL spent by a buy or received by a sale.
-    pub native_amount: f64,
-    /// The share of the round a sale sold.
-    pub percentage: Option<f64>,
-    pub fees_native: Option<f64>,
-    pub strategy_id: Option<String>,
-    pub quote: Option<serde_json::Value>,
-}
-
-/// A paper round with every fill it booked, oldest first.
-#[derive(Debug, Serialize)]
-pub struct PaperPositionDetailResponse {
-    pub position: PositionResponse,
-    pub fills: Vec<PaperFillResponse>,
-}
-
+/// One booked entry of a round. A paper round's entry also carries the strategy that
+/// decided it and the quotes it filled at.
 #[derive(Debug, Serialize)]
 pub struct EntryRecordResponse {
     pub id: Option<i64>,
@@ -167,8 +146,40 @@ pub struct EntryRecordResponse {
     pub transaction_signature: String,
     pub is_dca: bool,
     pub fees_native: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quote: Option<serde_json::Value>,
 }
 
+impl EntryRecordResponse {
+    /// The booked `record`, its fee in the native coin of `chain`.
+    pub fn from_record(record: EntryRecord, chain: ChainId) -> Self {
+        Self {
+            id: record.id,
+            timestamp: record.timestamp.timestamp(),
+            amount: record.amount,
+            price: record.price,
+            native_spent: record.native_spent,
+            transaction_signature: record.transaction_signature,
+            is_dca: record.is_dca,
+            fees_native: record
+                .fees_raw
+                .map(|raw| adapter_for(chain).raw_to_native(raw)),
+            strategy_id: None,
+            quote: None,
+        }
+    }
+
+    /// Adds the strategy and quotes of the paper `leg` the entry booked.
+    pub fn with_leg(mut self, leg: Option<&PaperLegRecord>) -> Self {
+        (self.strategy_id, self.quote) = leg_provenance(leg);
+        self
+    }
+}
+
+/// One booked exit of a round, partial or full. A paper round's exit also carries the
+/// strategy that decided it and the quotes it filled at.
 #[derive(Debug, Serialize)]
 pub struct ExitRecordResponse {
     pub id: Option<i64>,
@@ -182,6 +193,46 @@ pub struct ExitRecordResponse {
     pub is_partial: bool,
     pub percentage: f64,
     pub fees_native: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quote: Option<serde_json::Value>,
+}
+
+impl ExitRecordResponse {
+    /// The booked `record`, its fee in the native coin of `chain`.
+    pub fn from_record(record: ExitRecord, chain: ChainId) -> Self {
+        Self {
+            id: record.id,
+            timestamp: record.timestamp.timestamp(),
+            amount: record.amount,
+            price: record.price,
+            native_received: record.native_received,
+            transaction_signature: record.transaction_signature,
+            is_partial: record.is_partial,
+            percentage: record.percentage,
+            fees_native: record
+                .fees_raw
+                .map(|raw| adapter_for(chain).raw_to_native(raw)),
+            strategy_id: None,
+            quote: None,
+        }
+    }
+
+    /// Adds the strategy and quotes of the paper `leg` the exit booked.
+    pub fn with_leg(mut self, leg: Option<&PaperLegRecord>) -> Self {
+        (self.strategy_id, self.quote) = leg_provenance(leg);
+        self
+    }
+}
+
+/// The strategy that decided a paper fill and the quotes it filled at; the quotes are
+/// absent when the stored text is not valid JSON.
+fn leg_provenance(leg: Option<&PaperLegRecord>) -> (Option<String>, Option<serde_json::Value>) {
+    (
+        leg.and_then(|leg| leg.strategy_id.clone()),
+        leg.and_then(|leg| serde_json::from_str(&leg.quote_json).ok()),
+    )
 }
 
 /// Token information for position detail view
@@ -250,6 +301,8 @@ impl ExternalLinks {
     }
 }
 
+/// The details of one round, live or paper: both books answer this one shape.
+///
 /// NOTE: the token's activity timeline is deliberately NOT here. It spans every position
 /// ever opened on the mint plus every wallet transaction that touched it, which is far more
 /// work than this route should carry — `/details` is also hit by the trade dialog on every
@@ -257,6 +310,8 @@ impl ExternalLinks {
 /// lazily-fetched endpoint: `GET /api/positions/{key}/activity` ([`TokenActivityResponse`]).
 #[derive(Debug, Serialize)]
 pub struct PositionDetailResponse {
+    /// The book the round belongs to: its wallet actions exist only on `live`.
+    pub book: Book,
     pub position: Option<PositionDetail>,
     pub entries: Vec<EntryRecordResponse>,
     pub exits: Vec<ExitRecordResponse>,

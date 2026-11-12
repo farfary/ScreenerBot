@@ -420,6 +420,7 @@ positions-event-native-amount = { -sol } miktarı
 positions-event-cost-basis = Maliyet bazı
 positions-event-usd-value = USD değeri
 positions-event-network-fee = Ağ ücreti
+positions-event-strategy = Strateji
 positions-event-router = Yönlendirici
 positions-event-slot = Slot
 positions-event-chain-status = Zincir durumu

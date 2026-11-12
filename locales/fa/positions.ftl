@@ -503,6 +503,7 @@ positions-event-native-amount = مقدار { -sol }
 positions-event-cost-basis = قیمت تمام‌شده
 positions-event-usd-value = ارزش دلاری
 positions-event-network-fee = کارمزد شبکه
+positions-event-strategy = استراتژی
 positions-event-router = روتر
 positions-event-slot = اسلات
 positions-event-chain-status = وضعیت زنجیره

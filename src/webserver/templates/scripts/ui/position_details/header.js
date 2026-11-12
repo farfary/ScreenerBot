@@ -11,10 +11,11 @@ import { paintHtml } from "../../core/dom.js";
 import * as Hints from "../../core/hints.js";
 import { notificationManager } from "../../core/notifications.js";
 import { HintTrigger } from "../hint_popover.js";
-import { manualTrade } from "../manual_trade.js";
+import { closePaperRound, manualTrade } from "../manual_trade.js";
 import { POSITION_MANAGEMENT_LABELS } from "../position_management.js";
 import { POSITION_STATUS_LABELS } from "../position_status.js";
 import { getIdentity, renderAddress, renderTokenLogo } from "../token_identity.js";
+import { tradingModeMarker } from "../trading_mode.js";
 
 const esc = (text) => Utils.escapeHtml(text);
 
@@ -195,14 +196,18 @@ export function applyHeaderMixin(PositionDetailsDialog) {
   };
 
   proto._buildHeaderBadges = function (pos) {
-    const badges = [
-      `<span class="pdd-badge" title="${esc(I18n.t("positions-header-origin-hint"))}">${this._originLabel(pos.origin)}</span>`,
-    ];
+    const badges = this._isPaper() ? [tradingModeMarker("paper", esc)] : [];
+    badges.push(
+      `<span class="pdd-badge" title="${esc(I18n.t("positions-header-origin-hint"))}">${this._originLabel(pos.origin)}</span>`
+    );
     // A copied position names its source wallet in full beside the origin badge.
     if (pos.origin?.kind === "copy" && pos.origin.source_wallet) {
       badges.push(renderAddress(String(pos.origin.source_wallet), { explorer: "account" }));
     }
-    if (this._status() === "open") badges.push(this._buildManagementControl(pos));
+    // A paper round has no wallet to manage it from: the paper book closes it.
+    if (this._status() === "open" && !this._isPaper()) {
+      badges.push(this._buildManagementControl(pos));
+    }
 
     const security = this.fullDetails?.security;
     if (security) {
@@ -306,7 +311,11 @@ export function applyHeaderMixin(PositionDetailsDialog) {
       .join("");
   };
 
-  /** Controls that act on the position: trade while it is open, otherwise its token. */
+  /**
+   * Controls that act on the position: trade while it is open, otherwise its token. An open
+   * paper round offers only its close at a paper fill; it has no wallet to add to or sell
+   * from.
+   */
   proto._buildTradeActions = function () {
     const status = this._status();
     if (!status) return "";
@@ -315,6 +324,9 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     const attrs = (action, title) =>
       `data-trade-action="${action}" data-idle-title="${esc(title)}" title="${esc(title)}" aria-label="${esc(title)}"`;
 
+    if (status === "open" && this._isPaper()) {
+      return `<button type="button" class="pdd-trade-btn is-close" ${attrs("paper-close", I18n.attr("positions-action-paper-close", "title"))}><i class="icon-circle-x"></i><span>${esc(I18n.t("positions-trade-close"))}</span></button>`;
+    }
     if (status === "open") {
       return `
         <button type="button" class="pdd-trade-btn is-add" ${attrs("add", I18n.attr("positions-trade-add", "title"))}><i class="icon-circle-plus"></i><span>${esc(I18n.t("positions-trade-add"))}</span></button>
@@ -338,7 +350,8 @@ export function applyHeaderMixin(PositionDetailsDialog) {
    */
   proto._tradeLock = function () {
     const pos = this._position();
-    if (!pos) return null;
+    // A paper close sends no swap, so no wallet trade or pending swap can overlap it.
+    if (!pos || this._isPaper()) return null;
     if (pos.exit_transaction_signature && !pos.transaction_exit_verified) {
       return { state: "closing", actions: ALL_TRADE_ACTIONS };
     }
@@ -389,6 +402,14 @@ export function applyHeaderMixin(PositionDetailsDialog) {
           detail: { mint, symbol, name, logo_url: logoUrl },
         })
       );
+      return;
+    }
+
+    if (action === "paper-close") {
+      const closed = await closePaperRound({ id: pos.id, symbol, btn });
+      if (!closed || !this.dialogEl) return;
+      this.onTradeComplete({ action: "close", mint });
+      await this._fetchDetails();
       return;
     }
 

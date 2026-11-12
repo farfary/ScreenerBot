@@ -22,6 +22,11 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     return this.fullDetails?.position || this.positionData || null;
   };
 
+  /** The round belongs to the paper book: simulated fills, no wallet and no transactions. */
+  proto._isPaper = function () {
+    return this.book === "paper";
+  };
+
   /**
    * `open` | `closed` | `archived`, exactly as the API reports it — null only before the
    * first response of a dialog opened without a row. Never inferred from `position_type`,

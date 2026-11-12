@@ -1,0 +1,169 @@
+{
+  "book": "paper",
+  "position": {
+    "id": 7,
+    "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "symbol": "BONK",
+    "name": "Bonk",
+    "logo_url": null,
+    "entry_price": 1.2e-07,
+    "entry_time": 1791309600,
+    "exit_price": null,
+    "exit_time": null,
+    "position_type": "buy",
+    "status": "open",
+    "entry_size_native": 0.5,
+    "total_size_native": 0.75,
+    "price_highest": 1.6799999999999997e-07,
+    "price_lowest": 1.0319999999999998e-07,
+    "basis_peak_price": 1.44e-07,
+    "entry_transaction_signature": "paper-7-entry",
+    "exit_transaction_signature": null,
+    "token_amount": 416666666667,
+    "effective_entry_price": 1.2035999999999997e-07,
+    "effective_exit_price": null,
+    "sol_received": null,
+    "liquidity_tier": "medium",
+    "transaction_entry_verified": true,
+    "transaction_exit_verified": false,
+    "entry_fee_raw": 5000,
+    "exit_fee_raw": null,
+    "current_price": 1.344e-07,
+    "current_price_updated": 1791331198,
+    "current_price_source": "pool",
+    "phantom_confirmations": 0,
+    "synthetic_exit": false,
+    "closed_reason": null,
+    "pnl": null,
+    "pnl_percent": null,
+    "unrealized_pnl": 0.06000000000000005,
+    "unrealized_pnl_percent": 12.00000000000001,
+    "dca_count": 1,
+    "average_entry_price": 1.2e-07,
+    "partial_exit_count": 0,
+    "average_exit_price": null,
+    "remaining_token_amount": 416666666667,
+    "total_exited_amount": 0,
+    "token_decimals": 5,
+    "archived": false,
+    "archived_at": null,
+    "origin": {
+      "kind": "auto",
+      "strategy_id": "paper-momentum"
+    },
+    "management": "auto_trader",
+    "round_key": null,
+    "basis_complete": true,
+    "history_complete": true,
+    "holding_state": null,
+    "phantom_remove": false,
+    "phantom_first_seen": null,
+    "peak_since_last_buy": 1.44e-07,
+    "trailing_stop_active": true,
+    "break_even_active": false,
+    "default_add_size_native": null,
+    "quote_asset": false,
+    "exit_plan": {
+      "stop_loss_pct": 50,
+      "take_profit_steps": [
+        {
+          "profit_pct": 20,
+          "sell_pct": 40,
+          "taken": true
+        },
+        {
+          "profit_pct": 60,
+          "sell_pct": 60,
+          "taken": false
+        }
+      ],
+      "trailing_stop": {
+        "activation_pct": 20,
+        "distance_pct": 10,
+        "bands": [
+          {
+            "profit_pct": 50,
+            "distance_pct": 6
+          }
+        ]
+      },
+      "break_even": null,
+      "time_loss": {
+        "duration_seconds": 14400,
+        "loss_threshold_pct": -10
+      },
+      "time_stagnation": null
+    }
+  },
+  "entries": [
+    {
+      "id": 71,
+      "timestamp": 1791309600,
+      "amount": 416666666667,
+      "price": 1.2e-07,
+      "sol_spent": 0.5,
+      "transaction_signature": "paper-7-entry",
+      "is_dca": false,
+      "fees_native": 0.000105,
+      "strategy_id": "paper-momentum",
+      "quote": {
+        "model": "pool_quote"
+      }
+    },
+    {
+      "id": 72,
+      "timestamp": 1791311400,
+      "amount": 208333333334,
+      "price": 1.2e-07,
+      "sol_spent": 0.25,
+      "transaction_signature": "paper-7-dca",
+      "is_dca": true,
+      "fees_native": 0.000105,
+      "strategy_id": "paper-dca",
+      "quote": {
+        "model": "pool_quote"
+      }
+    }
+  ],
+  "exits": [],
+  "token_info": {
+    "decimals": 5,
+    "description": "Bonk token on Solana.",
+    "image_url": null,
+    "website": null,
+    "twitter": null,
+    "telegram": null
+  },
+  "market_data": {
+    "market_cap": 412000000,
+    "fdv": 460000000,
+    "liquidity_usd": 8400000,
+    "volume_24h": 21500000,
+    "price_change_h1": 1.8,
+    "price_change_h24": -3.4,
+    "holder_count": 182340
+  },
+  "security": {
+    "score_normalized": 12,
+    "risk_level": "low",
+    "has_mint_authority": false,
+    "has_freeze_authority": false,
+    "top_risks": []
+  },
+  "pool_info": {
+    "pool_address": "Poo1Ad9mHfdX3T9jqoqhX3Mmw57uRT17qDPdqqsTq1ww",
+    "pool_program": "raydium_cpmm",
+    "liquidity_native": 1820.5
+  },
+  "external_links": {
+    "solscan": "https://solscan.io/token/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "dexscreener": "https://dexscreener.com/solana/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "birdeye": "https://birdeye.so/token/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263?chain=solana",
+    "rugcheck": "https://rugcheck.xyz/tokens/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "photon": "https://photon-sol.tinyastro.io/en/lp/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+  },
+  "position_age_seconds": 21600,
+  "native_price_usd": 152.4,
+  "pending_swaps": [],
+  "fetched_at": "2026-10-07T00:00:00.000Z"
+}

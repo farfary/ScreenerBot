@@ -17,7 +17,7 @@ import { buyHasLoadedPosition, rememberEntries } from "./positions/pending_buys.
 import { bookViews, paperActionCell, paperEmptyState, positionsUrl } from "./positions/book.js";
 import { loadPage } from "../core/router.js";
 import { POSITION_EMPTY_LABELS, POSITION_STATUS_LABELS } from "../ui/position_status.js";
-import { manualTrade } from "../ui/manual_trade.js";
+import { manualTrade, closePaperRound } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
@@ -833,29 +833,8 @@ function createLifecycle() {
 
   // Close an open paper round in full at a paper fill. No swap is sent.
   const closePaperPosition = async (row, btn) => {
-    if (!row || row.id == null) {
-      Utils.showToast(I18n.t("positions-toast-not-found"), "error");
-      return;
-    }
-    const choice = await ConfirmationDialog.show({
-      title: I18n.t("positions-paper-close-title"),
-      message: I18n.t("positions-paper-close-message", { symbol: row.symbol || "?" }),
-      confirmLabel: I18n.t("positions-paper-close-confirm"),
-      variant: "warning",
-    });
-    if (!choice?.confirmed) return;
-    if (btn) btn.disabled = true;
-    try {
-      await requestManager.fetch(`/api/positions/paper/${encodeURIComponent(row.id)}/close`, {
-        method: "POST",
-        priority: "high",
-      });
-      Utils.showToast(I18n.t("positions-toast-paper-closed"), "success");
-      table.refresh({ reason: "manual", preserveScroll: true });
-    } catch (err) {
-      if (btn) btn.disabled = false;
-      Utils.showToast(err?.message || I18n.t("positions-paper-close-failed"), "error");
-    }
+    const closed = await closePaperRound({ id: row?.id, symbol: row?.symbol, btn });
+    if (closed) table.refresh({ reason: "manual", preserveScroll: true });
   };
 
   // Handle remove (archive/delete) / restore / delete actions on a position row.
@@ -1062,6 +1041,7 @@ function createLifecycle() {
           return classes.join(" ");
         },
         rowAttributes: (row) => ({
+          "data-book": state.book,
           "data-management": row?.management || "auto_trader",
           "data-origin-kind": row?.origin?.kind || "auto",
         }),
@@ -1205,10 +1185,11 @@ function createLifecycle() {
           // data-row-id is now the unique position id (see rowIdField above).
           const rowId = row.dataset.rowId;
           const position = table?.getData()?.find((p) => String(p.id) === rowId);
-          // Pending (in-flight buy) rows have no real position record yet. The details
-          // dialog reads the live book; a paper round's id names a different round there.
-          if (state.book === "live" && position && !position._pending && positionDetailsDialog) {
-            positionDetailsDialog.show(position);
+          // Pending (in-flight buy) rows have no real position record yet. The dialog reads
+          // the details of the book the row was listed from: a paper round's id names a
+          // different round in the live book.
+          if (position && !position._pending && positionDetailsDialog) {
+            positionDetailsDialog.show(position, { book: state.book });
           }
         };
 

@@ -493,6 +493,7 @@ positions-event-native-amount = { -sol } 수량
 positions-event-cost-basis = 매입 원가
 positions-event-usd-value = USD 가치
 positions-event-network-fee = 네트워크 수수료
+positions-event-strategy = 전략
 positions-event-router = 라우터
 positions-event-slot = 슬롯
 positions-event-chain-status = 체인 상태

@@ -493,6 +493,7 @@ positions-event-native-amount = { -sol } 数量
 positions-event-cost-basis = 取得原価
 positions-event-usd-value = USD 価値
 positions-event-network-fee = ネットワーク手数料
+positions-event-strategy = ストラテジー
 positions-event-router = ルーター
 positions-event-slot = スロット
 positions-event-chain-status = チェーンステータス

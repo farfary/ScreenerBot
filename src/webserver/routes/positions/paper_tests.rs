@@ -3,8 +3,9 @@
 
 //! The paper routes win over the live `/positions/{key}` routes and sit behind the paper
 //! store's own gate, answer that the paper book is unavailable until it loads, a paper
-//! close resolves its id in the paper book only, and the stats,
-//! account and fills of a paper round keep their response shape.
+//! close and a paper details read resolve their id in the paper book only, the stats and
+//! account keep their response shape, and a paper round's details are the live details
+//! shape with the paper provenance of each fill.
 
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ use crate::database::catalog;
 use crate::database::health::{self, StoreHealth};
 use crate::database::recovery::RecoveryAction;
 use crate::errors::DatabaseError;
+use crate::positions::db::PaperLegRecord;
 use crate::positions::{
     Book, EntryRecord, ExitRecord, Opening, Position, PositionManagement, PositionOrigin,
 };
@@ -101,10 +103,11 @@ async fn paper_routes_answer_paper_book_unavailable_until_the_paper_book_loads()
     }
 }
 
-/// A live round and a loaded paper book in an isolated data directory: closing the live
-/// round's id through the paper route answers not found and leaves the live round open.
+/// A live round and a loaded paper book in an isolated data directory: closing or reading
+/// the live round's id through the paper routes answers not found and leaves the live
+/// round open.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_paper_close_resolves_its_id_in_the_paper_book_only() {
+async fn a_paper_close_and_details_resolve_their_id_in_the_paper_book_only() {
     let directory = tempfile::tempdir().expect("temp dir");
     std::env::set_var("SCREENERBOT_DATA_DIR", directory.path());
     let wallet = crate::chains::solana::accounts::configure_test_trading_wallet();
@@ -125,6 +128,13 @@ async fn a_paper_close_resolves_its_id_in_the_paper_book_only() {
         .await
         .expect("load the paper book");
     assert!(book.position(live_id).await.is_none());
+
+    let (status, body) = answer("GET", &format!("/api/positions/paper/{live_id}/details")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(
+        body["error"]["text"]["id"], "errors-positions-not-found",
+        "{body}"
+    );
 
     let (status, body) = answer("POST", &format!("/api/positions/paper/{live_id}/close")).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
@@ -207,10 +217,11 @@ fn the_account_response_carries_the_run_and_its_cash() {
     }
 }
 
-#[test]
-fn paper_fills_are_ordered_joined_to_their_legs_and_carry_no_signature() {
+/// The booked history of paper round 7: an entry, a partial exit with no leg and a full
+/// exit whose leg carries an unreadable quote, the exits stored newest first.
+fn round_history() -> PaperRoundHistory {
     let at = |minute| Utc.with_ymd_and_hms(2026, 10, 1, 0, minute, 0).unwrap();
-    let history = PaperRoundHistory {
+    PaperRoundHistory {
         entries: vec![EntryRecord {
             id: Some(1),
             position_id: 7,
@@ -264,24 +275,64 @@ fn paper_fills_are_ordered_joined_to_their_legs_and_carry_no_signature() {
                 created_at: at(9).to_rfc3339(),
             },
         ],
-    };
+    }
+}
 
-    let fills = paper_fills(history, ChainId::Solana);
-    let kinds: Vec<&str> = fills.iter().map(|fill| fill.kind.as_str()).collect();
-    assert_eq!(kinds, ["entry", "partial", "exit"]);
-    assert_eq!(fills[0].strategy_id.as_deref(), Some("paper-entry"));
-    assert_eq!(fills[0].quote, Some(serde_json::json!({"model": "quote"})));
+#[test]
+fn paper_records_are_ordered_and_joined_to_their_legs() {
+    let (entries, exits) = paper_records(round_history(), ChainId::Solana);
+
+    assert_eq!(entries.len(), 1);
+    assert!(!entries[0].is_dca);
+    assert_eq!(entries[0].strategy_id.as_deref(), Some("paper-entry"));
     assert_eq!(
-        fills[1].strategy_id, None,
+        entries[0].quote,
+        Some(serde_json::json!({"model": "quote"}))
+    );
+    assert!(entries[0].fees_native.is_some());
+
+    let percentages: Vec<f64> = exits.iter().map(|exit| exit.percentage).collect();
+    assert_eq!(percentages, [50.0, 100.0], "exits are oldest first");
+    assert!(exits[0].is_partial);
+    assert_eq!(
+        exits[0].strategy_id, None,
         "a fill without a leg has no provenance"
     );
-    assert_eq!(fills[1].percentage, Some(50.0));
-    assert_eq!(fills[2].strategy_id.as_deref(), Some("paper-exit"));
-    assert_eq!(fills[2].quote, None, "an unreadable quote is left out");
+    assert_eq!(exits[1].strategy_id.as_deref(), Some("paper-exit"));
+    assert_eq!(exits[1].quote, None, "an unreadable quote is left out");
+}
 
-    let json = serde_json::to_value(&fills).unwrap();
-    for fill in json.as_array().unwrap() {
-        assert!(fill.get("transaction_signature").is_none(), "{fill}");
-        assert!(fill.get("signature").is_none(), "{fill}");
-    }
+/// The paper round and the live round of the same shape build the same response: the
+/// book is the only difference, a paper round has no swap pending and takes no manual
+/// add, and a record carries its provenance only when the paper leg gave it one.
+#[tokio::test]
+async fn a_paper_round_builds_the_live_details_shape_with_its_paper_provenance() {
+    crate::config::utils::install_default_config();
+    let (entries, exits) = paper_records(round_history(), ChainId::Solana);
+    let paper =
+        build_position_details(&round(7, true, 0.1, None), entries, exits, Vec::new()).await;
+    let paper = serde_json::to_value(paper).unwrap();
+
+    assert_eq!(paper["book"], "paper");
+    assert_eq!(paper["pending_swaps"], serde_json::json!([]));
+    assert_eq!(paper["position"]["id"], 7);
+    assert_eq!(paper["position"]["mint"], "PaperRouteMint7");
+    assert_eq!(paper["position"]["default_add_size_native"], Value::Null);
+    assert_eq!(paper["entries"][0]["strategy_id"], "paper-entry");
+    assert_eq!(paper["entries"][0]["quote"]["model"], "quote");
+    assert_eq!(paper["entries"][0]["transaction_signature"], "paper:entry");
+    assert!(paper["exits"][0].get("strategy_id").is_none());
+    assert!(paper["exits"][0].get("quote").is_none());
+    assert_eq!(paper["exits"][1]["strategy_id"], "paper-exit");
+    assert!(paper["exits"][1].get("quote").is_none());
+
+    let mut live_round = round(8, true, 0.1, None);
+    live_round.book = Book::Live;
+    let live = build_position_details(&live_round, Vec::new(), Vec::new(), Vec::new()).await;
+    let live = serde_json::to_value(live).unwrap();
+    assert_eq!(live["book"], "live");
+    let keys =
+        |value: &Value| -> Vec<String> { value.as_object().unwrap().keys().cloned().collect() };
+    assert_eq!(keys(&paper), keys(&live), "both books answer one shape");
+    assert_eq!(keys(&paper["position"]), keys(&live["position"]));
 }

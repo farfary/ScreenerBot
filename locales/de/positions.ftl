@@ -422,6 +422,7 @@ positions-event-native-amount = { -sol }-Menge
 positions-event-cost-basis = Einstandsbasis
 positions-event-usd-value = USD-Wert
 positions-event-network-fee = Netzwerkgebühr
+positions-event-strategy = Strategie
 positions-event-router = Router
 positions-event-slot = Slot
 positions-event-chain-status = Chain-Status

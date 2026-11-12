@@ -430,6 +430,7 @@ positions-event-native-amount = Montant en { -sol }
 positions-event-cost-basis = Prix de revient
 positions-event-usd-value = Valeur en USD
 positions-event-network-fee = Frais de réseau
+positions-event-strategy = Stratégie
 positions-event-router = Routeur
 positions-event-slot = Slot
 positions-event-chain-status = Statut on-chain

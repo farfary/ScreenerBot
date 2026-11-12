@@ -18,7 +18,7 @@ export function createStatsTables({ DataTable, Utils, emptyText }) {
   const esc = Utils.escapeHtml;
   const tables = new Map();
   const painted = new Map();
-  // The book the shown rows belong to; only a live row opens the position details.
+  // The book the shown rows belong to; a recent round opens its details from that book.
   let shownBook = "live";
   // The window of the shown rows, which an emptied table names.
   let shownPeriod = null;
@@ -79,14 +79,14 @@ export function createStatsTables({ DataTable, Utils, emptyText }) {
     });
   }
 
-  /** Open the details of a live round; the dialog reads the live book only. */
+  /** Open the details of a round of the shown book. */
   async function openDetails(row) {
-    if (shownBook !== "live" || row.position_id == null) return;
+    if (row.position_id == null) return;
     // The dialog module installs the listener this event reaches; it loads on first use.
     await import("../../ui/position_details_dialog.js");
     window.dispatchEvent(
       new CustomEvent("screenerbot:open-position-details", {
-        detail: { id: row.position_id, mint: row.mint, symbol: row.symbol },
+        detail: { id: row.position_id, mint: row.mint, symbol: row.symbol, book: shownBook },
       })
     );
   }

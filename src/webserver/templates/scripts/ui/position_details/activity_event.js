@@ -243,6 +243,10 @@ function renderDetails(event, ctx) {
       I18n.t("positions-event-network-fee"),
       fee != null && fee > 0 ? ctx.formatSol(fee) : null
     ),
+    metric(
+      I18n.t("positions-event-strategy"),
+      event.strategy_id ? Utils.escapeHtml(event.strategy_id) : null
+    ),
     metric(I18n.t("positions-event-router"), event.router ? Utils.escapeHtml(event.router) : null),
     metric(
       I18n.t("positions-event-slot"),

@@ -523,6 +523,7 @@ positions-event-native-amount = Сума в { -sol }
 positions-event-cost-basis = Собівартість
 positions-event-usd-value = Вартість у USD
 positions-event-network-fee = Комісія мережі
+positions-event-strategy = Стратегія
 positions-event-router = Маршрутизатор
 positions-event-slot = Слот
 positions-event-chain-status = Статус у мережі

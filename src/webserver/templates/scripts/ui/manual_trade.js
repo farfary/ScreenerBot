@@ -24,6 +24,7 @@ import * as Utils from "../core/utils.js";
 import { tradeToastKey } from "../core/action_toasts.js";
 import { requestManager, errorMessageOf } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
+import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { setupRequired } from "./access_gate.js";
 import { fetchBlacklistEntry } from "./token_blacklist.js";
 
@@ -393,5 +394,44 @@ export async function submitTrade({ action, mint, result, btn = null }) {
     return false;
   } finally {
     if (btn) btn.disabled = false;
+  }
+}
+
+/**
+ * Close the open paper round `id` in full at a paper fill once the user confirms. No swap
+ * is sent. The positions row action and the position details dialog both close through
+ * here.
+ *
+ * @param {Object} options
+ * @param {number|string|null} options.id - the paper round's id
+ * @param {string} [options.symbol] - the token ticker the confirmation names
+ * @param {HTMLElement} [options.btn] - disabled while the request runs; it stays disabled
+ *   once the round closed, because the caller repaints without it
+ * @returns {Promise<boolean>} true when the round was closed (false = cancelled or failed)
+ */
+export async function closePaperRound({ id, symbol, btn = null }) {
+  if (id == null) {
+    Utils.showToast(I18n.t("positions-toast-not-found"), "error");
+    return false;
+  }
+  const choice = await ConfirmationDialog.show({
+    title: I18n.t("positions-paper-close-title"),
+    message: I18n.t("positions-paper-close-message", { symbol: symbol || "?" }),
+    confirmLabel: I18n.t("positions-paper-close-confirm"),
+    variant: "warning",
+  });
+  if (!choice?.confirmed) return false;
+  if (btn) btn.disabled = true;
+  try {
+    await requestManager.fetch(`/api/positions/paper/${encodeURIComponent(id)}/close`, {
+      method: "POST",
+      priority: "high",
+    });
+    Utils.showToast(I18n.t("positions-toast-paper-closed"), "success");
+    return true;
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    Utils.showToast(err?.message || I18n.t("positions-paper-close-failed"), "error");
+    return false;
   }
 }

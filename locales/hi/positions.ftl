@@ -421,6 +421,7 @@ positions-event-native-amount = { -sol } राशि
 positions-event-cost-basis = कॉस्ट बेसिस
 positions-event-usd-value = USD वैल्यू
 positions-event-network-fee = नेटवर्क फ़ीस
+positions-event-strategy = स्ट्रैटेजी
 positions-event-router = राउटर
 positions-event-slot = स्लॉट
 positions-event-chain-status = चेन स्टेटस

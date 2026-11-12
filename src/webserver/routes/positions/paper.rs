@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Paper book routes under `/positions/paper`: its rounds, stats, account and run reset,
-//! a round's fills, and the manual close of a paper round. They read and write the paper
+//! a round's details, and the manual close of a paper round. They read and write the paper
 //! store only; no live position route accepts a paper round.
 
 use std::sync::Arc;
@@ -19,7 +19,6 @@ use crate::chains::ChainId;
 use crate::database::catalog;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::positions::db::PaperLegRecord;
 use crate::positions::paper::{PaperAccount, PaperBook, PaperRoundHistory};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::middleware::store_gate;
@@ -27,10 +26,9 @@ use crate::webserver::routes::trader::{trade_response, trader_failure};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::success_response;
 
-use super::list::{map_position_to_response_async, position_responses, positions_stats};
-use super::types::{
-    PaperAccountResponse, PaperFillResponse, PaperPositionDetailResponse, PositionsQuery,
-};
+use super::detail::build_position_details;
+use super::list::{position_responses, positions_stats};
+use super::types::{EntryRecordResponse, ExitRecordResponse, PaperAccountResponse, PositionsQuery};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -138,6 +136,9 @@ fn paper_account_response(account: PaperAccount) -> PaperAccountResponse {
     }
 }
 
+/// A paper round in the shape of a live one: its booked entries and exits, each with the
+/// strategy that decided it and the quotes it filled at. A paper round has no swaps to
+/// confirm, so no swap is pending.
 async fn paper_position_details(Path(position_id): Path<i64>) -> Response {
     let book = match paper_book() {
         Ok(book) => book,
@@ -157,61 +158,43 @@ async fn paper_position_details(Path(position_id): Path<i64>) -> Response {
         Err(_) => return trader_failure(&crate::trader::Error::PaperBookUnavailable),
     };
     match book.round_history(&wallet, position_id).await {
-        Ok(history) => success_response(PaperPositionDetailResponse {
-            position: map_position_to_response_async(&position).await,
-            fills: paper_fills(history, book.chain()),
-        }),
+        Ok(history) => {
+            let (entries, exits) = paper_records(history, book.chain());
+            success_response(build_position_details(&position, entries, exits, Vec::new()).await)
+        }
         Err(error) => paper_load_failed(&error),
     }
 }
 
-/// Every fill of a paper round on `chain`, oldest first, each joined to the leg its
-/// record carries.
-fn paper_fills(history: PaperRoundHistory, chain: ChainId) -> Vec<PaperFillResponse> {
-    let adapter = crate::chains::adapter_for(chain);
-    let leg_of = |reference: &str| history.legs.iter().find(|leg| leg.leg_ref == reference);
-    let provenance = |leg: Option<&PaperLegRecord>| {
-        (
-            leg.and_then(|leg| leg.strategy_id.clone()),
-            leg.and_then(|leg| serde_json::from_str(&leg.quote_json).ok()),
-        )
-    };
-    let mut fills: Vec<PaperFillResponse> = history
-        .entries
-        .iter()
+/// The entry and exit records of a paper round on `chain`, oldest first, each joined to
+/// the leg its transaction reference names.
+fn paper_records(
+    history: PaperRoundHistory,
+    chain: ChainId,
+) -> (Vec<EntryRecordResponse>, Vec<ExitRecordResponse>) {
+    let PaperRoundHistory {
+        entries,
+        exits,
+        legs,
+    } = history;
+    let leg_of = |reference: &str| legs.iter().find(|leg| leg.leg_ref == reference);
+    let mut entries: Vec<EntryRecordResponse> = entries
+        .into_iter()
         .map(|entry| {
             let leg = leg_of(&entry.transaction_signature);
-            let (strategy_id, quote) = provenance(leg);
-            PaperFillResponse {
-                kind: if entry.is_dca { "dca" } else { "entry" }.to_owned(),
-                timestamp: entry.timestamp.timestamp(),
-                amount: entry.amount,
-                price: entry.price,
-                native_amount: entry.native_spent,
-                percentage: None,
-                fees_native: entry.fees_raw.map(|raw| adapter.raw_to_native(raw)),
-                strategy_id,
-                quote,
-            }
+            EntryRecordResponse::from_record(entry, chain).with_leg(leg)
         })
         .collect();
-    fills.extend(history.exits.iter().map(|exit| {
-        let leg = leg_of(&exit.transaction_signature);
-        let (strategy_id, quote) = provenance(leg);
-        PaperFillResponse {
-            kind: if exit.is_partial { "partial" } else { "exit" }.to_owned(),
-            timestamp: exit.timestamp.timestamp(),
-            amount: exit.amount,
-            price: exit.price,
-            native_amount: exit.native_received,
-            percentage: Some(exit.percentage),
-            fees_native: exit.fees_raw.map(|raw| adapter.raw_to_native(raw)),
-            strategy_id,
-            quote,
-        }
-    }));
-    fills.sort_by_key(|fill| fill.timestamp);
-    fills
+    let mut exits: Vec<ExitRecordResponse> = exits
+        .into_iter()
+        .map(|exit| {
+            let leg = leg_of(&exit.transaction_signature);
+            ExitRecordResponse::from_record(exit, chain).with_leg(leg)
+        })
+        .collect();
+    entries.sort_by_key(|entry| entry.timestamp);
+    exits.sort_by_key(|exit| exit.timestamp);
+    (entries, exits)
 }
 
 /// Closes the open paper round `position_id` in full at a paper fill. A round of the

@@ -40,6 +40,8 @@ export class PositionDetailsDialog {
     this.onTradeComplete = options.onTradeComplete || (() => {});
     this.dialogEl = null;
     this.positionData = null;
+    // The book the shown round belongs to: `live` or `paper`.
+    this.book = "live";
     this.fullDetails = null;
     this.isLoading = false;
     this.isOpening = false;
@@ -64,10 +66,17 @@ export class PositionDetailsDialog {
   /**
    * Show the dialog for a position.
    * @param {Object} positionData - Position row (at minimum an id or a mint)
+   * @param {Object} [options]
+   * @param {"live"|"paper"} [options.book] - the book the row was listed from; a paper
+   *   round is addressed by its id alone, which names a different round in the live book
    */
-  async show(positionData) {
+  async show(positionData, { book = "live" } = {}) {
     if (!positionData || (!positionData.id && !positionData.mint)) {
       console.error("Invalid position data provided to PositionDetailsDialog");
+      return;
+    }
+    if (book === "paper" && !positionData.id) {
+      console.error("A paper round is opened by its id");
       return;
     }
     if (this.isOpening) return;
@@ -81,6 +90,7 @@ export class PositionDetailsDialog {
     try {
       this._openSeq += 1;
       this.positionData = positionData;
+      this.book = book;
       this.fullDetails = null;
       this._resetActivityState();
 
@@ -112,9 +122,7 @@ export class PositionDetailsDialog {
     const seq = this._openSeq;
 
     try {
-      const data = await requestManager.fetch(`/api/positions/${this._getPositionKey()}/details`, {
-        priority: "high",
-      });
+      const data = await requestManager.fetch(this._detailsUrl(), { priority: "high" });
       if (seq !== this._openSeq || !this.dialogEl) return;
 
       this.fullDetails = data;
@@ -138,6 +146,14 @@ export class PositionDetailsDialog {
   _getPositionKey() {
     if (this.positionData.id) return `id:${this.positionData.id}`;
     return `mint:${this.positionData.mint}`;
+  }
+
+  /** The details endpoint of the shown round's book. */
+  _detailsUrl() {
+    if (this._isPaper()) {
+      return `/api/positions/paper/${encodeURIComponent(this.positionData.id)}/details`;
+    }
+    return `/api/positions/${this._getPositionKey()}/details`;
   }
 
   _updateDialogContent() {
@@ -173,6 +189,8 @@ export class PositionDetailsDialog {
       { label: "PositionDetails", intervalMs } // l10n-ignore: internal poller name
     );
     this.refreshPoller.start();
+    // A paper round moves with the paper book, not with the wallet's trade actions.
+    if (this._isPaper()) return;
 
     // React immediately to live buy/sell action events (SSE) so the trade controls disable
     // and enable, and pull fresh details: a manual trade's action reaches "completed" when the
@@ -266,6 +284,7 @@ export class PositionDetailsDialog {
       this.dialogEl = null;
       this._resetActivityState();
       this.positionData = null;
+      this.book = "live";
       this.fullDetails = null;
       // The instance is reused for every position: the next one derives its own timeframe.
       this._chartTimeframe = null;
@@ -289,6 +308,7 @@ export class PositionDetailsDialog {
     this.dialogEl = null;
     this._resetActivityState();
     this.positionData = null;
+    this.book = "live";
     this.fullDetails = null;
   }
 
@@ -396,7 +416,7 @@ export class PositionDetailsDialog {
     // Reflect management changes (from here or the row context menu) in this dialog.
     this._managementChangedHandler = (event) => {
       const { id, management } = event.detail || {};
-      if (id == null || id !== this._position()?.id) return;
+      if (this._isPaper() || id == null || id !== this._position()?.id) return;
       if (this.positionData) this.positionData.management = management;
       if (this.fullDetails?.position) this.fullDetails.position.management = management;
       this._renderHeader();
@@ -462,12 +482,12 @@ applyPanesMixin(PositionDetailsDialog);
 // ============================================================================
 // Lets any surface (the positions context menu, the token details Positions tab) open the
 // dialog without importing it. The lifecycle comes from the details response, so the event
-// carries only the position's identity.
+// carries only the position's identity and the book it is listed in (`live` unless named).
 
 let globalPositionDialogInstance = null;
 
 window.addEventListener("screenerbot:open-position-details", async (event) => {
-  const { id, mint, symbol } = event.detail || {};
+  const { id, mint, symbol, book = "live" } = event.detail || {};
 
   if (!id && !mint) {
     console.error("[PositionDetailsDialog] Event received without id or mint");
@@ -476,7 +496,8 @@ window.addEventListener("screenerbot:open-position-details", async (event) => {
 
   if (globalPositionDialogInstance?.dialogEl) {
     const current = globalPositionDialogInstance.positionData;
-    if ((id && current?.id === id) || (!id && current?.mint === mint)) return;
+    const sameBook = globalPositionDialogInstance.book === book;
+    if (sameBook && ((id && current?.id === id) || (!id && current?.mint === mint))) return;
     globalPositionDialogInstance.close();
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
@@ -485,7 +506,7 @@ window.addEventListener("screenerbot:open-position-details", async (event) => {
     globalPositionDialogInstance = new PositionDetailsDialog();
   }
 
-  await globalPositionDialogInstance.show({ id, mint, symbol: symbol || "" });
+  await globalPositionDialogInstance.show({ id, mint, symbol: symbol || "" }, { book });
 });
 
 // ============================================================================

@@ -94,6 +94,8 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
         transaction_signature: ENTRY_SIG.to_owned(),
         is_dca: false,
         fees_native: None,
+        strategy_id: None,
+        quote: None,
     }];
 
     let mut events: Vec<ActivityEvent> =
@@ -147,6 +149,8 @@ fn a_round_whose_dca_adds_have_no_record_is_priced_against_its_whole_basis() {
         transaction_signature: ENTRY_SIG.to_owned(),
         is_dca: false,
         fees_native: None,
+        strategy_id: None,
+        quote: None,
     }];
     let exits = vec![ExitRecordResponse {
         id: Some(1),
@@ -158,6 +162,8 @@ fn a_round_whose_dca_adds_have_no_record_is_priced_against_its_whole_basis() {
         is_partial: false,
         percentage: 100.0,
         fees_native: None,
+        strategy_id: None,
+        quote: None,
     }];
 
     let mut events: Vec<ActivityEvent> =
@@ -207,6 +213,8 @@ fn a_closed_rounds_exits_add_up_to_its_basis_and_pnl() {
         transaction_signature: ENTRY_SIG.to_owned(),
         is_dca: false,
         fees_native: None,
+        strategy_id: None,
+        quote: None,
     }];
     let exit_at = position.exit_time.unwrap().timestamp();
     let exits = vec![
@@ -220,6 +228,8 @@ fn a_closed_rounds_exits_add_up_to_its_basis_and_pnl() {
             is_partial: true,
             percentage: 33.3,
             fees_native: None,
+            strategy_id: None,
+            quote: None,
         },
         ExitRecordResponse {
             id: Some(2),
@@ -231,6 +241,8 @@ fn a_closed_rounds_exits_add_up_to_its_basis_and_pnl() {
             is_partial: false,
             percentage: 100.0,
             fees_native: None,
+            strategy_id: None,
+            quote: None,
         },
     ];
 

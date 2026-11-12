@@ -31,7 +31,6 @@ use super::types::{
     ActivityEvent, ActivityPositionSummary, ActivityStateChange, ActivityTotals,
     EntryRecordResponse, ExitRecordResponse, TokenActivityResponse,
 };
-use crate::chains::adapter;
 use crate::chains::RawAmount;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
@@ -460,37 +459,19 @@ async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<Exi
         return (Vec::new(), Vec::new());
     };
 
+    let chain = crate::chains::active_chain();
     let entries = positions::get_entry_history(id)
         .await
         .unwrap_or_default()
         .into_iter()
-        .map(|record| EntryRecordResponse {
-            id: record.id,
-            timestamp: record.timestamp.timestamp(),
-            amount: record.amount,
-            price: record.price,
-            native_spent: record.native_spent,
-            transaction_signature: record.transaction_signature,
-            is_dca: record.is_dca,
-            fees_native: record.fees_raw.map(|l| adapter().raw_to_native(l)),
-        })
+        .map(|record| EntryRecordResponse::from_record(record, chain))
         .collect();
 
     let exits = positions::get_exit_history(id)
         .await
         .unwrap_or_default()
         .into_iter()
-        .map(|record| ExitRecordResponse {
-            id: record.id,
-            timestamp: record.timestamp.timestamp(),
-            amount: record.amount,
-            price: record.price,
-            native_received: record.native_received,
-            transaction_signature: record.transaction_signature,
-            is_partial: record.is_partial,
-            percentage: record.percentage,
-            fees_native: record.fees_raw.map(|l| adapter().raw_to_native(l)),
-        })
+        .map(|record| ExitRecordResponse::from_record(record, chain))
         .collect();
 
     (entries, exits)

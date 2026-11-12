@@ -94,6 +94,7 @@
             id: context.id,
             mint: context.mint,
             symbol: context.symbol,
+            book: context.element?.dataset?.book || "live",
           },
         })
       );

@@ -6,7 +6,8 @@
  * Activity section of the Position Details dialog: the token's whole history in this wallet,
  * set under the chart. Several positions on one token are grouped into trading rounds; a token
  * traded once shows its events directly. Wallet transactions that never belonged to a
- * position get a group of their own.
+ * position get a group of their own. A paper round has no wallet history: its booked fills,
+ * read from the details response, are its whole activity.
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
@@ -68,6 +69,13 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const pos = details?.position;
     if (!pos) return;
 
+    if (this._isPaper()) {
+      this._activity = this._paperActivity(details);
+      this._activityError = null;
+      this._paintActivity();
+      return;
+    }
+
     const trigger = [
       details.entries?.length ?? 0,
       details.exits?.length ?? 0,
@@ -84,6 +92,84 @@ export function applyActivityMixin(PositionDetailsDialog) {
       this._activityTrigger = trigger;
       this._fetchActivity();
     }
+  };
+
+  /**
+   * The activity of a paper round in the shape the activity endpoint answers with: the
+   * round's booked entries and exits oldest first, none with a transaction signature.
+   */
+  proto._paperActivity = function (details) {
+    const pos = details.position;
+    const entries = (details.entries || []).map((entry, index) => ({
+      kind: entry.is_dca ? "dca" : "entry",
+      side: "entry",
+      sequence: index + 1,
+      state: "confirmed",
+      signature: null,
+      timestamp: entry.timestamp,
+      position_id: pos.id,
+      position_index: 1,
+      recorded: true,
+      record_id: entry.id,
+      token_amount: this._toUiAmount(entry.amount),
+      price: entry.price,
+      sol_amount: entry.sol_spent,
+      record_fee_native: entry.fees_native,
+      strategy_id: entry.strategy_id ?? null,
+    }));
+    const exits = (details.exits || []).map((exit, index) => ({
+      kind: exit.is_partial ? "partial_exit" : "exit",
+      side: "exit",
+      sequence: index + 1,
+      state: "confirmed",
+      signature: null,
+      timestamp: exit.timestamp,
+      position_id: pos.id,
+      position_index: 1,
+      recorded: true,
+      record_id: exit.id,
+      token_amount: this._toUiAmount(exit.amount),
+      price: exit.price,
+      sol_amount: exit.sol_received,
+      exit_percentage: exit.percentage,
+      record_fee_native: exit.fees_native,
+      strategy_id: exit.strategy_id ?? null,
+    }));
+    const events = [...entries, ...exits].sort((a, b) => a.timestamp - b.timestamp);
+    const sum = (records) => records.reduce((total, record) => total + record.sol_amount, 0);
+    const invested = sum(entries);
+    const returned = sum(exits);
+    const realized = pos.pnl ?? 0;
+
+    return {
+      symbol: pos.symbol,
+      native_price_usd: details.native_price_usd,
+      events,
+      state_history: [],
+      positions: [
+        {
+          id: pos.id,
+          index: 1,
+          opened_at: pos.entry_time,
+          closed_at: pos.exit_time ?? null,
+          is_open: pos.status === "open",
+          archived: false,
+          swaps: events.length,
+          native_invested: invested,
+          native_returned: returned,
+          realized_pnl: realized,
+        },
+      ],
+      totals: {
+        events: events.length,
+        entries: entries.length,
+        exits: exits.length,
+        wallet_events: 0,
+        native_invested: invested,
+        native_returned: returned,
+        realized_pnl: realized,
+      },
+    };
   };
 
   proto._fetchActivity = async function () {

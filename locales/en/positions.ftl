@@ -503,6 +503,7 @@ positions-event-native-amount = { -sol } amount
 positions-event-cost-basis = Cost basis
 positions-event-usd-value = USD value
 positions-event-network-fee = Network fee
+positions-event-strategy = Strategy
 positions-event-router = Router
 positions-event-slot = Slot
 positions-event-chain-status = Chain status

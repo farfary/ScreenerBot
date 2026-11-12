@@ -493,6 +493,7 @@ positions-event-native-amount = { -sol } 数量
 positions-event-cost-basis = 成本
 positions-event-usd-value = USD 价值
 positions-event-network-fee = 网络费用
+positions-event-strategy = 策略
 positions-event-router = 路由
 positions-event-slot = 插槽
 positions-event-chain-status = 链上状态

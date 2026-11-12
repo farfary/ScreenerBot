@@ -440,6 +440,7 @@ positions-event-native-amount = Сумма в { -sol }
 positions-event-cost-basis = Базовая стоимость
 positions-event-usd-value = Стоимость в USD
 positions-event-network-fee = Комиссия сети
+positions-event-strategy = Стратегия
 positions-event-router = Роутер
 positions-event-slot = Слот
 positions-event-chain-status = Статус в блокчейне
