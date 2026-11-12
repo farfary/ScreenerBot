@@ -29,12 +29,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/", post(add_target))
         .route("/{id}", delete(remove_target))
         .route("/{id}/enabled", post(set_target_enabled))
-        .route("/{id}/budget", post(set_target_budget))
         .route(
             "/{id}/high-activity-approval",
             post(set_high_activity_approval),
         )
-        .route("/{id}/resume", post(resume_target))
         .route("/{id}/status", get(get_status))
 }
 
@@ -63,17 +61,6 @@ struct TargetResponse {
 #[derive(Deserialize)]
 struct SetEnabledRequest {
     enabled: bool,
-}
-
-#[derive(Deserialize)]
-struct SetBudgetRequest {
-    page_budget: usize,
-}
-
-#[derive(Deserialize)]
-struct ResumeRequest {
-    page_budget: usize,
-    acknowledge_missed_activity: bool,
 }
 
 #[derive(Deserialize)]
@@ -191,20 +178,6 @@ async fn set_target_enabled(
             );
             watch_failure(&e, ids::ERRORS_WALLET_WATCH_UPDATE_FAILED).into_response()
         }
-    }
-}
-
-async fn set_target_budget(Path(id): Path<i64>, Json(request): Json<SetBudgetRequest>) -> Response {
-    match watch::update_target_page_budget(id, request.page_budget).await {
-        Ok(()) => success_response(serde_json::json!({})),
-        Err(error) => watch_failure(&error, ids::ERRORS_WALLET_WATCH_BUDGET_FAILED).into_response(),
-    }
-}
-
-async fn resume_target(Path(id): Path<i64>, Json(request): Json<ResumeRequest>) -> Response {
-    match watch::resume_target(id, request.page_budget, request.acknowledge_missed_activity).await {
-        Ok(()) => success_response(serde_json::json!({})),
-        Err(error) => watch_failure(&error, ids::ERRORS_WALLET_WATCH_RESUME_FAILED).into_response(),
     }
 }
 

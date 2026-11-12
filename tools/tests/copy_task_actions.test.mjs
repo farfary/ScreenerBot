@@ -104,14 +104,13 @@ test("the task action row uses one button style", async (t) => {
   }
 });
 
-test("a watch over its limit is restored from the notice under the tab row", async (t) => {
+test("a failed watch is retried from the notice under the tab row", async (t) => {
   const task = fixture("copy_workspace.json");
   task.enabled = false;
-  task.recovery = "restore_watch";
-  task.pause_reason = { kind: "watch_budget_exceeded", page_budget: 5, signatures_checked: 500 };
+  task.recovery = "retry_watch";
+  task.pause_reason = { kind: "helius_unavailable" };
   const watch = fixture("wallets_watch_status.json");
   watch.target.enabled = false;
-  watch.catch_up_options = [{ provider: "helius", available: true }];
   const { page, origin } = await openCopy(t, {
     [`/api/copy-trading/tasks/${task.id}/workspace`]: JSON.stringify(task),
     [`/api/wallets/watch/${watch.target.id}/status`]: JSON.stringify(watch),
@@ -120,40 +119,15 @@ test("a watch over its limit is restored from the notice under the tab row", asy
   await page.waitForSelector(PAGE_READY);
 
   const notice = page.locator("#copy-ws-notices .notice");
-  const restore = notice.locator("[data-action='restore-watch']");
-  await restore.waitFor();
-  assert.equal(strip(await restore.textContent()), "Restore wallet watch");
+  const retry = notice.locator("[data-action='retry-watch']");
+  await retry.waitFor();
+  assert.equal(strip(await retry.textContent()), "Retry wallet watch");
   assert.equal(await page.locator("#copy-ws-actions [data-ws-action='resume']").count(), 0);
-  assert.equal(await page.locator("#copy-ws-actions [data-ws-action='resume-budget']").count(), 0);
   const layout = await page.evaluate(() => {
     const box = (selector) => document.querySelector(selector).getBoundingClientRect();
     return { tabs: box("#copy-ws-tabs"), notices: box("#copy-ws-notices") };
   });
   assert.ok(layout.tabs.bottom <= layout.notices.top, "the notice sits below the tab row");
-
-  await restore.click();
-  const dialog = page.locator("#copy-watch-restore:not([hidden])");
-  await dialog.locator("[data-restore-action='approve-helius']").waitFor();
-  const choices = await dialog.locator("[data-restore-action]").evaluateAll((nodes) =>
-    nodes.map((node) => {
-      const style = getComputedStyle(node);
-      return {
-        action: node.dataset.restoreAction,
-        variant: ["btn-primary", "btn-outline"].find((name) => node.classList.contains(name)),
-        legible: style.color !== style.backgroundColor,
-      };
-    })
-  );
-  assert.deepEqual(
-    choices.map(({ action, variant }) => `${action}:${variant}`),
-    ["approve-helius:btn-primary", "resume-budget:btn-outline"]
-  );
-  for (const choice of choices) assert.ok(choice.legible, `${choice.action} is legible`);
-
-  const resume = dialog.locator("[data-restore-action='resume-budget']");
-  assert.ok(await resume.isDisabled(), "resuming from now waits for the acknowledgement");
-  await dialog.locator("[data-watch-resume-ack]").check();
-  assert.ok(await resume.isEnabled(), "the acknowledgement enables resuming from now");
 });
 
 test("the toolbar offers one bulk action that follows the task states", async (t) => {

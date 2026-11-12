@@ -35,18 +35,6 @@
   line-height: 1.4;
 }
 
-#watch-budget-resume-notice {
-  border-top: 1px solid var(--border-color);
-  padding-top: var(--spacing-md);
-}
-
-#watch-budget-resume-notice p {
-  margin: 0 0 var(--spacing-sm);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-}
-
 .watch-helius-option {
   border-bottom: 1px solid var(--border-color);
   padding-bottom: var(--spacing-md);

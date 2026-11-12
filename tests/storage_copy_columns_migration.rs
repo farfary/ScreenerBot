@@ -352,7 +352,7 @@ fn a_v9_store_drops_the_position_link_table_and_keeps_its_rows() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (13, 13));
+    assert_eq!(ledger, (14, 13));
     let fk_violations = conn
         .prepare("PRAGMA foreign_key_check")
         .unwrap()
@@ -425,7 +425,7 @@ fn a_released_partial_stop_loss_override_is_turned_off_once() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (13, 13));
+    assert_eq!(ledger, (14, 13));
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .unwrap();
@@ -781,7 +781,7 @@ fn a_v11_store_gains_the_paper_round_exit_state() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (13, 13));
+    assert_eq!(ledger, (14, 13));
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .unwrap();

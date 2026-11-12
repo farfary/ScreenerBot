@@ -4,6 +4,7 @@
 //! Tests for WatchDatabase - the pre-chain-identity rebuild, target and cursor round trips, and the budget and provider pause and resume lifecycle.
 
 use super::*;
+use crate::database::WriteTransaction;
 
 /// The pre-chain-identity shape a real `wallets.db` still has on disk.
 const LEGACY_WATCH_TARGETS: &str = "CREATE TABLE watch_targets (\n\
@@ -252,63 +253,62 @@ async fn removing_one_source_preserves_the_shared_target_and_cursor() {
 }
 
 #[tokio::test]
-async fn budget_pause_persists_across_reopen_and_blocks_implicit_reenable() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("wallets.db");
-    let db = WatchDatabase::new_with_path(&path, ChainId::Solana).unwrap();
-    let target = db.insert_alert_target("Budget1111", None).await.unwrap();
-    let id = target.id.unwrap();
-    db.set_page_budget(id, 8).await.unwrap();
+async fn a_signature_budget_pause_is_watched_again_from_its_cursor() {
+    let (db, _dir) = temp_db();
+    let budget = db.insert_alert_target("Budget1111", None).await.unwrap();
+    let user = db.insert_alert_target("User1111", None).await.unwrap();
     db.set_cursor("Budget1111", "last-complete-check")
         .await
         .unwrap();
-    db.pause_for_budget(id, 8, 800).await.unwrap();
-    drop(db);
+    db.set_enabled(user.id.unwrap(), false).await.unwrap();
+    {
+        let conn = db.conn().unwrap();
+        conn.execute(
+            "UPDATE watch_targets SET enabled = 0, disable_reason_json = \
+             '{\"kind\":\"signature_budget\",\"page_budget\":8,\"signatures_checked\":800}' \
+             WHERE address = 'Budget1111'",
+            [],
+        )
+        .unwrap();
+        let mut conn = db.conn().unwrap();
+        let tx = conn.write_tx().unwrap();
+        WatchDatabase::retire_signature_budget(&tx).unwrap();
+        WatchDatabase::retire_signature_budget(&tx).unwrap();
+        tx.commit().unwrap();
+    }
 
-    let reopened = WatchDatabase::new_with_path(&path, ChainId::Solana).unwrap();
-    let paused = reopened.get_target(id).await.unwrap().unwrap();
-    assert!(!paused.enabled);
-    assert_eq!(paused.page_budget, 8);
+    let resumed = db.get_target(budget.id.unwrap()).await.unwrap().unwrap();
+    assert!(resumed.enabled);
+    assert_eq!(resumed.disable_reason, None);
     assert_eq!(
-        paused.disable_reason,
-        Some(WatchDisableReason::SignatureBudget {
-            page_budget: 8,
-            signatures_checked: 800,
-        })
-    );
-    assert_eq!(
-        reopened.get_cursor("Budget1111").await.unwrap().as_deref(),
+        db.get_cursor("Budget1111").await.unwrap().as_deref(),
         Some("last-complete-check")
     );
+    let paused = db.get_target(user.id.unwrap()).await.unwrap().unwrap();
+    assert!(!paused.enabled, "only budget pauses are released");
+    assert_eq!(paused.disable_reason, Some(WatchDisableReason::User));
+}
 
-    assert!(matches!(
-        reopened.set_enabled(id, true).await,
-        Err(Error::WatchBudgetAcknowledgementRequired { .. })
-    ));
-    reopened.set_enabled(id, false).await.unwrap();
-    assert!(
-        matches!(
-            reopened.set_enabled(id, true).await,
-            Err(Error::WatchBudgetAcknowledgementRequired { .. })
-        ),
-        "ordinary disable must not clear the budget safety pause"
+#[tokio::test]
+async fn an_unreadable_pause_reason_is_re_enabled_like_a_user_pause() {
+    let (db, _dir) = temp_db();
+    let target = db.insert_alert_target("Unknown1111", None).await.unwrap();
+    let id = target.id.unwrap();
+    db.conn()
+        .unwrap()
+        .execute(
+            "UPDATE watch_targets SET enabled = 0, disable_reason_json = '{\"kind\":\"retired\"}' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
+    assert_eq!(
+        db.get_target(id).await.unwrap().unwrap().disable_reason,
+        Some(WatchDisableReason::Unknown)
     );
-    reopened.set_page_budget(id, 12).await.unwrap();
-    let still_paused = reopened.get_target(id).await.unwrap().unwrap();
-    assert!(
-        !still_paused.enabled,
-        "editing a budget is not a resume action"
-    );
-    assert!(matches!(
-        still_paused.disable_reason,
-        Some(WatchDisableReason::SignatureBudget { .. })
-    ));
-    assert!(matches!(
-        reopened
-            .upsert_source("Budget1111", None, WatchSource::Copy { task_id: 7 })
-            .await,
-        Err(Error::WatchBudgetAcknowledgementRequired { .. })
-    ));
+    db.set_enabled(id, true).await.unwrap();
+    let enabled = db.get_target(id).await.unwrap().unwrap();
+    assert!(enabled.enabled);
+    assert_eq!(enabled.disable_reason, None);
 }
 
 #[tokio::test]
@@ -372,41 +372,12 @@ async fn processing_pause_requires_an_explicit_retry_and_preserves_its_cursor() 
 }
 
 #[tokio::test]
-async fn explicit_resume_rebaselines_cursor_and_applies_only_this_wallets_budget() {
-    let (db, _dir) = temp_db();
-    let target = db.insert_alert_target("Resume1111", None).await.unwrap();
-    let id = target.id.unwrap();
-    assert!(matches!(
-        db.resume_target_from_head(id, 9, Some("must-not-skip".into()))
-            .await,
-        Err(Error::WatchResumeNotBudgetPaused { .. })
-    ));
-    db.set_cursor("Resume1111", "old-complete-check")
-        .await
-        .unwrap();
-    db.pause_for_budget(id, 5, 500).await.unwrap();
-    db.resume_target_from_head(id, 9, Some("current-head".to_owned()))
-        .await
-        .unwrap();
-
-    let resumed = db.get_target(id).await.unwrap().unwrap();
-    assert!(resumed.enabled);
-    assert_eq!(resumed.page_budget, 9);
-    assert_eq!(resumed.disable_reason, None);
-    assert_eq!(
-        db.get_cursor("Resume1111").await.unwrap().as_deref(),
-        Some("current-head")
-    );
-}
-
-#[tokio::test]
-async fn helius_approval_is_persisted_and_restores_a_budget_pause_without_rebasing() {
+async fn helius_approval_is_persisted_and_keeps_the_saved_cursor() {
     let (db, dir) = temp_db();
     let target = db.insert_alert_target("Approved1111", None).await.unwrap();
     let id = target.id.unwrap();
     assert!(!target.high_activity_approved);
     db.set_cursor("Approved1111", "saved-cursor").await.unwrap();
-    db.pause_for_budget(id, 5, 500).await.unwrap();
 
     db.set_high_activity_approved(id, true).await.unwrap();
     let restored = db.get_target(id).await.unwrap().unwrap();

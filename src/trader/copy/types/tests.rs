@@ -8,22 +8,6 @@
 use super::*;
 
 #[test]
-fn watch_budget_pause_exposes_a_distinct_dashboard_reason() {
-    let reason = CopyPauseReason::WatchBudgetExceeded {
-        page_budget: 8,
-        signatures_checked: 800,
-    };
-    assert_eq!(
-        serde_json::to_value(reason).unwrap(),
-        serde_json::json!({
-            "kind": "watch_budget_exceeded",
-            "page_budget": 8,
-            "signatures_checked": 800
-        })
-    );
-}
-
-#[test]
 fn helius_pause_exposes_a_distinct_dashboard_reason() {
     assert_eq!(
         serde_json::to_value(CopyPauseReason::HeliusUnavailable).unwrap(),

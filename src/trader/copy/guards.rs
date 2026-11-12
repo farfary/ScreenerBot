@@ -136,7 +136,6 @@ pub(super) async fn sync_paused_watches(database: &CopyDatabase) -> crate::trade
                 task.pause_reason,
                 Some(
                     CopyPauseReason::WatchDetached
-                        | CopyPauseReason::WatchBudgetExceeded { .. }
                         | CopyPauseReason::HeliusUnavailable
                         | CopyPauseReason::WatchProcessingFailed
                 )
@@ -202,8 +201,7 @@ fn log_watch_state_error(task_id: i64, error: &crate::wallets::Error) {
 fn watch_waits_for_user(reason: &crate::wallets::watch::WatchDisableReason) -> bool {
     matches!(
         reason,
-        crate::wallets::watch::WatchDisableReason::SignatureBudget { .. }
-            | crate::wallets::watch::WatchDisableReason::Unknown
+        crate::wallets::watch::WatchDisableReason::Unknown
             | crate::wallets::watch::WatchDisableReason::HeliusUnavailable
             | crate::wallets::watch::WatchDisableReason::ProcessingFailed
     )
@@ -213,13 +211,6 @@ fn watch_pause_reason(
     reason: Option<&crate::wallets::watch::WatchDisableReason>,
 ) -> Option<CopyPauseReason> {
     match reason {
-        Some(crate::wallets::watch::WatchDisableReason::SignatureBudget {
-            page_budget,
-            signatures_checked,
-        }) => Some(CopyPauseReason::WatchBudgetExceeded {
-            page_budget: *page_budget,
-            signatures_checked: *signatures_checked,
-        }),
         Some(crate::wallets::watch::WatchDisableReason::HeliusUnavailable) => {
             Some(CopyPauseReason::HeliusUnavailable)
         }
@@ -526,13 +517,7 @@ mod tests {
     #[test]
     fn paused_watch_user_action_state_is_skipped_without_stopping_later_tasks() {
         let tasks = [
-            (
-                1,
-                WatchDisableReason::SignatureBudget {
-                    page_budget: 5,
-                    signatures_checked: 500,
-                },
-            ),
+            (1, WatchDisableReason::HeliusUnavailable),
             (2, WatchDisableReason::User),
         ];
         let reconciled: Vec<_> = tasks

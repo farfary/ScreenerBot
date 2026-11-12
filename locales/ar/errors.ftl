@@ -274,8 +274,6 @@ errors-wallet-watch-address-empty = لا يمكن أن يكون العنوان �
 errors-wallet-watch-add-failed = تعذّرت إضافة هدف المراقبة
 errors-wallet-watch-remove-failed = تعذّرت إزالة هدف المراقبة
 errors-wallet-watch-update-failed = تعذّر تحديث هدف المراقبة
-errors-wallet-watch-budget-failed = تعذّر تحديث ميزانية المراقبة
-errors-wallet-watch-resume-failed = تعذّر استئناف المراقبة
 errors-wallet-watch-approval-failed = تعذّر تحديث موافقة { -helius }
 errors-wallet-watch-status-failed = تعذّر جلب حالة المراقبة
 

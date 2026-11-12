@@ -50,6 +50,24 @@ impl WatchDatabase {
         Ok(())
     }
 
+    /// Retires the per-target signature budget: a target paused for reaching it is
+    /// watched again from its saved cursor, and skips to its head if that is more than
+    /// `poller::BACKLOG_CAP` references behind. Idempotent, and a data-only change:
+    /// the unread `page_budget` column stays for older readers.
+    pub(super) fn retire_signature_budget(tx: &rusqlite::Transaction) -> Result<(), Error> {
+        tx.execute(
+            "UPDATE watch_targets SET enabled = 1, disable_reason_json = NULL \
+             WHERE json_valid(disable_reason_json) \
+               AND json_extract(disable_reason_json, '$.kind') = 'signature_budget'",
+            [],
+        )
+        .map_err(|error| Error::Migration {
+            step: "resume signature-budget pauses".to_owned(),
+            detail: error.to_string(),
+        })?;
+        Ok(())
+    }
+
     /// Whether `table` already carries a unique index over exactly
     /// `(chain_id, address)` — the structural gate that makes both rebuilds
     /// idempotent. A freshly created database satisfies it from
@@ -160,11 +178,6 @@ impl WatchDatabase {
         .map_err(|e| migration_step("create watch_targets__chain", e))?;
 
         let chain_expr = Self::chain_source_expr(tx, "watch_targets")?;
-        let budget_expr = if ddl::has_column(tx, "watch_targets", "page_budget")? {
-            "page_budget"
-        } else {
-            "5"
-        };
         let reason_expr = if ddl::has_column(tx, "watch_targets", "disable_reason_json")? {
             "disable_reason_json"
         } else {
@@ -178,9 +191,9 @@ impl WatchDatabase {
         tx.execute(
             &format!(
                 "INSERT INTO watch_targets__chain
-                    (id, chain_id, address, label, sources, enabled, page_budget, high_activity_approved, disable_reason_json, created_at, updated_at)
+                    (id, chain_id, address, label, sources, enabled, high_activity_approved, disable_reason_json, created_at, updated_at)
                  SELECT id, {chain_expr}, address, label, sources,
-                        enabled, {budget_expr}, {approval_expr}, {reason_expr}, created_at, updated_at
+                        enabled, {approval_expr}, {reason_expr}, created_at, updated_at
                  FROM watch_targets"
             ),
             [],

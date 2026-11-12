@@ -248,8 +248,6 @@ errors-wallet-watch-address-empty = Alamat tidak boleh kosong
 errors-wallet-watch-add-failed = Gagal menambahkan target pantau
 errors-wallet-watch-remove-failed = Gagal menghapus target pantau
 errors-wallet-watch-update-failed = Gagal memperbarui target pantau
-errors-wallet-watch-budget-failed = Anggaran pantau tidak dapat diperbarui
-errors-wallet-watch-resume-failed = Pemantauan tidak dapat dilanjutkan
 errors-wallet-watch-approval-failed = Persetujuan { -helius } tidak dapat diperbarui
 errors-wallet-watch-status-failed = Gagal mengambil status pemantauan
 

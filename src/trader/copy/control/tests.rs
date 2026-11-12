@@ -796,15 +796,8 @@ async fn an_attach_never_outlives_the_task_row() {
     assert!(watched.lock().unwrap().is_empty());
 }
 
-pub(super) fn budget_pause() -> CopyPauseReason {
-    CopyPauseReason::WatchBudgetExceeded {
-        page_budget: 5,
-        signatures_checked: 500,
-    }
-}
-
 /// Every pause reason, from the one list of them, comes back the way its kind states:
-/// a resume, a watch retry or a restore of missed activity.
+/// a resume or a watch retry.
 #[test]
 fn every_pause_reason_maps_to_its_recovery() {
     let stated = [
@@ -814,7 +807,6 @@ fn every_pause_reason_maps_to_its_recovery() {
         ("storage_restored", CopyRecovery::Resume),
         ("helius_unavailable", CopyRecovery::RetryWatch),
         ("watch_processing_failed", CopyRecovery::RetryWatch),
-        ("watch_budget_exceeded", CopyRecovery::RestoreWatch),
     ];
     for reason in every_pause_reason() {
         let kind = serde_json::to_value(&reason).unwrap()["kind"]
@@ -832,8 +824,8 @@ fn every_pause_reason_maps_to_its_recovery() {
         assert_eq!(task.recovery(), Some(*recovery), "{reason:?}");
     }
     assert_eq!(
-        serde_json::to_value(CopyRecovery::RestoreWatch).unwrap(),
-        "restore_watch"
+        serde_json::to_value(CopyRecovery::RetryWatch).unwrap(),
+        "retry_watch"
     );
 }
 
@@ -865,7 +857,11 @@ fn the_status_counts_resumable_and_resumable_live_tasks() {
         task(3, TradingMode::Paper, Some(CopyPauseReason::User)),
         task(4, TradingMode::Live, Some(CopyPauseReason::WatchDetached)),
         task(5, TradingMode::Live, Some(CopyPauseReason::StorageRestored)),
-        task(6, TradingMode::Paper, Some(budget_pause())),
+        task(
+            6,
+            TradingMode::Paper,
+            Some(CopyPauseReason::WatchProcessingFailed),
+        ),
         task(
             7,
             TradingMode::Live,
@@ -931,11 +927,11 @@ fn the_summary_carries_net_pnl_and_the_recovery() {
 
     let mut paused = stored();
     paused.enabled = false;
-    paused.pause_reason = Some(budget_pause());
+    paused.pause_reason = Some(CopyPauseReason::HeliusUnavailable);
     let (summary, _) = super::summarize(&status, paused, &[], &rounds, 0.0);
-    assert_eq!(summary.recovery, Some(CopyRecovery::RestoreWatch));
+    assert_eq!(summary.recovery, Some(CopyRecovery::RetryWatch));
     assert_eq!(
         serde_json::to_value(&summary).unwrap()["recovery"],
-        "restore_watch"
+        "retry_watch"
     );
 }

@@ -27,7 +27,7 @@ fn own_watch_target(address: &str) -> WatchTarget {
         label: None,
         sources: vec![WatchSource::OwnWallet],
         enabled: true,
-        page_budget: poller::DEFAULT_PAGE_BUDGET,
+
         high_activity_approved: false,
         disable_reason: None,
         created_at: Utc::now(),
@@ -42,7 +42,7 @@ fn alert_watch_target(address: &str, rule_id: i64) -> WatchTarget {
         label: None,
         sources: vec![WatchSource::Alert { rule_id }],
         enabled: true,
-        page_budget: poller::DEFAULT_PAGE_BUDGET,
+
         high_activity_approved: false,
         disable_reason: None,
         created_at: Utc::now(),
@@ -93,7 +93,7 @@ async fn raw_overflow_switches_to_helius_and_preserves_the_prior_cursor() {
     let address = "HighModeTarget1111";
     let runtime = FakeRuntime::new(vec![address.to_owned()]);
     runtime.set_high_activity_supported(true);
-    for page in 0..poller::DEFAULT_PAGE_BUDGET {
+    for page in 0..poller::MAX_PAGES {
         runtime.queue_page_items(
             address,
             (0..poller::PAGE_SIZE)
@@ -613,10 +613,10 @@ async fn a_new_stream_mode_resubscribes_the_target_in_that_mode() {
 }
 
 #[tokio::test]
-async fn a_backlog_past_its_cap_pauses_without_advancing_the_cursor() {
+async fn a_backlog_past_its_cap_skips_to_its_head_and_keeps_watching() {
     let address = "FloodTarget1111";
     let fake = FakeRuntime::new(vec![address.to_owned()]);
-    let cap = poller::backlog_cap(poller::DEFAULT_PAGE_BUDGET);
+    let cap = poller::BACKLOG_CAP;
     for page in 0..cap / poller::PAGE_SIZE {
         fake.queue_page(
             address,
@@ -652,18 +652,18 @@ async fn a_backlog_past_its_cap_pauses_without_advancing_the_cursor() {
     }
     poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
 
-    let paused = watch_db.get_target(id).await.unwrap().unwrap();
-    assert!(!paused.enabled);
-    assert_eq!(
-        paused.disable_reason,
-        Some(crate::wallets::watch::WatchDisableReason::SignatureBudget {
-            page_budget: poller::DEFAULT_PAGE_BUDGET,
-            signatures_checked: cap,
-        })
-    );
+    let watched = watch_db.get_target(id).await.unwrap().unwrap();
+    assert!(watched.enabled, "a backlog never pauses the target");
+    assert_eq!(watched.disable_reason, None);
     assert_eq!(
         watch_db.get_cursor(address).await.unwrap().as_deref(),
-        Some("old-head")
+        Some("flood-0-0"),
+        "the cursor moves to the range's head"
+    );
+    assert!(target_runtime.catch_up.is_none() && !target_runtime.range_open);
+    assert_eq!(
+        super::super::service_state::skipped(address).map(|skip| skip.signatures),
+        Some(cap)
     );
 }
 
@@ -809,7 +809,6 @@ async fn seven_targets_read_their_ranges_independently() {
         "TargetSeven1111",
     ];
     let busy = [false, true, false, true, false, true, false];
-    let raised_budget = [false, false, false, true, false, false, false];
     let fake = FakeRuntime::new(
         addresses
             .iter()
@@ -822,14 +821,8 @@ async fn seven_targets_read_their_ranges_independently() {
     );
     let mut targets = Vec::new();
 
-    for ((address, is_busy), raised) in addresses.into_iter().zip(busy).zip(raised_budget) {
+    for (address, is_busy) in addresses.into_iter().zip(busy) {
         let inserted = watch_db.insert_alert_target(address, None).await.unwrap();
-        if raised {
-            watch_db
-                .set_page_budget(inserted.id.unwrap(), poller::DEFAULT_PAGE_BUDGET + 1)
-                .await
-                .unwrap();
-        }
         let target = watch_db
             .get_target(inserted.id.unwrap())
             .await
@@ -837,16 +830,13 @@ async fn seven_targets_read_their_ranges_independently() {
             .unwrap();
         watch_db.set_cursor(address, "old-head").await.unwrap();
         if is_busy {
-            for page in 0..poller::DEFAULT_PAGE_BUDGET {
+            for page in 0..poller::MAX_PAGES {
                 fake.queue_page(
                     address,
                     (0..poller::PAGE_SIZE)
                         .map(|item| format!("{address}-{page}-{item}"))
                         .collect(),
                 );
-            }
-            if raised {
-                fake.queue_page(address, vec![format!("{address}-tail")]);
             }
         } else {
             fake.queue_page(address, Vec::new());
@@ -859,13 +849,12 @@ async fn seven_targets_read_their_ranges_independently() {
         poll_target(target, &chain_runtime, &watch_db, own.clone(), false).await;
     }
 
-    for ((target, is_busy), raised) in targets.iter().zip(busy).zip(raised_budget) {
+    for (target, is_busy) in targets.iter().zip(busy) {
         let id = target.target.id.unwrap();
         let persisted = watch_db.get_target(id).await.unwrap().unwrap();
         assert!(persisted.enabled, "{}", persisted.address);
         assert_eq!(
-            target.range_open,
-            is_busy && !raised,
+            target.range_open, is_busy,
             "only a busy target's own range stays open: {}",
             persisted.address
         );

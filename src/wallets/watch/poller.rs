@@ -27,23 +27,14 @@ pub const INITIAL_WINDOW: usize = 100;
 /// Maximum RPC pages fetched for one target in one poll.
 pub const MAX_PAGES: usize = 5;
 
-/// Pages per poll for a target that names no budget of its own.
-pub const DEFAULT_PAGE_BUDGET: usize = MAX_PAGES;
-
-/// Upper bound for a user-selected per-wallet budget.
-pub const MAX_PAGE_BUDGET: usize = 50;
-
-/// Polls of a full budget an unfinished range may span before the target
-/// pauses. An unfinished range is read on, poll after poll; only a backlog this
-/// large (a long outage on an address referenced hundreds of times a second)
-/// stops the target instead of holding an unbounded range in memory.
+/// Polls of full pages an unfinished range may span before the target skips
+/// ahead. An unfinished range is read on, poll after poll; only a backlog this
+/// large (hours of sleep on an address referenced hundreds of times a second)
+/// is dropped instead of held in memory, and its transactions are too old to copy.
 pub const BACKLOG_POLLS: usize = 20;
 
-/// The most references an unfinished range of `page_budget` holds before the
-/// target pauses.
-pub fn backlog_cap(page_budget: usize) -> usize {
-    page_budget.clamp(1, MAX_PAGE_BUDGET) * PAGE_SIZE * BACKLOG_POLLS
-}
+/// The most references an unfinished range holds before the target skips ahead.
+pub const BACKLOG_CAP: usize = MAX_PAGES * PAGE_SIZE * BACKLOG_POLLS;
 
 /// Resolve baseline versus escalated polling without duplicating the state rule in
 /// service code or tests. `None` while a connected transport needs no baseline poll
@@ -182,7 +173,7 @@ impl CatchUpState {
     }
 }
 
-/// Advance one target by at most `page_budget` pages. Returns a replay batch only after
+/// Advance one target by at most `MAX_PAGES` pages. Returns a replay batch only after
 /// the complete range back to the durable cursor is known. Paging mechanics for
 /// the chain's wire format live behind the injected `runtime`; this function
 /// stays chain-neutral.
@@ -190,13 +181,12 @@ pub(super) async fn advance_catch_up(
     runtime: &dyn WalletWatchRuntime,
     address: &str,
     state: &mut CatchUpState,
-    page_budget: usize,
 ) -> Result<Option<CompletedCatchUp>, Error> {
     if state.is_complete() {
         return Ok(state.completed());
     }
 
-    for _ in 0..page_budget.clamp(1, MAX_PAGE_BUDGET) {
+    for _ in 0..MAX_PAGES {
         let limit = if state.initial_window {
             INITIAL_WINDOW
         } else {
@@ -372,15 +362,10 @@ mod tests {
         runtime.queue_page("Addr1111", vec!["newest".to_owned(), "older".to_owned()]);
 
         let mut state = CatchUpState::new(Some("old-cursor".to_owned()));
-        let completed = advance_catch_up(
-            runtime.as_ref(),
-            "Addr1111",
-            &mut state,
-            DEFAULT_PAGE_BUDGET,
-        )
-        .await
-        .expect("fetch succeeds")
-        .expect("range completes in one short page");
+        let completed = advance_catch_up(runtime.as_ref(), "Addr1111", &mut state)
+            .await
+            .expect("fetch succeeds")
+            .expect("range completes in one short page");
 
         assert_eq!(names(&completed), ["older", "newest"]);
         assert_eq!(completed.newest_signature.as_deref(), Some("newest"));
@@ -393,27 +378,17 @@ mod tests {
         let runtime = FakeRuntime::new(vec!["Addr1111".to_owned()]);
         runtime.queue_page("Addr1111", vec!["recent".to_owned()]);
         let mut first = CatchUpState::new(None);
-        advance_catch_up(
-            runtime.as_ref(),
-            "Addr1111",
-            &mut first,
-            DEFAULT_PAGE_BUDGET,
-        )
-        .await
-        .expect("fetch succeeds")
-        .expect("the first window completes");
+        advance_catch_up(runtime.as_ref(), "Addr1111", &mut first)
+            .await
+            .expect("fetch succeeds")
+            .expect("the first window completes");
 
         runtime.queue_page("Addr1111", vec!["newer".to_owned()]);
         let mut later = CatchUpState::new(Some("recent".to_owned()));
-        advance_catch_up(
-            runtime.as_ref(),
-            "Addr1111",
-            &mut later,
-            DEFAULT_PAGE_BUDGET,
-        )
-        .await
-        .expect("fetch succeeds")
-        .expect("a short page completes the range");
+        advance_catch_up(runtime.as_ref(), "Addr1111", &mut later)
+            .await
+            .expect("fetch succeeds")
+            .expect("a short page completes the range");
 
         assert_eq!(
             runtime.calls.lock().unwrap().page_sizes,
@@ -431,14 +406,9 @@ mod tests {
         }
 
         let mut state = CatchUpState::new(Some("durable".to_owned()));
-        let completed = advance_catch_up(
-            runtime.as_ref(),
-            "Addr1111",
-            &mut state,
-            DEFAULT_PAGE_BUDGET,
-        )
-        .await
-        .expect("fetch succeeds");
+        let completed = advance_catch_up(runtime.as_ref(), "Addr1111", &mut state)
+            .await
+            .expect("fetch succeeds");
 
         assert!(completed.is_none(), "range must stay open past MAX_PAGES");
         assert!(!state.is_complete());

@@ -13,7 +13,7 @@ use crate::trader::copy::types::{CopyOutcome, PaperDecision};
 use crate::trader::error::Error;
 use crate::trader::policy::ExitPolicyOverrides;
 
-const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_VERSION: i64 = 14;
 
 /// Version 13 moves paper copies to the shared paper book. An older core would keep
 /// booking paper copies into the archived copy book and split a task's results across
@@ -38,6 +38,11 @@ const SHARED_PAPER_BOOK_VERSION: i64 = 13;
 /// choice and must never be rewritten again. A data-only change, so v10 readers
 /// still open the store.
 const PARTIAL_OVERRIDE_RETIREMENT_VERSION: i64 = 11;
+
+/// The version whose open released the tasks paused for their wallet's watch
+/// signature budget, which no longer exists. Pinned, not `SCHEMA_VERSION`. A
+/// data-only change, so v13 readers still open the store.
+const WATCH_BUDGET_RETIREMENT_VERSION: i64 = 14;
 
 /// The schema of `copy_trading.db`.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
@@ -319,6 +324,26 @@ fn migrate(connection: &Transaction<'_>) -> crate::trader::Result<()> {
     if stored_version < SHARED_PAPER_BOOK_VERSION {
         archive_copy_paper_book(connection, chrono::Utc::now())?;
     }
+    if stored_version < WATCH_BUDGET_RETIREMENT_VERSION {
+        retire_watch_budget_pauses(connection)?;
+    }
+    Ok(())
+}
+
+/// v14: a wallet watch never pauses for its signature budget any more, so a task
+/// paused for it keeps its pause without a recorded reason. It reads as paused and
+/// comes back only through a plain resume, never by itself.
+pub(super) fn retire_watch_budget_pauses(
+    transaction: &Transaction<'_>,
+) -> crate::trader::Result<()> {
+    transaction
+        .execute(
+            "UPDATE copy_tasks SET pause_reason_json = NULL \
+             WHERE json_valid(pause_reason_json) \
+               AND json_extract(pause_reason_json, '$.kind') = 'watch_budget_exceeded'",
+            [],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
     Ok(())
 }
 

@@ -127,7 +127,6 @@ const PAUSE_SHORT_LABELS = Object.freeze({
   user: "copy-pause-short-user",
   latency_kill_switch: "copy-pause-short-latency-kill-switch",
   watch_detached: "copy-pause-short-watch-detached",
-  watch_budget_exceeded: "copy-pause-short-watch-budget-exceeded",
   helius_unavailable: "copy-pause-short-helius-unavailable",
   watch_processing_failed: "copy-pause-short-watch-processing-failed",
   storage_restored: "copy-pause-short-storage-restored",

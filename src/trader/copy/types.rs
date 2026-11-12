@@ -57,10 +57,6 @@ pub enum CopyPauseReason {
         threshold_ms: u64,
     },
     WatchDetached,
-    WatchBudgetExceeded {
-        page_budget: usize,
-        signatures_checked: usize,
-    },
     HeliusUnavailable,
     WatchProcessingFailed,
     /// The copy store opened with restored or recreated contents, so budgets, claims and
@@ -76,8 +72,6 @@ pub enum CopyRecovery {
     Resume,
     /// The watch provider or its processing failed; the watch is retried first.
     RetryWatch,
-    /// The wallet outran its watch budget, so missed activity must be restored first.
-    RestoreWatch,
 }
 
 impl CopyPauseReason {
@@ -90,7 +84,6 @@ impl CopyPauseReason {
             | Self::WatchDetached
             | Self::StorageRestored => CopyRecovery::Resume,
             Self::HeliusUnavailable | Self::WatchProcessingFailed => CopyRecovery::RetryWatch,
-            Self::WatchBudgetExceeded { .. } => CopyRecovery::RestoreWatch,
         }
     }
 }

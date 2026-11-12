@@ -17,7 +17,7 @@ import { renderExecution } from "./execution.js";
 import { renderRules } from "./rules.js";
 import { createHoldings } from "./holdings.js";
 import { createActivity } from "./activity.js";
-import { postWatch, watchTarget } from "./watch_restore.js";
+import { postWatch, watchTarget } from "./api.js";
 
 /** Analytics are heavier than the workspace read; a poll refreshes them at most this often. */
 const INSIGHTS_TTL_MS = 15_000;
@@ -71,20 +71,17 @@ const STATE_DETAIL_LABELS = Object.freeze({
 const PAUSE_HINTS = Object.freeze({
   latency_kill_switch: "copy-paused-resume-latency",
   watch_detached: "copy-paused-resume-detached",
-  watch_budget_exceeded: "copy-watch-recovery-budget-intro",
   helius_unavailable: "copy-watch-recovery-provider-failed",
   watch_processing_failed: "copy-watch-recovery-processing-failed",
 });
 
 /** The notice action of each way back the server names (`recovery`); a plain resume has none. */
 const RECOVERY_ACTIONS = Object.freeze({
-  restore_watch: "restore-watch",
   retry_watch: "retry-watch",
 });
 
 /** Message key of each recovery action's label. */
 const RECOVERY_LABELS = Object.freeze({
-  restore_watch: "copy-watch-recovery-title",
   retry_watch: "copy-action-retry-watch",
 });
 
@@ -269,7 +266,9 @@ export function createWorkspace(page) {
   function watchStatusHtml(task) {
     const watch = watchStatuses.get(task.target_address);
     const status = watch?.status;
-    if (!status?.target?.enabled || status.mode !== "helius_high_activity") return "";
+    if (!status?.target?.enabled) return "";
+    if (status.stream_unavailable) return `<small>${esc(I18n.t("copy-watch-no-stream"))}</small>`;
+    if (status.mode !== "helius_high_activity") return "";
     const watching = status.catching_up
       ? I18n.t("copy-watch-state-catching-up")
       : I18n.t("copy-watch-state-watching");
@@ -476,9 +475,7 @@ export function createWorkspace(page) {
   function runNoticeAction(action, button) {
     const task = current() || selectedSummary();
     if (!task) return;
-    if (action === "restore-watch") {
-      page.watchRestore.open(task, watchStatuses.get(task.target_address)?.status);
-    } else if (action === "retry-watch") {
+    if (action === "retry-watch") {
       void retryWatch(task, button);
     } else if (action === "edit-rules") {
       page.editor.openEdit(task, EXITS_STEP);

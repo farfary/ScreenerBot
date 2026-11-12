@@ -53,6 +53,12 @@ pub trait WalletWatchRuntime: Send + Sync {
     /// True while the shared realtime transport is connected.
     fn is_connected(&self) -> bool;
 
+    /// True when no configured endpoint serves the realtime subscriptions at all, so
+    /// every target is polled. A transport that is only reconnecting answers `false`.
+    fn stream_unavailable(&self) -> bool {
+        false
+    }
+
     /// Whether a connected transport still needs the baseline signature poll.
     /// A transport whose every notification triggers a gap-fill (the service
     /// version stream) answers `false`: while it is connected nothing is polled.

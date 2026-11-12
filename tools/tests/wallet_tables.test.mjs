@@ -241,12 +241,9 @@ test("a paused watched wallet shows its short reason and carries the full senten
   );
   assert.equal(
     (await state.textContent()).replace(/[\u2068\u2069]/g, "").trim(),
-    "Paused · watch limit"
+    "Paused · by you"
   );
-  assert.equal(
-    await state.getAttribute("title"),
-    "This wallet has more activity than its current watch can check."
-  );
+  assert.equal(await state.getAttribute("title"), "Paused by you.");
   assert.equal(
     await page.locator(`${WATCHED} tr[data-row-id="3"] .watched-wallet-reason`).count(),
     0,
@@ -254,21 +251,21 @@ test("a paused watched wallet shows its short reason and carries the full senten
   );
 });
 
-async function openBudgetModal(page) {
+async function openOptionsModal(page) {
   await page
-    .locator(`${WATCHED} tr[data-row-id="1"] .dt-action-btn[data-action-id="budget"]`)
+    .locator(`${WATCHED} tr[data-row-id="1"] .dt-action-btn[data-action-id="options"]`)
     .click();
-  await page.waitForSelector("#watch-budget-modal:not([hidden])");
+  await page.waitForSelector("#watch-options-modal:not([hidden])");
 }
 
-test("Escape closes the watch budget modal", async (t) => {
+test("Escape closes the watch options modal", async (t) => {
   const page = await openWatched(t);
-  await openBudgetModal(page);
+  await openOptionsModal(page);
   await page.keyboard.press("Escape");
-  await page.waitForSelector("#watch-budget-modal", { state: "hidden" });
+  await page.waitForSelector("#watch-options-modal", { state: "hidden" });
 });
 
-test("Escape on a confirmation over the budget modal closes only the confirmation", async (t) => {
+test("Escape on a confirmation over the options modal closes only the confirmation", async (t) => {
   const status = JSON.parse(
     readFileSync(`${FIXTURES_ROOT}/wallets/wallets_watch_status.json`, "utf8")
   );
@@ -276,16 +273,16 @@ test("Escape on a confirmation over the budget modal closes only the confirmatio
   const page = await openWatched(t, {
     "/api/wallets/watch/1/status": JSON.stringify(status),
   });
-  await openBudgetModal(page);
+  await openOptionsModal(page);
   await page.click("#watch-helius-action");
   await page.waitForSelector(".confirmation-dialog");
   await page.keyboard.press("Escape");
   await page.waitForSelector(".confirmation-dialog", {
     state: "detached",
   });
-  assert.equal(await page.locator("#watch-budget-modal").isVisible(), true);
+  assert.equal(await page.locator("#watch-options-modal").isVisible(), true);
   await page.keyboard.press("Escape");
-  await page.waitForSelector("#watch-budget-modal", { state: "hidden" });
+  await page.waitForSelector("#watch-options-modal", { state: "hidden" });
 });
 
 test("an empty uniform-rows table does not clip its message", async (t) => {

@@ -50,26 +50,14 @@ pub enum Error {
     /// configured-capacity rejection, not a malformed request).
     #[error("the watch target limit of {max} is reached; remove one before adding another")]
     WatchTargetLimitReached { max: usize },
-    #[error("watch target {address} reached its signature page budget; raise the wallet limit and explicitly resume it")]
-    WatchBudgetAcknowledgementRequired { address: String },
     #[error("watch target {address} needs an explicit retry after the watch problem is resolved")]
     WatchRetryRequired { address: String },
     #[error("watch target {address} requires Helius high-activity support; configure Helius and retry the watch")]
     WatchHeliusUnavailable { address: String },
-    #[error("watch page budget {requested} is outside the allowed range {min}–{max}")]
-    InvalidWatchBudget {
-        requested: usize,
-        min: usize,
-        max: usize,
-    },
-    #[error("resuming the watch requires acknowledging that activity since the last completed check will be skipped")]
-    WatchResumeAcknowledgementRequired,
     #[error(
         "enabling Helius high-activity checks requires explicit acknowledgement of provider usage"
     )]
     WatchHeliusApprovalAcknowledgementRequired,
-    #[error("watch target {id} is not paused by its signature limit")]
-    WatchResumeNotBudgetPaused { id: i64 },
     #[error("'{value}' is not a valid watch address")]
     InvalidWatchAddress { value: String },
     /// A dashboard window does not map to one of the canonical cache windows
@@ -212,12 +200,8 @@ impl ErrorClass for Error {
             Error::WatchTargetAlreadyWatched { .. } => false,
             Error::WatchTargetIsOwnWallet { .. } => false,
             Error::WatchTargetLimitReached { .. } => false,
-            Error::WatchBudgetAcknowledgementRequired { .. } => false,
             Error::WatchRetryRequired { .. } | Error::WatchHeliusUnavailable { .. } => false,
-            Error::InvalidWatchBudget { .. } => false,
-            Error::WatchResumeAcknowledgementRequired => false,
             Error::WatchHeliusApprovalAcknowledgementRequired => false,
-            Error::WatchResumeNotBudgetPaused { .. } => false,
             Error::InvalidWatchAddress { .. } => false,
             Error::InvalidWindow { .. } => false,
             Error::InvalidPrivateKey { .. } => false,
@@ -275,15 +259,10 @@ impl ErrorClass for Error {
             Error::WatchTargetAlreadyWatched { .. } => Severity::Warning,
             Error::WatchTargetIsOwnWallet { .. } => Severity::Warning,
             Error::WatchTargetLimitReached { .. } => Severity::Warning,
-            Error::WatchBudgetAcknowledgementRequired { .. } | Error::InvalidWatchBudget { .. } => {
-                Severity::Warning
-            }
             Error::WatchRetryRequired { .. } | Error::WatchHeliusUnavailable { .. } => {
                 Severity::Warning
             }
-            Error::WatchResumeAcknowledgementRequired => Severity::Warning,
             Error::WatchHeliusApprovalAcknowledgementRequired => Severity::Warning,
-            Error::WatchResumeNotBudgetPaused { .. } => Severity::Warning,
             Error::InvalidWatchAddress { .. } => Severity::Warning,
             Error::InvalidWindow { .. } => Severity::Warning,
             Error::InvalidPrivateKey { .. } => Severity::Critical,
@@ -323,12 +302,8 @@ impl ErrorClass for Error {
             Error::WatchDisabled => 400,
             Error::WatchTargetAlreadyWatched { .. } | Error::WatchTargetIsOwnWallet { .. } => 409,
             Error::WatchTargetLimitReached { .. } => 400,
-            Error::WatchBudgetAcknowledgementRequired { .. } => 409,
             Error::WatchRetryRequired { .. } | Error::WatchHeliusUnavailable { .. } => 409,
-            Error::InvalidWatchBudget { .. } => 400,
-            Error::WatchResumeAcknowledgementRequired => 400,
             Error::WatchHeliusApprovalAcknowledgementRequired => 400,
-            Error::WatchResumeNotBudgetPaused { .. } => 409,
             Error::InvalidWatchAddress { .. } => 400,
             Error::InvalidWindow { .. } => 400,
             Error::InvalidPrivateKey { .. } => 400,

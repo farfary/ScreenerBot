@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use super::super::merge_task_patch;
 use super::super::tasks::apply_task_update;
-use super::super::tests::{budget_pause, global_policy, stored};
+use super::super::tests::{global_policy, stored};
 use super::{CopyResumeKept, CopyResumeKeptReason, CopyResumeOutcome};
 use crate::trader::copy::{CopyDatabase, CopyPauseReason, CopyTask, CopyTaskInput, ExitMode};
 use crate::trader::paper::{TradingMode, LIVE_ARM_CONFIRMATION};
@@ -107,7 +107,6 @@ async fn a_user_paused_paper_task_resumes() {
 #[tokio::test]
 async fn a_watch_recovery_pause_stays_paused() {
     let (_directory, database, ids) = store_of(&[
-        (TradingMode::Paper, Some(budget_pause())),
         (TradingMode::Paper, Some(CopyPauseReason::HeliusUnavailable)),
         (
             TradingMode::Paper,
@@ -125,7 +124,7 @@ async fn a_watch_recovery_pause_stays_paused() {
     );
     assert_eq!(
         stored_task(&database, ids[0]).await.pause_reason,
-        Some(budget_pause())
+        Some(CopyPauseReason::HeliusUnavailable)
     );
     let reply = serde_json::to_value(&outcome).unwrap();
     assert_eq!(
@@ -234,7 +233,7 @@ async fn the_reply_accounts_for_every_paused_task() {
     let (_directory, database, ids) = store_of(&[
         (TradingMode::Paper, None),
         (TradingMode::Live, Some(CopyPauseReason::User)),
-        (TradingMode::Paper, Some(budget_pause())),
+        (TradingMode::Paper, Some(CopyPauseReason::HeliusUnavailable)),
         (TradingMode::Paper, Some(CopyPauseReason::WatchDetached)),
         (TradingMode::Paper, Some(CopyPauseReason::User)),
     ])

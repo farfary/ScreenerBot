@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::i18n::{ids, UiArg, UiText};
+use crate::i18n::{ids, UiText};
 
 /// Why a wallet is under observation. One address can serve more than one source at
 /// once (`sources` on `WatchTarget` is a `Vec`).
@@ -42,14 +42,11 @@ pub struct WatchTarget {
     /// Every reason this address is being watched.
     pub sources: Vec<WatchSource>,
     pub enabled: bool,
-    /// Maximum signature pages this target may fetch during one poll. Its
-    /// independent default is `poller::DEFAULT_PAGE_BUDGET`.
-    pub page_budget: usize,
     /// Explicit consent for the higher-cost Helius fallback. The synthesized
     /// own-wallet target always remains false.
     pub high_activity_approved: bool,
-    /// A safety pause that survives process restarts. User pauses have no
-    /// automatic cause; budget pauses retain the exact limit that stopped them.
+    /// A pause that survives process restarts: the user's, or a safety pause after a
+    /// provider or processing failure.
     pub disable_reason: Option<WatchDisableReason>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -60,10 +57,6 @@ pub struct WatchTarget {
 pub enum WatchDisableReason {
     User,
     Unknown,
-    SignatureBudget {
-        page_budget: usize,
-        signatures_checked: usize,
-    },
     HeliusUnavailable,
     ProcessingFailed,
 }
@@ -73,10 +66,6 @@ impl WatchDisableReason {
     pub fn ui_text(&self) -> UiText {
         match self {
             Self::User => UiText::new(ids::WALLETS_WATCH_DISABLED_USER),
-            Self::SignatureBudget {
-                signatures_checked, ..
-            } => UiText::new(ids::WALLETS_WATCH_DISABLED_SIGNATURE_BUDGET)
-                .arg("limit", UiArg::Text(signatures_checked.to_string())),
             Self::Unknown => UiText::new(ids::WALLETS_WATCH_DISABLED_UNKNOWN),
             Self::HeliusUnavailable => UiText::new(ids::WALLETS_WATCH_DISABLED_HELIUS_UNAVAILABLE),
             Self::ProcessingFailed => UiText::new(ids::WALLETS_WATCH_DISABLED_PROCESSING_FAILED),
@@ -311,6 +300,20 @@ pub struct WatchStatus {
     pub last_checked_at: Option<DateTime<Utc>>,
     /// Recovery methods supported by this chain adapter and their current readiness.
     pub catch_up_options: Vec<WatchCatchUpOption>,
+    /// The latest skip to the head after the target fell `poller::BACKLOG_CAP`
+    /// references behind, in this process.
+    pub skipped: Option<WatchSkip>,
+    /// True when no configured endpoint serves the realtime subscriptions, so the
+    /// target is polled and its activity arrives seconds late.
+    pub stream_unavailable: bool,
+}
+
+/// A skip to the head: references older than the head were left unread.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WatchSkip {
+    pub at: DateTime<Utc>,
+    /// References read before the skip; at least this many were left unread.
+    pub signatures: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -322,7 +325,7 @@ pub struct WatchCatchUpOption {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::i18n::{format_en, LanguageIdentifier};
+    use crate::i18n::format_en;
     use crate::wallets::watch::error::WatchRuntimeError;
 
     /// Every variant, listed through an exhaustive match so a new one fails to
@@ -331,17 +334,12 @@ mod tests {
         let listed = |reason: WatchDisableReason| match reason {
             WatchDisableReason::User
             | WatchDisableReason::Unknown
-            | WatchDisableReason::SignatureBudget { .. }
             | WatchDisableReason::HeliusUnavailable
             | WatchDisableReason::ProcessingFailed => reason,
         };
         vec![
             listed(WatchDisableReason::User),
             listed(WatchDisableReason::Unknown),
-            listed(WatchDisableReason::SignatureBudget {
-                page_budget: 8,
-                signatures_checked: 800,
-            }),
             listed(WatchDisableReason::HeliusUnavailable),
             listed(WatchDisableReason::ProcessingFailed),
         ]
@@ -437,18 +435,5 @@ mod tests {
             assert!(stable_buy.stable_swap_in_native(unusable).is_none());
         }
         assert!(ActivityKind::Other.stable_swap_in_native(125.0).is_none());
-    }
-
-    #[test]
-    fn budget_pause_names_the_signatures_it_checked() {
-        let en: LanguageIdentifier = "en".parse().unwrap();
-        let reason = WatchDisableReason::SignatureBudget {
-            page_budget: 5,
-            signatures_checked: 100_000,
-        };
-        assert_eq!(
-            reason.ui_text().render_plain(&en),
-            "Paused: reached the 100000-signature check limit before catching up"
-        );
     }
 }

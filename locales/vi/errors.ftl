@@ -245,8 +245,6 @@ errors-wallet-watch-address-empty = Địa chỉ không được để trống
 errors-wallet-watch-add-failed = Không thêm được mục tiêu theo dõi
 errors-wallet-watch-remove-failed = Không xóa được mục tiêu theo dõi
 errors-wallet-watch-update-failed = Không cập nhật được mục tiêu theo dõi
-errors-wallet-watch-budget-failed = Không cập nhật được ngân sách theo dõi
-errors-wallet-watch-resume-failed = Không tiếp tục được việc theo dõi
 errors-wallet-watch-approval-failed = Không cập nhật được phê duyệt { -helius }
 errors-wallet-watch-status-failed = Không lấy được trạng thái theo dõi
 

@@ -4,7 +4,7 @@
 //! The single shared WebSocket connection and its reconnect loop.
 
 use futures_util::{SinkExt, StreamExt};
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering::Relaxed};
 use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::sync::{mpsc, watch, Mutex};
@@ -70,6 +70,8 @@ static RECONNECTS: AtomicU64 = AtomicU64::new(0);
 /// Counts successful connects. A subscriber that saw `Confirmed` on one generation
 /// knows a later generation may have missed notifications in between.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// True while every configured endpoint has refused the subscription methods.
+static UNSUPPORTED: AtomicBool = AtomicBool::new(false);
 /// Unix seconds of the last notification; 0 means never.
 static LAST_MESSAGE_UNIX: AtomicI64 = AtomicI64::new(0);
 static ACTIVE_ADDRESSES: AtomicU64 = AtomicU64::new(0);
@@ -89,6 +91,10 @@ pub(super) fn state_receiver() -> watch::Receiver<ConnectionState> {
 }
 
 /// The number of the current connection; it grows by one on every connect.
+pub(super) fn subscriptions_unsupported() -> bool {
+    UNSUPPORTED.load(Relaxed)
+}
+
 pub(super) fn connection_generation() -> u64 {
     GENERATION.load(Relaxed)
 }
@@ -184,6 +190,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                     UNSUPPORTED_RECHECK.as_secs()
                 ),
             );
+            UNSUPPORTED.store(true, Relaxed);
             set_state(ConnectionState::Down);
             drain_pending_commands(&mut commands, &mut registry);
             tokio::time::sleep(UNSUPPORTED_RECHECK).await;
@@ -231,6 +238,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
             &format!("WebSocket connected ({})", crate::logger::redact_url(&url)),
         );
         let connected_at = std::time::Instant::now();
+        UNSUPPORTED.store(false, Relaxed);
         GENERATION.fetch_add(1, Relaxed);
         set_state(ConnectionState::Connected);
         let (mut ws_tx, mut ws_rx) = stream.split();

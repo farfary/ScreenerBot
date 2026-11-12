@@ -557,3 +557,49 @@ fn paper_sell(task: &CopyTask, signature: &str, tokens: f64, proceeds: f64) -> C
         },
     })
 }
+
+#[tokio::test]
+async fn a_task_paused_for_the_retired_watch_budget_stays_paused_without_a_reason() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    let budget = db
+        .insert_task(task_with_partial_override(None))
+        .await
+        .unwrap();
+    let provider = db
+        .insert_task(task_with_partial_override(None))
+        .await
+        .unwrap();
+    drop(db);
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        for (id, reason) in [
+            (
+                budget.id,
+                r#"{"kind":"watch_budget_exceeded","page_budget":5,"signatures_checked":500}"#,
+            ),
+            (provider.id, r#"{"kind":"helius_unavailable"}"#),
+        ] {
+            connection
+                .execute(
+                    "UPDATE copy_tasks SET enabled = 0, pause_reason_json = ?1 WHERE id = ?2",
+                    rusqlite::params![reason, id],
+                )
+                .unwrap();
+        }
+    }
+
+    let mut connection = rusqlite::Connection::open(&path).unwrap();
+    let transaction = connection.write_tx().unwrap();
+    schema::retire_watch_budget_pauses(&transaction).unwrap();
+    transaction.commit().unwrap();
+    drop(connection);
+
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    let released = db.get_task(budget.id).await.unwrap().unwrap();
+    assert!(!released.enabled, "only a plain resume brings it back");
+    assert_eq!(released.pause_reason, None);
+    let kept = db.get_task(provider.id).await.unwrap().unwrap();
+    assert_eq!(kept.pause_reason, Some(CopyPauseReason::HeliusUnavailable));
+}

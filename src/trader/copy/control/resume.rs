@@ -140,9 +140,7 @@ where
     match task.recovery() {
         None => return Ok(()),
         Some(CopyRecovery::Resume) => {}
-        Some(CopyRecovery::RetryWatch | CopyRecovery::RestoreWatch) => {
-            return Err(CopyResumeKeptReason::NeedsWatchRecovery)
-        }
+        Some(CopyRecovery::RetryWatch) => return Err(CopyResumeKeptReason::NeedsWatchRecovery),
     }
     if task.mode == TradingMode::Live && !include_live {
         return Err(CopyResumeKeptReason::LiveNotIncluded);

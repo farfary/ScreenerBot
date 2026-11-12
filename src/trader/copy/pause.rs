@@ -29,10 +29,6 @@ impl CopyPauseReason {
                 .arg("average", UiArg::Text(seconds(*average_ms)))
                 .arg("threshold", UiArg::Text(seconds(*threshold_ms))),
             Self::WatchDetached => UiText::new(ids::COPY_PAUSE_WATCH_DETACHED),
-            Self::WatchBudgetExceeded {
-                signatures_checked, ..
-            } => UiText::new(ids::COPY_PAUSE_WATCH_BUDGET_EXCEEDED)
-                .arg("limit", UiArg::Text(signatures_checked.to_string())),
             Self::HeliusUnavailable => UiText::new(ids::COPY_PAUSE_HELIUS_UNAVAILABLE),
             Self::WatchProcessingFailed => UiText::new(ids::COPY_PAUSE_WATCH_PROCESSING_FAILED),
             Self::StorageRestored => UiText::new(ids::COPY_PAUSE_STORAGE_RESTORED),
@@ -59,7 +55,6 @@ pub(super) fn every_pause_reason() -> Vec<CopyPauseReason> {
         CopyPauseReason::User
         | CopyPauseReason::LatencyKillSwitch { .. }
         | CopyPauseReason::WatchDetached
-        | CopyPauseReason::WatchBudgetExceeded { .. }
         | CopyPauseReason::HeliusUnavailable
         | CopyPauseReason::WatchProcessingFailed
         | CopyPauseReason::StorageRestored => reason,
@@ -71,10 +66,6 @@ pub(super) fn every_pause_reason() -> Vec<CopyPauseReason> {
             threshold_ms: 3000,
         }),
         listed(CopyPauseReason::WatchDetached),
-        listed(CopyPauseReason::WatchBudgetExceeded {
-            page_budget: 8,
-            signatures_checked: 800,
-        }),
         listed(CopyPauseReason::HeliusUnavailable),
         listed(CopyPauseReason::WatchProcessingFailed),
         listed(CopyPauseReason::StorageRestored),
@@ -101,17 +92,23 @@ mod tests {
         }
     }
 
+    /// Stored notices name pause text that no pause produces any more: a wallet watch
+    /// used to pause for its signature budget. The catalog keeps it so the event history
+    /// reads as it did.
+    #[test]
+    fn retired_pause_text_still_renders_for_stored_notices() {
+        let en: LanguageIdentifier = "en".parse().unwrap();
+        let stored = UiText::new(ids::COPY_PAUSE_WATCH_BUDGET_EXCEEDED)
+            .arg("limit", UiArg::Text("500".to_owned()));
+        assert_eq!(
+            stored.render_plain(&en),
+            "Paused: this wallet reached its 500-signature watch check limit before catching up"
+        );
+    }
+
     #[test]
     fn pause_wording_keeps_the_limits() {
         let en: LanguageIdentifier = "en".parse().unwrap();
-        let budget = CopyPauseReason::WatchBudgetExceeded {
-            page_budget: 8,
-            signatures_checked: 800,
-        };
-        assert_eq!(
-            budget.ui_text().render_plain(&en),
-            "Paused: this wallet reached its 800-signature watch check limit before catching up"
-        );
         let latency = CopyPauseReason::LatencyKillSwitch {
             average_ms: 4200,
             threshold_ms: 12_400,

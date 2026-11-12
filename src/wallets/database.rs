@@ -34,9 +34,10 @@ pub struct WalletsDatabase {
 /// Version 2 drops the per-wallet token balance cache. The oldest reader stays
 /// version 1: a version 1 core re-creates that cache empty on open and loses
 /// nothing, and the store is the vault, whose readers must not be fenced out over
-/// a cache.
+/// a cache. Version 3 watches again the wallets paused for the retired signature
+/// budget, a data-only change.
 pub(crate) const SCHEMA: StoreSchema = StoreSchema {
-    version: 2,
+    version: 3,
     min_reader_version: 1,
     baseline: 1,
     renames: None,
@@ -322,7 +323,7 @@ mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .expect("read the store ledger");
-        assert_eq!(ledger, (2, 1));
+        assert_eq!(ledger, (3, 1));
     }
 
     /// Every key added to the vault leaves a snapshot to restore the vault from.

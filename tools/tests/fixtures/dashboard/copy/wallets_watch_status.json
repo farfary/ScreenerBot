@@ -10,7 +10,6 @@
       }
     ],
     "enabled": true,
-    "page_budget": 5,
     "high_activity_approved": false,
     "disable_reason": null,
     "created_at": "2026-09-28T09:15:00Z",

@@ -38,9 +38,6 @@ impl WatchDatabase {
                 let disable_reason = disable_reason_json
                     .map(|json| serde_json::from_str::<super::WatchDisableReason>(&json)
                         .unwrap_or(super::WatchDisableReason::Unknown));
-                if matches!(disable_reason, Some(super::WatchDisableReason::SignatureBudget { .. } | super::WatchDisableReason::Unknown)) {
-                    return Err(Error::WatchBudgetAcknowledgementRequired { address });
-                }
                 if matches!(disable_reason, Some(super::WatchDisableReason::HeliusUnavailable | super::WatchDisableReason::ProcessingFailed)) {
                     return Err(Error::WatchRetryRequired { address });
                 }

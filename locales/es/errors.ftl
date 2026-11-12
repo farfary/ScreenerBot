@@ -245,8 +245,6 @@ errors-wallet-watch-address-empty = La dirección no puede estar vacía
 errors-wallet-watch-add-failed = Error al añadir el objetivo de seguimiento
 errors-wallet-watch-remove-failed = Error al quitar el objetivo de seguimiento
 errors-wallet-watch-update-failed = Error al actualizar el objetivo de seguimiento
-errors-wallet-watch-budget-failed = No se pudo actualizar el presupuesto de seguimiento
-errors-wallet-watch-resume-failed = No se pudo reanudar el seguimiento
 errors-wallet-watch-approval-failed = No se pudo actualizar la aprobación de { -helius }
 errors-wallet-watch-status-failed = Error al obtener el estado del seguimiento
 

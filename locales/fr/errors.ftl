@@ -268,8 +268,6 @@ errors-wallet-watch-address-empty = L'adresse ne peut pas être vide
 errors-wallet-watch-add-failed = Échec de l'ajout de la cible de surveillance
 errors-wallet-watch-remove-failed = Échec du retrait de la cible de surveillance
 errors-wallet-watch-update-failed = Échec de la mise à jour de la cible de surveillance
-errors-wallet-watch-budget-failed = Impossible de mettre à jour le budget de surveillance
-errors-wallet-watch-resume-failed = Impossible de reprendre la surveillance
 errors-wallet-watch-approval-failed = Impossible de mettre à jour l'approbation { -helius }
 errors-wallet-watch-status-failed = Échec de la récupération du statut de surveillance
 

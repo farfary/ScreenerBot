@@ -245,8 +245,6 @@ errors-wallet-watch-address-empty = Адреса не може бути поро
 errors-wallet-watch-add-failed = Не вдалося додати ціль стеження
 errors-wallet-watch-remove-failed = Не вдалося видалити ціль стеження
 errors-wallet-watch-update-failed = Не вдалося оновити ціль стеження
-errors-wallet-watch-budget-failed = Не вдалося оновити бюджет стеження
-errors-wallet-watch-resume-failed = Не вдалося відновити стеження
 errors-wallet-watch-approval-failed = Не вдалося оновити підтвердження { -helius }
 errors-wallet-watch-status-failed = Не вдалося отримати статус стеження
 

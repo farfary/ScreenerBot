@@ -11,7 +11,6 @@
         }
       ],
       "enabled": true,
-      "page_budget": 4,
       "high_activity_approved": false,
       "disable_reason": null,
       "created_at": "2026-10-02T00:00:00.000Z",

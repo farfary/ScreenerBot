@@ -248,8 +248,6 @@ errors-wallet-watch-address-empty = アドレスを空にすることはでき�
 errors-wallet-watch-add-failed = ウォッチ対象を追加できませんでした
 errors-wallet-watch-remove-failed = ウォッチ対象を削除できませんでした
 errors-wallet-watch-update-failed = ウォッチ対象を更新できませんでした
-errors-wallet-watch-budget-failed = ウォッチの予算を更新できませんでした
-errors-wallet-watch-resume-failed = ウォッチを再開できませんでした
 errors-wallet-watch-approval-failed = { -helius } の承認を更新できませんでした
 errors-wallet-watch-status-failed = ウォッチのステータスを取得できませんでした
 

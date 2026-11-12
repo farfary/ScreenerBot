@@ -120,6 +120,7 @@
 -helius = Helius
 -quicknode = QuickNode
 -alchemy = Alchemy
+-drpc = dRPC
 -solana-explorer = Solana Explorer
 -geckoterminal = GeckoTerminal
 -dextools = DexTools

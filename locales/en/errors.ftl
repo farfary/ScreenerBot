@@ -276,8 +276,6 @@ errors-wallet-watch-address-empty = Address cannot be empty
 errors-wallet-watch-add-failed = Failed to add watch target
 errors-wallet-watch-remove-failed = Failed to remove watch target
 errors-wallet-watch-update-failed = Failed to update watch target
-errors-wallet-watch-budget-failed = Watch budget could not be updated
-errors-wallet-watch-resume-failed = Watch could not be resumed
 errors-wallet-watch-approval-failed = { -helius } approval could not be updated
 errors-wallet-watch-status-failed = Failed to get watch status
 

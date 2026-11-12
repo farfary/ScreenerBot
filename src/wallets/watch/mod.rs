@@ -43,13 +43,15 @@ mod types;
 
 pub use database::WatchDatabase;
 pub use error::WatchRuntimeError;
-pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, PAGE_SIZE};
+pub use poller::{
+    cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, BACKLOG_CAP, MAX_PAGES, PAGE_SIZE,
+};
 pub use service::subscribe_activity;
 pub use types::{
     ActivityKind, ReferenceVerdict, SignaturePageItem, StreamEvent, StreamMode,
     SuccessfulTransactionPageItem, SuccessfulTransactionsPage, SwapSide, TransferDirection,
     UnresolvedSwapReason, WalletActivity, WatchDisableReason, WatchMode, WatchNotification,
-    WatchSource, WatchStatus, WatchTarget,
+    WatchSkip, WatchSource, WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};
@@ -305,58 +307,10 @@ fn validate_helius_retry(target: &WatchTarget, high_activity_supported: bool) ->
     Ok(())
 }
 
-pub const MAX_PAGE_BUDGET: usize = poller::MAX_PAGE_BUDGET;
-pub const DEFAULT_PAGE_BUDGET: usize = poller::DEFAULT_PAGE_BUDGET;
-
-pub async fn resume_target(
-    id: i64,
-    page_budget: usize,
-    acknowledge_missed_activity: bool,
-) -> Result<(), Error> {
-    require_watch_capability()?;
-    if !acknowledge_missed_activity {
-        return Err(Error::WatchResumeAcknowledgementRequired);
-    }
-    validate_page_budget(page_budget)?;
-    let target = get_target(id).await?.ok_or(Error::WatchTargetNotFound {
-        address: format!("id={id}"),
-    })?;
-    if target.enabled
-        || !matches!(
-            target.disable_reason,
-            Some(WatchDisableReason::SignatureBudget { .. })
-        )
-    {
-        return Err(Error::WatchResumeNotBudgetPaused { id });
-    }
-    let runtime = runtime::get_runtime().map_err(|e| Error::ChainRuntime {
-        operation: "get_runtime",
-        detail: e.to_string(),
-    })?;
-    let head = runtime
-        .fetch_signatures_page(&target.address, 1, None, None)
-        .await?;
-    watch_db()?
-        .resume_target_from_head(
-            id,
-            page_budget,
-            head.first().map(|item| item.signature.clone()),
-        )
-        .await?;
-    service::request_reload();
-    Ok(())
-}
-
-pub async fn update_target_page_budget(id: i64, page_budget: usize) -> Result<(), Error> {
-    validate_page_budget(page_budget)?;
-    watch_db()?.set_page_budget(id, page_budget).await?;
-    service::request_reload();
-    Ok(())
-}
-
 /// Persist or revoke per-wallet approval for the Helius high-activity fallback.
-/// Approval validates provider capability and resumes a budget-paused watch from
-/// its saved cursor rather than rebasing at the current head.
+/// Approval validates provider capability; an approved target that falls
+/// `poller::BACKLOG_CAP` references behind catches up through it from its saved
+/// cursor instead of skipping to the head.
 pub async fn set_target_high_activity_approved(
     id: i64,
     approved: bool,
@@ -381,17 +335,6 @@ pub async fn set_target_high_activity_approved(
     }
     watch_db()?.set_high_activity_approved(id, approved).await?;
     service::request_reload();
-    Ok(())
-}
-
-fn validate_page_budget(page_budget: usize) -> Result<(), Error> {
-    if !(DEFAULT_PAGE_BUDGET..=MAX_PAGE_BUDGET).contains(&page_budget) {
-        return Err(Error::InvalidWatchBudget {
-            requested: page_budget,
-            min: DEFAULT_PAGE_BUDGET,
-            max: MAX_PAGE_BUDGET,
-        });
-    }
     Ok(())
 }
 
@@ -426,6 +369,9 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
     let mode = service_state::watch_mode(&target.address);
     let catching_up = service_state::catching_up(&target.address);
     let last_checked_at = service_state::last_checked_at(&target.address);
+    let skipped = service_state::skipped(&target.address);
+    let stream_unavailable =
+        runtime::try_get_runtime().is_some_and(|runtime| runtime.stream_unavailable());
     let catch_up_options = match runtime::try_get_runtime() {
         Some(runtime) => match runtime.high_activity_provider() {
             Some(provider) => vec![types::WatchCatchUpOption {
@@ -447,6 +393,8 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
         catching_up,
         last_checked_at,
         catch_up_options,
+        skipped,
+        stream_unavailable,
     })
 }
 
@@ -475,7 +423,6 @@ mod tests {
             label: None,
             sources: vec![WatchSource::Alert { rule_id: 1 }],
             enabled: true,
-            page_budget: DEFAULT_PAGE_BUDGET,
             high_activity_approved: false,
             disable_reason: None,
             created_at: Utc::now(),

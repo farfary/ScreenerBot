@@ -201,7 +201,7 @@ fn assert_moved_to_the_shared_book(conn: &Connection) {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(ledger, (13, 13));
+    assert_eq!(ledger, (14, 13));
     let stamped: String = conn
         .query_row(
             "SELECT value FROM copy_metadata WHERE key = 'schema_version'",
@@ -209,7 +209,7 @@ fn assert_moved_to_the_shared_book(conn: &Connection) {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(stamped, "13");
+    assert_eq!(stamped, "14");
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .unwrap();

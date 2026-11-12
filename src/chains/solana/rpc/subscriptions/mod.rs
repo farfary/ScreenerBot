@@ -69,6 +69,11 @@ pub async fn subscribe(topic: Topic) -> crate::Result<Subscription> {
 
 /// The number of the current connection; it grows by one on every connect, so
 /// coverage established on an earlier connection can be told apart.
+/// True while no configured endpoint serves the subscription methods the app uses.
+pub fn subscriptions_unsupported() -> bool {
+    client::subscriptions_unsupported()
+}
+
 pub fn connection_generation() -> u64 {
     client::connection_generation()
 }

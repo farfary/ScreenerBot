@@ -268,8 +268,6 @@ errors-wallet-watch-address-empty = Adres boş olamaz
 errors-wallet-watch-add-failed = İzleme hedefi eklenemedi
 errors-wallet-watch-remove-failed = İzleme hedefi kaldırılamadı
 errors-wallet-watch-update-failed = İzleme hedefi güncellenemedi
-errors-wallet-watch-budget-failed = İzleme bütçesi güncellenemedi
-errors-wallet-watch-resume-failed = İzleme sürdürülemedi
 errors-wallet-watch-approval-failed = { -helius } onayı güncellenemedi
 errors-wallet-watch-status-failed = İzleme durumu alınamadı
 

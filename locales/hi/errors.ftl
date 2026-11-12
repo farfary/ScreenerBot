@@ -245,8 +245,6 @@ errors-wallet-watch-address-empty = एड्रेस खाली नहीं
 errors-wallet-watch-add-failed = वॉच टारगेट जोड़ने में विफल
 errors-wallet-watch-remove-failed = वॉच टारगेट हटाने में विफल
 errors-wallet-watch-update-failed = वॉच टारगेट अपडेट करने में विफल
-errors-wallet-watch-budget-failed = वॉच बजट अपडेट नहीं हो सका
-errors-wallet-watch-resume-failed = वॉच फिर से शुरू नहीं हो सकी
 errors-wallet-watch-approval-failed = { -helius } अनुमोदन अपडेट नहीं हो सका
 errors-wallet-watch-status-failed = वॉच की स्थिति प्राप्त करने में विफल
 

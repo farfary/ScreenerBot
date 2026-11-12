@@ -271,8 +271,6 @@ errors-wallet-watch-address-empty = 地址不能为空
 errors-wallet-watch-add-failed = 添加监控目标失败
 errors-wallet-watch-remove-failed = 移除监控目标失败
 errors-wallet-watch-update-failed = 更新监控目标失败
-errors-wallet-watch-budget-failed = 无法更新监控预算
-errors-wallet-watch-resume-failed = 无法恢复监控
 errors-wallet-watch-approval-failed = 无法更新 { -helius } 批准状态
 errors-wallet-watch-status-failed = 获取监控状态失败
 

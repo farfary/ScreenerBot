@@ -274,8 +274,6 @@ errors-wallet-watch-address-empty = آدرس نمی‌تواند خالی باش
 errors-wallet-watch-add-failed = افزودن هدف پایش ناموفق بود
 errors-wallet-watch-remove-failed = حذف هدف پایش ناموفق بود
 errors-wallet-watch-update-failed = به‌روزرسانی هدف پایش ناموفق بود
-errors-wallet-watch-budget-failed = به‌روزرسانی بودجه پایش ممکن نشد
-errors-wallet-watch-resume-failed = از سرگیری پایش ممکن نشد
 errors-wallet-watch-approval-failed = به‌روزرسانی تأیید { -helius } ممکن نشد
 errors-wallet-watch-status-failed = دریافت وضعیت پایش ناموفق بود
 

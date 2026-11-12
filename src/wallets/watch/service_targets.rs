@@ -87,35 +87,34 @@ impl TargetWorker {
     }
 }
 
-/// A target's unfinished range passed `poller::backlog_cap`. Its persisted cursor
-/// remains intact until the user resumes it with a higher budget or Helius support.
-pub(super) async fn handle_overflow(runtime: &mut TargetRuntime, db: &WatchDatabase) {
+/// A target's unfinished range passed `poller::BACKLOG_CAP`: everything older than
+/// the range's head is left unread and the cursor moves to the head, so the target
+/// keeps watching. The skipped transactions are too old to copy.
+pub(super) async fn skip_to_head(runtime: &mut TargetRuntime, db: &WatchDatabase) {
     let address = runtime.target.address.clone();
     let Some(state) = runtime.catch_up.take() else {
         return;
     };
     runtime.range_open = false;
-    let (pages, skipped) = (runtime.target.page_budget, state.pending_len());
-    let Some(id) = runtime.target.id else {
+    let skipped = state.pending_len();
+    let Some(head) = state.newest_signature() else {
         return;
     };
-    match db.pause_for_budget(id, pages, skipped).await {
-        Ok(()) => {
-            runtime.target.enabled = false;
-            runtime.target.disable_reason =
-                Some(super::types::WatchDisableReason::SignatureBudget {
-                    page_budget: pages,
-                    signatures_checked: skipped,
-                });
-            logger::warning(LogTag::WalletWatch, &format!("Paused {address}: reached its {skipped}-signature check limit before catching up; cursor preserved"));
-            super::publish_target_change(address);
-            service::request_reload();
-        }
-        Err(error) => logger::warning(
+    if let Err(error) = db.set_cursor(&address, head).await {
+        logger::warning(
             LogTag::WalletWatch,
-            &format!("Failed to pause over-budget target {address}: {error}"),
-        ),
+            &format!(
+                "Failed to move {address} to its head after {skipped} unread signatures: {error}"
+            ),
+        );
+        return;
     }
+    super::service_state::record_skip(&address, skipped);
+    logger::info(
+        LogTag::WalletWatch,
+        &format!("Skipped {address} to its head: {skipped} older signatures left unread"),
+    );
+    super::publish_target_change(address);
 }
 
 /// Hand the worker's chosen stream mode to its forwarder, waking it only on a change.
@@ -429,7 +428,6 @@ pub(super) async fn reload_targets(
             label: Some("Own wallet".to_owned()),
             sources: vec![WatchSource::OwnWallet],
             enabled: true,
-            page_budget: poller::DEFAULT_PAGE_BUDGET,
             high_activity_approved: false,
             disable_reason: None,
             created_at: Utc::now(),

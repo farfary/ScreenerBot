@@ -92,81 +92,36 @@
     </div>
   </div>
 
-  <div class="modal-overlay" hidden id="watch-budget-modal">
+  <div class="modal-overlay" hidden id="watch-options-modal">
     <div
       class="modal-dialog modal-sm"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="watch-budget-title"
+      aria-labelledby="watch-options-title"
     >
       <div class="modal-header">
-        <h2 id="watch-budget-title" data-l10n-id="wallets-watch-budget-title-options"></h2>
+        <h2 id="watch-options-title" data-l10n-id="wallets-watch-options-title"></h2>
         <button
           class="modal-close"
           type="button"
-          id="watch-budget-close"
+          id="watch-options-close"
           data-dialog-close
-          data-l10n-id="wallets-watch-budget-close"
+          data-l10n-id="wallets-watch-options-close"
         >
           <i class="icon-x"></i>
         </button>
       </div>
-      <form class="wallet-form" id="watch-budget-form">
-        <div class="modal-body">
-          <div class="form-group watch-helius-option" id="watch-helius-option">
-            <p id="watch-helius-description"></p>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              id="watch-helius-action"
-              data-l10n-id="wallets-watch-helius-allow"
-            ></button>
-          </div>
-          <div class="form-group">
-            <label
-              id="watch-page-budget-label"
-              for="watch-page-budget"
-              data-l10n-id="wallets-watch-budget-label-signatures"
-            ></label>
-            <input
-              id="watch-page-budget"
-              type="number"
-              min="500"
-              max="5000"
-              step="100"
-              aria-describedby="watch-budget-hint"
-              required
-            />
-            <small id="watch-budget-hint"></small>
-          </div>
-          <div class="form-group" hidden id="watch-budget-resume-notice">
-            <p data-l10n-id="wallets-watch-budget-resume-notice"></p>
-            <p data-l10n-id="wallets-watch-budget-resume-tasks"></p>
-            <label class="checkbox-label"
-              ><input id="watch-budget-ack" type="checkbox" /><span
-                data-l10n-id="wallets-watch-budget-resume-ack"
-              ></span
-            ></label>
-          </div>
-          <small class="form-error" hidden id="watch-budget-error" aria-live="polite"></small>
-          <div class="form-actions">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              id="watch-budget-cancel"
-              data-dialog-close
-              data-l10n-id="common-action-cancel"
-            ></button>
-            <button
-              type="submit"
-              class="btn btn-primary"
-              id="watch-budget-save"
-              data-l10n-id="wallets-watch-budget-save"
-              disabled
-            ></button>
-          </div>
+      <div class="modal-body">
+        <div class="form-group watch-helius-option">
+          <p id="watch-helius-description"></p>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            id="watch-helius-action"
+            data-l10n-id="wallets-watch-helius-allow"
+          ></button>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 </div>

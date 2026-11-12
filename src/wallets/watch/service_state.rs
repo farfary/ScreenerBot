@@ -17,7 +17,7 @@ use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 
 use super::error::WatchRuntimeError;
-use super::types::WatchMode;
+use super::types::{WatchMode, WatchSkip};
 
 /// A WS notification whose transaction was not decodable yet.
 #[derive(Debug, Clone)]
@@ -66,6 +66,7 @@ struct RuntimeStatus {
     catching_up: bool,
     last_checked_at: Option<DateTime<Utc>>,
     last_error: Option<WatchRuntimeError>,
+    skipped: Option<WatchSkip>,
 }
 
 static RUNTIME_STATUS: LazyLock<RwLock<HashMap<String, RuntimeStatus>>> =
@@ -78,11 +79,13 @@ pub(super) fn update_runtime_status(
     completed_successfully: bool,
 ) {
     let mut statuses = RUNTIME_STATUS.write().unwrap_or_else(|p| p.into_inner());
+    let previous = statuses.get(address);
     let last_error = if completed_successfully {
         None
     } else {
-        statuses.get(address).and_then(|status| status.last_error)
+        previous.and_then(|status| status.last_error)
     };
+    let skipped = previous.and_then(|status| status.skipped.clone());
     statuses.insert(
         address.to_owned(),
         RuntimeStatus {
@@ -90,6 +93,7 @@ pub(super) fn update_runtime_status(
             catching_up,
             last_checked_at: Some(Utc::now()),
             last_error,
+            skipped,
         },
     );
 }
@@ -133,8 +137,33 @@ pub(super) fn set_runtime_error(address: &str, error: WatchRuntimeError) {
         catching_up: false,
         last_checked_at: None,
         last_error: None,
+        skipped: None,
     });
     status.last_error = Some(error);
+}
+
+/// Remember that `address` skipped to its head after `signatures` unread references.
+pub(super) fn record_skip(address: &str, signatures: usize) {
+    let mut statuses = RUNTIME_STATUS.write().unwrap_or_else(|p| p.into_inner());
+    let status = statuses.entry(address.to_owned()).or_insert(RuntimeStatus {
+        mode: WatchMode::Standard,
+        catching_up: false,
+        last_checked_at: None,
+        last_error: None,
+        skipped: None,
+    });
+    status.skipped = Some(WatchSkip {
+        at: Utc::now(),
+        signatures,
+    });
+}
+
+pub(super) fn skipped(address: &str) -> Option<WatchSkip> {
+    RUNTIME_STATUS
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(address)
+        .and_then(|status| status.skipped.clone())
 }
 
 pub(super) fn runtime_error(address: &str) -> Option<WatchRuntimeError> {

@@ -92,7 +92,7 @@ pub(super) fn is_healthy() -> bool {
 }
 
 use super::service_targets::{
-    handle_overflow, reload_targets, request_gap_fill, stop_all, TargetRuntime, TargetWorker,
+    reload_targets, request_gap_fill, skip_to_head, stop_all, TargetRuntime, TargetWorker,
 };
 
 /// A range carrying more references a minute than this, and at least
@@ -257,7 +257,6 @@ pub(super) async fn poll_target(
             .catch_up
             .as_mut()
             .expect("catch-up initialized"),
-        target_runtime.target.page_budget,
     )
     .await
     {
@@ -265,7 +264,7 @@ pub(super) async fn poll_target(
         Ok(None) => {
             // An unfinished range stays open and is read on at the next tick. The own
             // wallet's history is the trading ledger and is never skipped; another
-            // target pauses only once its backlog passes `poller::backlog_cap`.
+            // target skips to its head once its backlog passes `poller::BACKLOG_CAP`.
             target_runtime.range_open = true;
             if !target_runtime
                 .target
@@ -304,10 +303,12 @@ pub(super) async fn poll_target(
                         target_runtime.high_activity_failures = 1;
                         target_runtime.high_activity_failure_reason = Some(result.pause_reason());
                     }
-                } else if target_runtime.catch_up.as_ref().is_some_and(|state| {
-                    state.pending_len() >= poller::backlog_cap(target_runtime.target.page_budget)
-                }) {
-                    handle_overflow(target_runtime, watch_db).await;
+                } else if target_runtime
+                    .catch_up
+                    .as_ref()
+                    .is_some_and(|state| state.pending_len() >= poller::BACKLOG_CAP)
+                {
+                    skip_to_head(target_runtime, watch_db).await;
                 } else {
                     super::service_state::update_runtime_status(
                         &target_runtime.target.address,
@@ -635,10 +636,9 @@ pub(super) async fn process_signature(
     ProcessOutcome::Terminal
 }
 
-/// Full transactions a high-activity poll may read per page of the target's budget.
-/// Helius meters each returned transaction, so this bound is its own and does not
-/// follow the raw signature page size.
-const HIGH_ACTIVITY_ITEMS_PER_PAGE: usize = 100;
+/// Full transactions one high-activity poll may read. Helius meters each returned
+/// transaction, so this bound is its own and does not follow the signature page size.
+const HIGH_ACTIVITY_TRANSACTIONS_PER_POLL: usize = 500;
 
 /// Advance an already-selected high-activity target. Helius returns confirmed
 /// successful transactions oldest first. One cursor write per fetched page keeps
@@ -683,10 +683,7 @@ async fn poll_high_activity_target(
             return HighActivityPollResult::ProcessingFailed;
         }
     };
-    let cap = target_runtime
-        .target
-        .page_budget
-        .saturating_mul(HIGH_ACTIVITY_ITEMS_PER_PAGE);
+    let cap = HIGH_ACTIVITY_TRANSACTIONS_PER_POLL;
     let mut after = cursor;
     let mut remaining = cap;
     while remaining > 0 {

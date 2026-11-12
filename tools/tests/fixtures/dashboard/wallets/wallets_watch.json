@@ -11,7 +11,6 @@
         }
       ],
       "enabled": true,
-      "page_budget": 5,
       "high_activity_approved": false,
       "disable_reason": null,
       "created_at": "2026-09-28T09:15:00Z",
@@ -28,7 +27,6 @@
         }
       ],
       "enabled": true,
-      "page_budget": 5,
       "high_activity_approved": false,
       "disable_reason": null,
       "created_at": "2026-09-25T13:00:00Z",
@@ -45,12 +43,9 @@
         }
       ],
       "enabled": false,
-      "page_budget": 5,
       "high_activity_approved": false,
       "disable_reason": {
-        "kind": "signature_budget",
-        "page_budget": 5,
-        "signatures_checked": 500
+        "kind": "user"
       },
       "created_at": "2026-09-21T07:40:00Z",
       "updated_at": "2026-10-05T03:12:00Z"

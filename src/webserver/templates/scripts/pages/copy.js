@@ -22,7 +22,6 @@ import { createEditor } from "./copy/editor.js";
 import { createArmGate } from "./copy/arm_gate.js";
 import { createSettings } from "./copy/settings.js";
 import { createProfile } from "./copy/profile.js";
-import { createWatchRestore } from "./copy/watch_restore.js";
 import { accessBlocked, gateControl, renderAccessGate, setupRequired } from "../ui/access_gate.js";
 
 const POLL_MS = 5000;
@@ -281,7 +280,6 @@ function createLifecycle() {
       page.arm = createArmGate(page);
       page.settings = createSettings(page);
       page.profile = createProfile(page);
-      page.watchRestore = createWatchRestore(page);
 
       page.dialogs.setup($("#copy-page"));
       [
@@ -292,7 +290,6 @@ function createLifecycle() {
         page.arm,
         page.settings,
         page.profile,
-        page.watchRestore,
       ].forEach((part) => part.setup());
       on($("#copy-add"), "click", () => page.editor.openCreate());
       on($("#copy-onboarding-add"), "click", () => page.editor.openCreate());

@@ -245,8 +245,6 @@ errors-wallet-watch-address-empty = Die Adresse darf nicht leer sein
 errors-wallet-watch-add-failed = Überwachungsziel konnte nicht hinzugefügt werden
 errors-wallet-watch-remove-failed = Überwachungsziel konnte nicht entfernt werden
 errors-wallet-watch-update-failed = Überwachungsziel konnte nicht aktualisiert werden
-errors-wallet-watch-budget-failed = Das Überwachungsbudget konnte nicht aktualisiert werden
-errors-wallet-watch-resume-failed = Die Überwachung konnte nicht fortgesetzt werden
 errors-wallet-watch-approval-failed = Die { -helius }-Freigabe konnte nicht aktualisiert werden
 errors-wallet-watch-status-failed = Überwachungsstatus konnte nicht abgerufen werden
 

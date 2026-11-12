@@ -37,9 +37,7 @@ use screenerbot::chains::solana::transactions::program_ids::detect_router_from_p
 use screenerbot::config::with_config;
 use screenerbot::transactions::Transaction;
 use screenerbot::wallets::watch::runtime::{get_runtime, WalletWatchRuntime};
-use screenerbot::wallets::watch::{
-    ActivityKind, SwapSide, WalletActivity, DEFAULT_PAGE_BUDGET, PAGE_SIZE,
-};
+use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, PAGE_SIZE};
 use serde_json::Value;
 use tokio::sync::broadcast::error::RecvError;
 
@@ -279,7 +277,7 @@ impl ReadProbe {
     /// pauses the wallet when that range exceeds its page budget.
     fn default_poller(&self) -> (String, String) {
         let poll_secs = with_config(|cfg| cfg.wallet.watch_poll_interval_secs) as f64;
-        let budget = (DEFAULT_PAGE_BUDGET * PAGE_SIZE) as f64;
+        let budget = (screenerbot::wallets::watch::MAX_PAGES * PAGE_SIZE) as f64;
         match self.per_minute(self.references) {
             Some(rate) => {
                 let per_poll = rate * poll_secs / 60.0;

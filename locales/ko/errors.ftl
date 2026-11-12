@@ -271,8 +271,6 @@ errors-wallet-watch-address-empty = 주소는 비워 둘 수 없습니다
 errors-wallet-watch-add-failed = 감시 대상을 추가하지 못했습니다
 errors-wallet-watch-remove-failed = 감시 대상을 제거하지 못했습니다
 errors-wallet-watch-update-failed = 감시 대상을 업데이트하지 못했습니다
-errors-wallet-watch-budget-failed = 감시 예산을 업데이트할 수 없습니다
-errors-wallet-watch-resume-failed = 감시를 재개할 수 없습니다
 errors-wallet-watch-approval-failed = { -helius } 승인을 업데이트할 수 없습니다
 errors-wallet-watch-status-failed = 감시 상태를 가져오지 못했습니다
 

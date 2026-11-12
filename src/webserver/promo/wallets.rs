@@ -211,7 +211,6 @@ fn target(entry: &PromoTarget) -> WatchTarget {
         label: Some(label.to_owned()),
         sources,
         enabled,
-        page_budget: crate::wallets::watch::DEFAULT_PAGE_BUDGET,
         high_activity_approved: false,
         disable_reason: None,
         created_at,
@@ -243,5 +242,7 @@ pub fn get_promo_watch_status(id: i64) -> Option<WatchStatus> {
         catching_up: false,
         last_checked_at: None,
         catch_up_options: Vec::new(),
+        skipped: None,
+        stream_unavailable: false,
     })
 }

@@ -66,6 +66,10 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         *rpc::connection_state().borrow() == ConnectionState::Connected
     }
 
+    fn stream_unavailable(&self) -> bool {
+        rpc::subscriptions_unsupported()
+    }
+
     fn connection_watch(&self) -> Box<dyn ConnectionWatch> {
         Box::new(SolanaConnectionWatch {
             rx: rpc::connection_state(),

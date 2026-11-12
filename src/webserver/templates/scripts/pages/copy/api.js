@@ -8,6 +8,32 @@ import { errorMessageOf } from "../../core/request_manager.js";
 
 const BASE = "/api/copy-trading";
 
+/** A failed wallet watch step carrying its translated explanation. */
+function watchError(message) {
+  const error = new Error(message);
+  error.detail = error.message;
+  return error;
+}
+
+/** The wallet watch target of `address`; a missing target fails with its own message. */
+export async function watchTarget(requestManager, address) {
+  const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
+  const target = targets.find((item) => item.address === address);
+  if (!target) throw watchError(I18n.t("copy-watch-target-missing"));
+  return target;
+}
+
+/** A write to one wallet watch target (`/api/wallets/watch/{id}/{action}`), never replayed. */
+export function postWatch(requestManager, targetId, action, body) {
+  return requestManager.fetch(`/api/wallets/watch/${targetId}/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    priority: "high",
+    skipDedup: true,
+  });
+}
+
 /** A manual paper close waits in the task's queue for two router quotes. */
 export const CLOSE_TIMEOUT_MS = 1_800_000;
 
