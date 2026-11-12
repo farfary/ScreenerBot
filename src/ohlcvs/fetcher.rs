@@ -11,6 +11,8 @@
 use crate::apis::geckoterminal::RequestLane;
 use crate::apis::{get_api_manager, ApiManager, Error as ApiError};
 use crate::chains::ChainId;
+use crate::connectivity::monitors::GeckoTerminalMonitor;
+use crate::connectivity::{EndpointMonitor, ProbeFailure};
 use crate::errors::NetworkError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::error::{OhlcvError, OhlcvResult};
@@ -137,6 +139,8 @@ impl OhlcvFetcher {
     /// the client is in its 429 penalty window nothing is sent and the fetch answers
     /// `OhlcvError::RateLimitExceeded` at once, which every caller treats as backpressure,
     /// instead of queueing on the client's single request permit for the rest of the window.
+    /// While GeckoTerminal blocks this client as a whole (`note_provider_block`) nothing is sent
+    /// either and the fetch answers `OhlcvError::ProviderBlocked`.
     pub async fn fetch_with_aggregate(
         &self,
         mint: &str,
@@ -147,6 +151,9 @@ impl OhlcvFetcher {
         limit: usize,
     ) -> OhlcvResult<Vec<Candle>> {
         let limit_clamped = limit.min(1000) as u32;
+        if provider_is_blocked(&GeckoTerminalMonitor::new()).await {
+            return Err(record_block(mint, pool_address, api_endpoint, aggregate).await);
+        }
         if let Err(ApiError::Deferred { retry_after_ms, .. }) = self
             .api_manager
             .geckoterminal
@@ -238,6 +245,9 @@ impl OhlcvFetcher {
                 )
             }
             Err(err) => {
+                if note_provider_block(&err).await {
+                    return Err(record_block(mint, pool_address, api_endpoint, aggregate).await);
+                }
                 let is_rate_limited =
                     matches!(&err, ApiError::Network(NetworkError::RateLimited { .. }));
                 let is_not_found = matches!(&err, ApiError::NotFound { .. })
@@ -655,6 +665,60 @@ async fn record_deferral(
     OhlcvError::RateLimitExceeded
 }
 
+/// Whether GeckoTerminal is confirmed down for this client: its connectivity endpoint is
+/// unhealthy while the monitor still probes it, so a probe that finds it answering lifts the
+/// block. An endpoint nobody has found unhealthy is not blocked, which includes every boot
+/// before the first probe.
+async fn provider_is_blocked(monitor: &GeckoTerminalMonitor) -> bool {
+    monitor.is_enabled() && crate::connectivity::is_endpoint_offline(monitor.name()).await
+}
+
+/// Report a GeckoTerminal answer that blocks this client as a whole, a 403 whose body is a
+/// challenge page, to the connectivity owner, which logs the start of the block once and lifts
+/// it when its probe succeeds again. Returns whether `err` was one.
+async fn note_provider_block(err: &ApiError) -> bool {
+    let ApiError::Network(network) = err else {
+        return false;
+    };
+    if !network.is_html_page_refusal() {
+        return false;
+    }
+    crate::connectivity::report_failure(
+        &GeckoTerminalMonitor::new(),
+        ProbeFailure::HttpStatus {
+            status: reqwest::StatusCode::FORBIDDEN.to_string(),
+        },
+    )
+    .await;
+    true
+}
+
+/// Record a GeckoTerminal candle fetch that was refused or not sent because the provider
+/// blocks this client, at debug: the start and the end of the block are logged once by the
+/// connectivity owner. Answers the block error.
+async fn record_block(
+    mint: &str,
+    pool_address: &str,
+    api_endpoint: &str,
+    aggregate: u32,
+) -> OhlcvError {
+    record_ohlcv_event(
+        "fetch_aggregate_blocked",
+        Severity::Debug,
+        Some(mint),
+        Some(pool_address),
+        json!({
+            "pool_address": pool_address,
+            "api_endpoint": api_endpoint,
+            "aggregate": aggregate,
+        }),
+    )
+    .await;
+    OhlcvError::ProviderBlocked {
+        provider: "GeckoTerminal",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -778,6 +842,77 @@ mod tests {
 
         assert!(matches!(answer, Err(OhlcvError::RateLimitExceeded)));
         assert!(started.elapsed() < Duration::from_millis(50));
+        assert_eq!(fetcher.calls_per_minute(), 0.0, "no request was sent");
+    }
+
+    const CHALLENGE_PAGE: &str = "<!DOCTYPE html><html><head><title>Challenge Verification</title></head><body>Verifying</body></html>";
+
+    /// Register the GeckoTerminal endpoint with the connectivity owner as its monitor does at
+    /// boot, after forgetting every other endpoint.
+    async fn register_gecko_endpoint() -> GeckoTerminalMonitor {
+        crate::connectivity::state::reset_all_for_tests().await;
+        let monitor = GeckoTerminalMonitor::new();
+        crate::connectivity::state::register_endpoint(
+            monitor.name(),
+            monitor.criticality(),
+            monitor.fallback_strategy(),
+        )
+        .await;
+        monitor
+    }
+
+    fn refusal(status: u16, body: &str) -> ApiError {
+        ApiError::Network(NetworkError::http_status(
+            "networks/solana/pools/pool/ohlcv/minute",
+            status,
+            Some(body.to_string()),
+        ))
+    }
+
+    #[tokio::test]
+    async fn only_a_challenge_page_refusal_blocks_the_provider() {
+        let _fetcher = test_fetcher();
+        let monitor = register_gecko_endpoint().await;
+        let other_failures = [
+            ApiError::Network(NetworkError::RateLimited {
+                endpoint: "networks".to_string(),
+                retry_after_ms: None,
+            }),
+            refusal(404, r#"{"errors":[{"status":"404"}]}"#),
+            refusal(403, r#"{"errors":[{"status":"403"}]}"#),
+            refusal(503, CHALLENGE_PAGE),
+        ];
+        for failure in other_failures {
+            assert!(!note_provider_block(&failure).await, "{failure}");
+            assert!(!provider_is_blocked(&monitor).await, "{failure}");
+        }
+
+        assert!(note_provider_block(&refusal(403, CHALLENGE_PAGE)).await);
+        assert!(provider_is_blocked(&monitor).await);
+    }
+
+    #[tokio::test]
+    async fn a_blocked_provider_is_asked_by_no_fetch_path() {
+        let fetcher = test_fetcher();
+        let monitor = register_gecko_endpoint().await;
+        assert!(!provider_is_blocked(&monitor).await);
+        assert!(note_provider_block(&refusal(403, CHALLENGE_PAGE)).await);
+
+        let started = Instant::now();
+        let direct = fetcher
+            .fetch_with_aggregate("mint", "pool", "minute", 5, None, 10)
+            .await;
+        let fallback = fetcher
+            .fetch_fallback("mint", "pool", "minute", 5, 10, true, None)
+            .await;
+
+        for answer in [direct.map(|_| ()), fallback.map(|_| ())] {
+            assert!(
+                matches!(answer, Err(OhlcvError::ProviderBlocked { .. })),
+                "{answer:?}"
+            );
+        }
+        assert!(started.elapsed() < Duration::from_millis(100));
         assert_eq!(fetcher.calls_per_minute(), 0.0, "no request was sent");
     }
 

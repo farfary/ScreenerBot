@@ -218,7 +218,11 @@ impl ConnectivityState {
         self.health.get(name).cloned()
     }
 
-    /// Get criticality level for an endpoint
+    /// Get criticality level for an endpoint; `None` for an endpoint no monitor registered
+    pub fn get_criticality(&self, name: &str) -> Option<EndpointCriticality> {
+        self.criticality.get(name).copied()
+    }
+
     /// Get fallback strategy for an endpoint
     pub fn get_fallback(&self, name: &str) -> Option<FallbackStrategy> {
         self.fallback.get(name).and_then(|f| f.clone())
@@ -414,6 +418,13 @@ pub async fn get_endpoint_health(name: &str) -> Option<EndpointHealth> {
     let state_arc = get_state();
     let state = state_arc.read().await;
     state.get_health(name)
+}
+
+/// The criticality of a registered endpoint; `None` for one no monitor registered
+pub async fn get_endpoint_criticality(name: &str) -> Option<EndpointCriticality> {
+    let state_arc = get_state();
+    let state = state_arc.read().await;
+    state.get_criticality(name)
 }
 
 /// Get fallback strategy for an endpoint

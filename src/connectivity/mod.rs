@@ -8,7 +8,7 @@ pub mod monitors;
 pub mod state;
 pub mod types;
 
-pub use checker::ConnectivityChecker;
+pub use checker::{report_failure, ConnectivityChecker};
 pub use monitor::EndpointMonitor;
 pub use state::{
     are_critical_endpoints_healthy, get_all_health, get_endpoint_health, get_fallback_strategy,

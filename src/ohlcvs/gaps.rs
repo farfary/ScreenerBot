@@ -466,7 +466,9 @@ impl GapManager {
 
     /// Fill one span through `fetch_multi_source` for the span's own timeframe
     /// (Data Server first) and store the answer (`store_span_answer`). A failed
-    /// request is recorded as an attempt and returned as the error.
+    /// request is recorded as an attempt and returned as the error, except one that only
+    /// says its source cannot be asked now (`OhlcvError::is_backpressure`): the span keeps
+    /// its attempts for a request that was served.
     pub async fn fill_span(
         &self,
         mint: &str,
@@ -491,6 +493,9 @@ impl GapManager {
         {
             Ok(response) => response,
             Err(e) => {
+                if e.is_backpressure() {
+                    return Err(e);
+                }
                 let (owned_mint, owned_pool) = (mint.to_string(), pool_address.to_string());
                 let (timeframe, start, end) = (span.timeframe, span.start, span.end);
                 let reason = e.to_string();

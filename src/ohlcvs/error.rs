@@ -19,6 +19,10 @@ pub enum OhlcvError {
     ApiError(String),
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
+    /// The provider refuses this client as a whole (a bot-challenge page instead of an answer),
+    /// so the request was not made or was refused for that reason alone.
+    #[error("{provider} is blocking requests")]
+    ProviderBlocked { provider: &'static str },
     #[error("Pool not found: {0}")]
     PoolNotFound(String),
     /// Another task is building this mint's strategy bundle; its result lands in the
@@ -40,5 +44,47 @@ pub enum OhlcvError {
     SeriesPoolMoved { mint: String, pool: String },
 }
 
+impl OhlcvError {
+    /// Whether the request was not served because its source cannot be asked now (rate limited,
+    /// or blocking this client as a whole). Such a failure says nothing about the pool or the
+    /// gap span it asked for, so it counts against neither.
+    pub(crate) fn is_backpressure(&self) -> bool {
+        matches!(self, Self::RateLimitExceeded | Self::ProviderBlocked { .. })
+    }
+}
+
 /// Result alias for the OHLCV module.
 pub type OhlcvResult<T> = Result<T, OhlcvError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_source_that_cannot_be_asked_now_is_backpressure() {
+        let cases = [
+            ("rate limited", OhlcvError::RateLimitExceeded, true),
+            (
+                "provider blocked",
+                OhlcvError::ProviderBlocked {
+                    provider: "Provider",
+                },
+                true,
+            ),
+            (
+                "provider error",
+                OhlcvError::ApiError("HTTP 500".to_string()),
+                false,
+            ),
+            (
+                "unknown pool",
+                OhlcvError::PoolNotFound("pool".to_string()),
+                false,
+            ),
+            ("no data", OhlcvError::NotFound("mint".to_string()), false),
+        ];
+        for (case, error, backpressure) in cases {
+            assert_eq!(error.is_backpressure(), backpressure, "{case}");
+        }
+    }
+}

@@ -10,6 +10,9 @@ use crate::logger::redact_url;
 
 const HTTP_BODY_MAX_CHARS: usize = 300;
 
+/// Opening words of the summary of an HTML response body (`summarize_http_body`).
+const HTML_PAGE_SUMMARY: &str = "HTML page";
+
 /// Summarizes an HTTP response body before it reaches logs or error messages.
 pub fn summarize_http_body(body: &str) -> String {
     let trimmed = body.trim();
@@ -29,8 +32,8 @@ pub fn summarize_http_body(body: &str) -> String {
             (!title.is_empty() && title.chars().count() <= 80).then_some(title)
         });
         return match title {
-            Some(title) => format!("HTML page \"{title}\", {} bytes", body.len()),
-            None => format!("HTML page, {} bytes", body.len()),
+            Some(title) => format!("{HTML_PAGE_SUMMARY} \"{title}\", {} bytes", body.len()),
+            None => format!("{HTML_PAGE_SUMMARY}, {} bytes", body.len()),
         };
     }
 
@@ -55,6 +58,17 @@ impl NetworkError {
                 .map(|body| summarize_http_body(&body))
                 .filter(|body| !body.is_empty()),
         }
+    }
+
+    /// Whether the endpoint refused with a 403 whose body is an HTML page: the challenge or
+    /// error page of the CDN in front of an API, which blocks the client as a whole and says
+    /// nothing about the request it answers.
+    pub fn is_html_page_refusal(&self) -> bool {
+        matches!(
+            self,
+            Self::HttpStatus { status: 403, body: Some(body), .. }
+                if body.starts_with(HTML_PAGE_SUMMARY)
+        )
     }
 }
 
@@ -84,7 +98,7 @@ pub enum NetworkError {
 
 #[cfg(test)]
 mod tests {
-    use super::summarize_http_body;
+    use super::{summarize_http_body, NetworkError};
 
     #[test]
     fn html_error_pages_are_summarized_on_one_line() {
@@ -95,6 +109,27 @@ mod tests {
             format!("HTML page \"Just a moment...\", {} bytes", body.len())
         );
         assert!(!summary.contains('\n'));
+    }
+
+    #[test]
+    fn only_a_403_with_an_html_body_is_an_html_page_refusal() {
+        let page = "<html><head><title>Challenge Verification</title></head></html>";
+        let json = r#"{"errors":[{"status":"403"}]}"#;
+        let cases = [
+            ("403 with an HTML page", 403, Some(page), true),
+            ("403 with JSON", 403, Some(json), false),
+            ("403 without a body", 403, None, false),
+            ("429 with an HTML page", 429, Some(page), false),
+            ("503 with an HTML page", 503, Some(page), false),
+        ];
+        for (case, status, body, refusal) in cases {
+            let error = NetworkError::http_status(
+                "https://api.example.com/v2",
+                status,
+                body.map(String::from),
+            );
+            assert_eq!(error.is_html_page_refusal(), refusal, "{case}");
+        }
     }
 
     #[test]

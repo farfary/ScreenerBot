@@ -1,10 +1,12 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! OHLCV fetch priorities — scoring and scheduling for token candle updates.
+//! OHLCV fetch priorities — scoring and scheduling for token candle updates, and the ranking
+//! of the monitor's token slots.
 
 use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 
 pub struct PriorityManager;
@@ -201,4 +203,330 @@ pub enum RecommendedAction {
     FetchNow,
     Throttle(Duration),
     Pause,
+}
+
+/// A monitored token as the slot planner sees it.
+#[derive(Debug, Clone)]
+pub(super) struct SlotHolder {
+    pub mint: String,
+    pub priority: Priority,
+    pub last_activity: DateTime<Utc>,
+    pub consecutive_empty_fetches: u32,
+}
+
+/// What one sync of the monitor's token slots is planned from.
+pub(super) struct SlotDemand<'a> {
+    /// Mints the pool service prices, in its order: the only tokens that can be monitored.
+    pub available: &'a [String],
+    pub monitored: &'a [SlotHolder],
+    /// Mints the live and paper books hold. They always get a slot, cap or not.
+    pub held: &'a HashSet<String>,
+    /// Mints that currently pass filtering: the candidates of the entry strategies.
+    pub passed: &'a HashSet<String>,
+    /// `ohlcv.max_monitored_tokens`; `usize::MAX` when it is 0 (unlimited).
+    pub max_tokens: usize,
+}
+
+/// The changes one sync makes to the monitored tokens.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct SlotPlan {
+    /// Mints to start monitoring, held first, then passed, then the rest.
+    pub add: Vec<String>,
+    /// Monitored mints to stop monitoring: over the cap, or releasing a slot to a passed token.
+    pub remove: Vec<String>,
+    /// Priced tokens that pass filtering and still have no slot after the plan.
+    pub passed_unmonitored: usize,
+}
+
+/// Plan the monitored tokens under `max_tokens`. Held mints come first, then the tokens that
+/// pass filtering, then the rest. A token over the cap leaves in the order of
+/// [`drops_before`]; a passed token that finds no free slot takes the slot of a monitored token
+/// that only holds a low-priority place (`is_releasable`), so the entry strategies' candidates
+/// are not starved of candles by tokens nothing is waiting on.
+pub(super) fn plan_monitor_slots(demand: &SlotDemand<'_>) -> SlotPlan {
+    let monitored_mints: HashSet<&str> = demand
+        .monitored
+        .iter()
+        .map(|holder| holder.mint.as_str())
+        .collect();
+    let (mut held_new, mut passed_new, mut rest_new) = (Vec::new(), Vec::new(), Vec::new());
+    for mint in demand.available {
+        if monitored_mints.contains(mint.as_str()) {
+            continue;
+        }
+        if demand.held.contains(mint) {
+            held_new.push(mint);
+        } else if demand.passed.contains(mint) {
+            passed_new.push(mint);
+        } else {
+            rest_new.push(mint);
+        }
+    }
+
+    // Holders that may leave, the first to leave first. Held mints never leave.
+    let mut leavers: Vec<&SlotHolder> = demand
+        .monitored
+        .iter()
+        .filter(|holder| !demand.held.contains(&holder.mint))
+        .collect();
+    leavers.sort_by(|a, b| drops_before(a, b, demand.passed));
+    let mut leavers: VecDeque<&SlotHolder> = leavers.into();
+
+    let mut plan = SlotPlan::default();
+    let mut len = demand.monitored.len() + held_new.len();
+    while len > demand.max_tokens {
+        let Some(leaver) = leavers.pop_front() else {
+            break;
+        };
+        plan.remove.push(leaver.mint.clone());
+        len -= 1;
+    }
+
+    plan.add.extend(held_new.into_iter().cloned());
+    let mut free = demand.max_tokens.saturating_sub(len);
+    for mint in passed_new {
+        if free > 0 {
+            free -= 1;
+            plan.add.push(mint.clone());
+        } else if let Some(at) = leavers
+            .iter()
+            .position(|holder| is_releasable(holder, demand.held, demand.passed))
+        {
+            let released = leavers.remove(at).expect("position is within the queue");
+            plan.remove.push(released.mint.clone());
+            plan.add.push(mint.clone());
+        } else {
+            plan.passed_unmonitored += 1;
+        }
+    }
+    for mint in rest_new {
+        if free == 0 {
+            break;
+        }
+        free -= 1;
+        plan.add.push(mint.clone());
+    }
+    plan
+}
+
+/// Order in which monitored tokens leave when the cap is exceeded: lowest priority first, a token
+/// nothing waits on before a passed one, then the longest inactive, then the most empty fetches.
+fn drops_before(a: &SlotHolder, b: &SlotHolder, passed: &HashSet<String>) -> std::cmp::Ordering {
+    a.priority
+        .cmp(&b.priority)
+        .then_with(|| passed.contains(&a.mint).cmp(&passed.contains(&b.mint)))
+        .then_with(|| a.last_activity.cmp(&b.last_activity))
+        .then_with(|| {
+            b.consecutive_empty_fetches
+                .cmp(&a.consecutive_empty_fetches)
+        })
+}
+
+/// Whether a monitored token gives up its slot for a waiting passed token: low priority, not
+/// held and not passed itself. A medium or higher priority token is one somebody viewed, requested
+/// or traded.
+fn is_releasable(holder: &SlotHolder, held: &HashSet<String>, passed: &HashSet<String>) -> bool {
+    holder.priority == Priority::Low
+        && !held.contains(&holder.mint)
+        && !passed.contains(&holder.mint)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration as ChronoDuration;
+
+    /// A fixed instant, so two holders idle for the same hours tie on activity.
+    fn at_rest() -> DateTime<Utc> {
+        DateTime::from_timestamp(1_700_000_000, 0).expect("valid instant")
+    }
+
+    fn holder(mint: &str, priority: Priority, idle_hours: i64, empty_fetches: u32) -> SlotHolder {
+        SlotHolder {
+            mint: mint.to_string(),
+            priority,
+            last_activity: at_rest() - ChronoDuration::hours(idle_hours),
+            consecutive_empty_fetches: empty_fetches,
+        }
+    }
+
+    fn mints(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| name.to_string()).collect()
+    }
+
+    fn set(names: &[&str]) -> HashSet<String> {
+        names.iter().map(|name| name.to_string()).collect()
+    }
+
+    fn plan(
+        available: &[&str],
+        monitored: &[SlotHolder],
+        held: &[&str],
+        passed: &[&str],
+        max_tokens: usize,
+    ) -> SlotPlan {
+        plan_monitor_slots(&SlotDemand {
+            available: &mints(available),
+            monitored,
+            held: &set(held),
+            passed: &set(passed),
+            max_tokens,
+        })
+    }
+
+    #[test]
+    fn free_slots_go_to_held_then_passed_then_the_rest() {
+        let result = plan(
+            &["rest", "passed", "held", "passed2", "rest2"],
+            &[],
+            &["held"],
+            &["passed", "passed2"],
+            3,
+        );
+        assert_eq!(result.add, mints(&["held", "passed", "passed2"]));
+        assert!(result.remove.is_empty());
+        assert_eq!(result.passed_unmonitored, 0);
+    }
+
+    #[test]
+    fn a_held_mint_gets_a_slot_beyond_the_cap() {
+        let monitored = [
+            holder("a", Priority::Low, 1, 0),
+            holder("b", Priority::Low, 2, 0),
+        ];
+        let result = plan(&["a", "b", "held"], &monitored, &["held"], &[], 2);
+        assert_eq!(result.add, mints(&["held"]));
+        // The cap is exceeded by the held mint, so the longest idle token leaves.
+        assert_eq!(result.remove, mints(&["b"]));
+    }
+
+    #[test]
+    fn a_waiting_passed_token_takes_the_slot_of_a_plain_low_token() {
+        let monitored = [
+            holder("plain-recent", Priority::Low, 1, 0),
+            holder("plain-idle", Priority::Low, 9, 0),
+            holder("passed-low", Priority::Low, 20, 0),
+        ];
+        let result = plan(
+            &["plain-recent", "plain-idle", "passed-low", "waiting"],
+            &monitored,
+            &[],
+            &["passed-low", "waiting"],
+            3,
+        );
+        assert_eq!(result.remove, mints(&["plain-idle"]));
+        assert_eq!(result.add, mints(&["waiting"]));
+        assert_eq!(result.passed_unmonitored, 0);
+    }
+
+    #[test]
+    fn only_a_plain_low_token_is_released_for_a_passed_one() {
+        let monitored = [
+            holder("held", Priority::Low, 50, 0),
+            holder("viewed", Priority::Medium, 50, 0),
+            holder("requested", Priority::High, 50, 0),
+            holder("traded", Priority::Critical, 50, 0),
+            holder("passed-low", Priority::Low, 50, 0),
+        ];
+        let result = plan(
+            &[
+                "held",
+                "viewed",
+                "requested",
+                "traded",
+                "passed-low",
+                "waiting",
+            ],
+            &monitored,
+            &["held"],
+            &["passed-low", "waiting"],
+            5,
+        );
+        assert!(result.remove.is_empty());
+        assert!(result.add.is_empty());
+        assert_eq!(result.passed_unmonitored, 1);
+    }
+
+    #[test]
+    fn each_waiting_passed_token_releases_one_slot() {
+        let monitored = [
+            holder("plain-a", Priority::Low, 3, 0),
+            holder("plain-b", Priority::Low, 2, 0),
+            holder("plain-c", Priority::Low, 1, 0),
+        ];
+        let result = plan(
+            &[
+                "plain-a", "plain-b", "plain-c", "wait-1", "wait-2", "wait-3", "wait-4",
+            ],
+            &monitored,
+            &[],
+            &["wait-1", "wait-2", "wait-3", "wait-4"],
+            3,
+        );
+        assert_eq!(result.remove, mints(&["plain-a", "plain-b", "plain-c"]));
+        assert_eq!(result.add, mints(&["wait-1", "wait-2", "wait-3"]));
+        assert_eq!(result.passed_unmonitored, 1);
+    }
+
+    #[test]
+    fn the_cap_trims_plain_tokens_before_passed_ones_within_a_priority() {
+        let monitored = [
+            holder("passed-idle", Priority::Low, 30, 0),
+            holder("plain-recent", Priority::Low, 1, 0),
+            holder("medium", Priority::Medium, 40, 0),
+            holder("plain-idle", Priority::Low, 20, 0),
+        ];
+        let result = plan(
+            &["passed-idle", "plain-recent", "medium", "plain-idle"],
+            &monitored,
+            &[],
+            &["passed-idle"],
+            2,
+        );
+        // Lowest priority first, plain before passed, then the longest idle.
+        assert_eq!(result.remove, mints(&["plain-idle", "plain-recent"]));
+        assert!(result.add.is_empty());
+    }
+
+    #[test]
+    fn a_token_with_more_empty_fetches_leaves_first_among_equals() {
+        let monitored = [
+            holder("quiet", Priority::Low, 5, 0),
+            holder("empty", Priority::Low, 5, 7),
+        ];
+        let result = plan(&["quiet", "empty"], &monitored, &[], &[], 1);
+        assert_eq!(result.remove, mints(&["empty"]));
+    }
+
+    #[test]
+    fn rest_tokens_fill_only_what_passed_ones_leave_free() {
+        let monitored = [holder("plain", Priority::Low, 1, 0)];
+        let result = plan(
+            &["plain", "other", "waiting"],
+            &monitored,
+            &[],
+            &["waiting"],
+            2,
+        );
+        assert_eq!(result.add, mints(&["waiting"]));
+        assert!(result.remove.is_empty());
+    }
+
+    #[test]
+    fn a_cap_of_zero_means_unlimited() {
+        let result = plan(&["a", "b", "c"], &[], &[], &["b"], usize::MAX);
+        assert_eq!(result.add, mints(&["b", "a", "c"]));
+        assert!(result.remove.is_empty());
+        assert_eq!(result.passed_unmonitored, 0);
+    }
+
+    #[test]
+    fn a_synced_set_plans_nothing() {
+        let monitored = [
+            holder("a", Priority::Low, 1, 0),
+            holder("b", Priority::Low, 1, 0),
+        ];
+        let result = plan(&["a", "b"], &monitored, &[], &["a"], 2);
+        assert_eq!(result, SlotPlan::default());
+    }
 }

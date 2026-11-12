@@ -16,7 +16,9 @@ use crate::ohlcvs::feeds::CandleFeed;
 use crate::ohlcvs::fetcher::{CandleSource, FetchResponse, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
 use crate::ohlcvs::gaps::{GapManager, GAP_FILL_REQUESTS_PER_CYCLE};
 use crate::ohlcvs::manager::PoolManager;
-use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
+use crate::ohlcvs::priorities::{
+    plan_monitor_slots, ActivityType, PriorityManager, SlotDemand, SlotHolder,
+};
 use crate::ohlcvs::types::{
     Candle, MonitorStats, MonitorTelemetrySnapshot, PoolConfig, Priority, Timeframe,
     TokenOhlcvConfig,
@@ -64,9 +66,10 @@ pub(super) const READ_THROUGH_PENDING_RETRY: Duration = Duration::from_secs(2);
 /// Shortest time left before a read-through's deadline worth starting a request in.
 const READ_THROUGH_MIN_ATTEMPT: Duration = Duration::from_secs(1);
 
-/// How long the Data Server may answer a series `pending` before the background paths collect
-/// it from the providers (`OhlcvFetcher::fetch_fallback`), so a degraded Data Server never
-/// leaves a native pool without candles.
+/// How long a series the Data Server last answered `pending` is waited on, once the server is
+/// unusable, before the background paths collect it from the providers
+/// (`OhlcvFetcher::fetch_fallback`), so a degraded Data Server never leaves a native pool
+/// without candles.
 const DATA_SERVER_PENDING_FALLBACK_SECS: i64 = 120;
 
 /// Delay of the first re-fetch after the Data Server reports it is refreshing
@@ -333,7 +336,8 @@ impl NativeSeriesState {
 }
 
 /// Whether a series the Data Server keeps answering `pending` is collected from the providers:
-/// the current pending run began at least `DATA_SERVER_PENDING_FALLBACK_SECS` ago.
+/// the current pending run began at least `DATA_SERVER_PENDING_FALLBACK_SECS` ago. A provider
+/// that blocks the app is skipped by `OhlcvFetcher` itself, so this fallback sends nothing then.
 fn pending_fallback_due(state: &NativeSeriesState, now: i64) -> bool {
     state
         .pending_since
@@ -1575,55 +1579,46 @@ impl OhlcvMonitor {
                 self.update_native_series(mint, &pool_address, Timeframe::Minute1, |state| {
                     state.record_failure(now)
                 });
-                if !matches!(e, OhlcvError::RateLimitExceeded) {
-                    // Only penalize pool health for non-rate-limit failures
+                // Only a failure of the pool itself penalizes its health; a source that
+                // cannot be asked now (rate limited, blocked) says nothing about it.
+                if !e.is_backpressure() {
                     self.pool_manager.mark_failure(mint, &pool_address).await?;
                 }
 
-                let level = if matches!(e, OhlcvError::RateLimitExceeded) {
-                    "WARN"
-                } else {
-                    "ERROR"
-                };
-
-                if !matches!(e, OhlcvError::RateLimitExceeded) {
-                    let (kind, severity) = classify_ohlcv_error(&e);
-                    record_ohlcv_event(
-                        "fetch_failed",
-                        severity,
-                        Some(mint),
-                        Some(pool_address.as_str()),
-                        crate::events::with_text(
-                            json!({
-                              "error_kind": kind,
-                              "batch_size": batch_size,
-                              "priority": priority.to_string(),
-                            }),
-                            &UiText::new(ids::EVENTS_OHLCV_FETCH_FAILED)
-                                .arg("mint", UiArg::Text(mint.to_string()))
-                                .arg("pool", UiArg::Text(pool_address.to_string()))
-                                .arg("error", UiArg::Text(e.to_string())),
-                        ),
-                    )
-                    .await;
-                }
-
-                if level == "WARN" {
-                    logger::warning(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Failed to fetch {} using pool {}: {}",
-                            mint, pool_address, e
-                        ),
-                    );
-                } else {
-                    logger::error(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Failed to fetch {} using pool {}: {}",
-                            mint, pool_address, e
-                        ),
-                    );
+                let failure = format!(
+                    "Failed to fetch {} using pool {}: {}",
+                    mint, pool_address, e
+                );
+                match &e {
+                    OhlcvError::RateLimitExceeded => {
+                        logger::warning(LogTag::Ohlcv, &failure);
+                    }
+                    // The connectivity owner logs the start and the end of the block once.
+                    OhlcvError::ProviderBlocked { .. } => {
+                        logger::debug(LogTag::Ohlcv, &failure);
+                    }
+                    _ => {
+                        let (kind, severity) = classify_ohlcv_error(&e);
+                        record_ohlcv_event(
+                            "fetch_failed",
+                            severity,
+                            Some(mint),
+                            Some(pool_address.as_str()),
+                            crate::events::with_text(
+                                json!({
+                                  "error_kind": kind,
+                                  "batch_size": batch_size,
+                                  "priority": priority.to_string(),
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_FETCH_FAILED)
+                                    .arg("mint", UiArg::Text(mint.to_string()))
+                                    .arg("pool", UiArg::Text(pool_address.to_string()))
+                                    .arg("error", UiArg::Text(e.to_string())),
+                            ),
+                        )
+                        .await;
+                        logger::error(LogTag::Ohlcv, &failure);
+                    }
                 }
             }
         }
@@ -2215,6 +2210,10 @@ impl OhlcvMonitor {
                 processed += 1;
                 match self.fill_token_gaps(&mint, priority, &mut budget).await {
                     Ok(()) => {}
+                    Err(e @ OhlcvError::ProviderBlocked { .. }) => {
+                        logger::debug(LogTag::Ohlcv, &format!("Gap fill paused: {e}"));
+                        break;
+                    }
                     Err(e) => {
                         logger::error(LogTag::Ohlcv, &format!("Gap fill error for {mint}: {e}"));
                         record_ohlcv_event(
@@ -2290,8 +2289,8 @@ impl OhlcvMonitor {
                         }
                     }
                 }
-                Err(OhlcvError::RateLimitExceeded) => {
-                    result = Err(OhlcvError::RateLimitExceeded);
+                Err(e) if e.is_backpressure() => {
+                    result = Err(e);
                     break;
                 }
                 Err(OhlcvError::SeriesPoolMoved { .. }) => {
@@ -2348,6 +2347,8 @@ impl OhlcvMonitor {
 
     async fn sync_pool_service_tokens(self: Arc<Self>) {
         let mut tick = interval(Duration::from_secs(30)); // Every 30 seconds (Pool Service updates every 5-10s)
+                                                          // Passed tokens the last sync left without a slot, logged only when it changes.
+        let mut passed_unmonitored = 0;
 
         loop {
             tick.tick().await;
@@ -2387,58 +2388,8 @@ impl OhlcvMonitor {
 
             let mut added = 0;
             let mut upgraded = 0;
-            let mut already_monitored = 0;
-
-            // Add or upgrade tokens from Pool Service
-            for mint in &available_mints {
-                let active_tokens = self.active_tokens.read().await;
-
-                if let Some(config) = active_tokens.get(mint) {
-                    // Token already monitored
-                    already_monitored += 1;
-
-                    // Upgrade to Critical if has open position
-                    if open_positions.contains(mint) && config.priority != Priority::Critical {
-                        drop(active_tokens);
-                        if let Err(e) = self.update_priority(mint, Priority::Critical).await {
-                            logger::error(
-                                LogTag::Ohlcv,
-                                &format!("Failed to upgrade priority for {mint}: {e}"),
-                            );
-                        } else {
-                            upgraded += 1;
-                        }
-                    }
-                } else {
-                    // New token - add with appropriate priority
-                    drop(active_tokens);
-
-                    let is_open_position = open_positions.contains(mint);
-
-                    if !is_open_position && max_tokens != usize::MAX {
-                        let current_len = {
-                            let snapshot = self.active_tokens.read().await;
-                            snapshot.len()
-                        };
-
-                        if current_len >= max_tokens {
-                            continue;
-                        }
-                    }
-
-                    let priority = if is_open_position {
-                        Priority::Critical
-                    } else {
-                        Priority::Low
-                    };
-
-                    if let Err(e) = self.add_token(mint.clone(), priority).await {
-                        logger::error(LogTag::Ohlcv, &format!("Failed to add token {mint}: {e}"));
-                    } else {
-                        added += 1;
-                    }
-                }
-            }
+            let mut removed = 0;
+            let mut trimmed = 0;
 
             // Remove tokens no longer in Pool Service — but KEEP anything the user
             // is actively interested in, so charts a user opens/trades stay ready
@@ -2451,7 +2402,6 @@ impl OhlcvMonitor {
                 available_mints.iter().cloned().collect();
             let grace_hours = with_config(|cfg| cfg.ohlcv.cache_retention_hours).max(0);
             let activity_cutoff = Utc::now() - chrono::Duration::hours(grace_hours);
-            let mut removed = 0;
 
             let active_tokens = self.active_tokens.read().await;
             let tokens_to_check: Vec<(String, Priority, DateTime<Utc>)> = active_tokens
@@ -2482,19 +2432,94 @@ impl OhlcvMonitor {
                 }
             }
 
-            let mut trimmed = 0;
-            if max_tokens != usize::MAX {
-                let tokens_to_trim = self
-                    .determine_tokens_to_trim(max_tokens, &open_positions)
-                    .await;
+            let monitored: Vec<SlotHolder> = {
+                let active = self.active_tokens.read().await;
+                active
+                    .values()
+                    .map(|config| SlotHolder {
+                        mint: config.mint.clone(),
+                        priority: config.priority,
+                        last_activity: config.last_activity,
+                        consecutive_empty_fetches: config.consecutive_empty_fetches,
+                    })
+                    .collect()
+            };
 
-                for mint in tokens_to_trim {
-                    if let Err(e) = self.remove_token(&mint).await {
-                        logger::error(LogTag::Ohlcv, &format!("Failed to trim token {mint}: {e}"));
+            // A held token is monitored at Critical priority
+            let mut already_monitored = 0;
+            for holder in monitored
+                .iter()
+                .filter(|holder| available_set.contains(&holder.mint))
+            {
+                already_monitored += 1;
+                if open_positions.contains(&holder.mint) && holder.priority != Priority::Critical {
+                    if let Err(e) = self.update_priority(&holder.mint, Priority::Critical).await {
+                        logger::error(
+                            LogTag::Ohlcv,
+                            &format!("Failed to upgrade priority for {}: {e}", holder.mint),
+                        );
                     } else {
-                        trimmed += 1;
+                        upgraded += 1;
                     }
                 }
+            }
+
+            // Under the cap, held mints come first, then the tokens that pass filtering (the
+            // candidates of the entry strategies, whose conditions read these candles), then the rest.
+            let passed: std::collections::HashSet<String> = crate::tokens::get_passed_tokens(chain)
+                .into_iter()
+                .collect();
+            let plan = plan_monitor_slots(&SlotDemand {
+                available: &available_mints,
+                monitored: &monitored,
+                held: &open_positions,
+                passed: &passed,
+                max_tokens,
+            });
+
+            for mint in &plan.remove {
+                if let Err(e) = self.remove_token(mint).await {
+                    logger::error(LogTag::Ohlcv, &format!("Failed to trim token {mint}: {e}"));
+                } else {
+                    trimmed += 1;
+                }
+            }
+
+            for mint in &plan.add {
+                let priority = if open_positions.contains(mint) {
+                    Priority::Critical
+                } else {
+                    Priority::Low
+                };
+
+                if let Err(e) = self.add_token(mint.clone(), priority).await {
+                    logger::error(LogTag::Ohlcv, &format!("Failed to add token {mint}: {e}"));
+                } else {
+                    added += 1;
+                }
+            }
+
+            if plan.passed_unmonitored != passed_unmonitored {
+                if plan.passed_unmonitored > 0 {
+                    let priced_passed = available_mints
+                        .iter()
+                        .filter(|mint| passed.contains(*mint))
+                        .count();
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "{} of {priced_passed} priced passed tokens have no candle monitoring: the \
+                             {max_tokens} slots of ohlcv.max_monitored_tokens are all held, passed or in use",
+                            plan.passed_unmonitored
+                        ),
+                    );
+                } else {
+                    logger::info(
+                        LogTag::Ohlcv,
+                        "Every priced passed token has candle monitoring again",
+                    );
+                }
+                passed_unmonitored = plan.passed_unmonitored;
             }
 
             if added > 0 || upgraded > 0 || removed > 0 || trimmed > 0 {
@@ -2512,56 +2537,6 @@ impl OhlcvMonitor {
         );
             }
         }
-    }
-
-    async fn determine_tokens_to_trim(
-        &self,
-        max_tokens: usize,
-        open_positions: &std::collections::HashSet<String>,
-    ) -> Vec<String> {
-        if max_tokens == usize::MAX {
-            return Vec::new();
-        }
-
-        let active = self.active_tokens.read().await;
-        let active_len = active.len();
-
-        if active_len <= max_tokens {
-            return Vec::new();
-        }
-
-        let mut candidates: Vec<(String, Priority, chrono::DateTime<Utc>, u32)> = active
-            .iter()
-            .filter(|(mint, _)| !open_positions.contains(*mint))
-            .map(|(mint, config)| {
-                (
-                    mint.clone(),
-                    config.priority,
-                    config.last_activity,
-                    config.consecutive_empty_fetches,
-                )
-            })
-            .collect();
-
-        let mut current_size = active_len;
-        drop(active);
-
-        candidates.sort_by(|a, b| {
-            a.1.cmp(&b.1)
-                .then_with(|| a.2.cmp(&b.2))
-                .then_with(|| b.3.cmp(&a.3))
-        });
-
-        let mut to_remove = Vec::new();
-        for (mint, _, _, _) in candidates {
-            if current_size <= max_tokens {
-                break;
-            }
-            to_remove.push(mint);
-            current_size -= 1;
-        }
-
-        to_remove
     }
 
     // ==================== Multi-Timeframe Backfill ====================
@@ -2745,6 +2720,21 @@ impl OhlcvMonitor {
                     }
                 }
                 Err(e @ OhlcvError::SeriesPoolMoved { .. }) => return Err(e),
+                Err(e @ OhlcvError::ProviderBlocked { .. }) => {
+                    {
+                        let mint = mint.to_string();
+                        self.blocking(move |monitor| {
+                            monitor.db.mark_backfill_incomplete(&mint, timeframe)
+                        })
+                        .await?;
+                    }
+                    // Every remaining timeframe asks the same blocked provider.
+                    logger::debug(
+                        LogTag::Ohlcv,
+                        &format!("Backfill of mint={mint} stopped: {e}"),
+                    );
+                    break;
+                }
                 Err(e) => {
                     {
                         let mint = mint.to_string();
@@ -3224,6 +3214,18 @@ impl OhlcvMonitor {
                             "Native refresh for mint={} stopped at timeframe={}: rate limit exceeded",
                             mint,
                             timeframe.as_str()
+                        ),
+                    );
+                    break;
+                }
+                Err(e @ OhlcvError::ProviderBlocked { .. }) => {
+                    logger::debug(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Native refresh for mint={} stopped at timeframe={}: {}",
+                            mint,
+                            timeframe.as_str(),
+                            e
                         ),
                     );
                     break;
@@ -3865,6 +3867,7 @@ fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity) {
         OhlcvError::Internal(_) => ("internal_error", Severity::Error),
         OhlcvError::ApiError(_) => ("api_error", Severity::Error),
         OhlcvError::RateLimitExceeded => ("rate_limit", Severity::Warn),
+        OhlcvError::ProviderBlocked { .. } => ("provider_blocked", Severity::Debug),
         OhlcvError::PoolNotFound(_) => ("pool_not_found", Severity::Warn),
         OhlcvError::BundleBuildInProgress(_) => ("bundle_build_in_progress", Severity::Debug),
         OhlcvError::InvalidTimeframe(_) => ("invalid_timeframe", Severity::Error),
@@ -5505,6 +5508,43 @@ mod tests {
             .native_series_state("mint", "other", Timeframe::Minute1)
             .last_fetch_at
             .is_some());
+    }
+
+    /// While the provider blocks this client, the series is refused without a request and the
+    /// refusals count nothing against its pool, however many there are.
+    #[tokio::test]
+    async fn a_provider_block_counts_nothing_against_the_series_pool() {
+        use crate::connectivity::monitors::GeckoTerminalMonitor;
+        use crate::connectivity::{state, EndpointMonitor, ProbeFailure};
+        let h = deep_history_monitor("provider-block", 0);
+        h.monitor.active_tokens.write().await.insert(
+            "mint".to_string(),
+            TokenOhlcvConfig::new("mint".to_string(), Priority::High),
+        );
+        state::reset_all_for_tests().await;
+        let gecko = GeckoTerminalMonitor::new();
+        state::register_endpoint(gecko.name(), gecko.criticality(), gecko.fallback_strategy())
+            .await;
+        crate::connectivity::report_failure(
+            &gecko,
+            ProbeFailure::HttpStatus {
+                status: "403 Forbidden".to_string(),
+            },
+        )
+        .await;
+        assert!(state::is_endpoint_offline(gecko.name()).await);
+
+        let max_pool_failures = with_config(|cfg| cfg.ohlcv.max_pool_failures);
+        for _ in 0..=max_pool_failures {
+            h.monitor.fetch_token_data("mint").await.unwrap();
+        }
+
+        let pools = h.db.get_pools("mint").unwrap();
+        assert!(pools.iter().all(|pool| pool.failure_count == 0));
+        assert_eq!(
+            PoolConfig::series_pool(&pools).map(|pool| pool.address.as_str()),
+            Some("pool")
+        );
     }
 
     #[test]
