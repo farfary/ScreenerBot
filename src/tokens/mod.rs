@@ -109,8 +109,8 @@ pub use priorities::Priority;
 pub use store::{
     answered_not_listed, dexscreener_cache_metrics, dexscreener_cache_size,
     geckoterminal_cache_metrics, geckoterminal_cache_size, get_cached_token,
-    invalidate_token_snapshot, refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size,
-    store_token_snapshot, CacheMetrics,
+    get_token_snapshot_async, invalidate_token_snapshot, refresh_token_snapshot,
+    rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot, CacheMetrics,
 };
 
 // Re-export pools APIs
@@ -232,7 +232,7 @@ pub async fn ensure_token_available(
     // Fast path: token already known (discovered, has market data) — covers
     // not-pool-tracked and filter-failed tokens shown in the dashboard.
     let db = database::require_database(chain)?;
-    if let Some(token) = store::get_full_token_async(chain, mint).await? {
+    if let Some(token) = store::get_token_snapshot_async(chain, mint).await? {
         return Ok(token);
     }
 
@@ -256,7 +256,7 @@ pub async fn ensure_token_available(
     }
 
     // Retry assembly now that market data may exist.
-    store::get_full_token_async(chain, mint)
+    store::get_token_snapshot_async(chain, mint)
         .await?
         .ok_or_else(|| Error::NoMarketData {
             mint: mint.to_owned(),

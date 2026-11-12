@@ -135,6 +135,22 @@ pub fn strategy_market_data(
     }
 }
 
+/// The token snapshot a strategy context reads its transaction counts, snapshot time and
+/// creation time from: cached while fresh, otherwise rebuilt from the token store. A store
+/// failure leaves it absent, and the rules that read it answer unknown.
+async fn token_snapshot(chain: ChainId, mint: &str) -> Option<Token> {
+    match crate::tokens::get_token_snapshot_async(chain, mint).await {
+        Ok(token) => token,
+        Err(e) => {
+            logger::debug(
+                LogTag::Trader,
+                &format!("Token snapshot unavailable for {mint}: {e}"),
+            );
+            None
+        }
+    }
+}
+
 /// The strategy view of an open position at `current_price`.
 ///
 /// The peak is the basis peak (the highest pool price since the average entry last
@@ -200,6 +216,20 @@ pub async fn strategy_candles(chain: ChainId, mint: &str) -> Option<TimeframeBun
                         crate::ohlcvs::store_bundle(chain, mint.to_string(), bundle.clone()).await;
                     Some(bundle)
                 }
+                // A token the candle monitor has not registered yet, or a bundle another
+                // task is building, is an expected state: the next cycle reads it.
+                Err(
+                    e @ (crate::ohlcvs::OhlcvError::PoolNotFound(_)
+                    | crate::ohlcvs::OhlcvError::BundleBuildInProgress(_)),
+                ) => {
+                    logger::debug(
+                        LogTag::Trader,
+                        &format!(
+                            "OHLCV bundle for {mint} not ready: {e} - evaluating without OHLCV"
+                        ),
+                    );
+                    None
+                }
                 Err(e) => {
                     logger::warning(
                         LogTag::Trader,
@@ -253,7 +283,7 @@ pub async fn live_strategy_context(
         }
     };
     let market_data = strategy_market_data(
-        crate::tokens::get_cached_token(chain, mint).as_ref(),
+        token_snapshot(chain, mint).await.as_ref(),
         live_pool
             .as_ref()
             .and_then(|price| usable_liquidity(price.native_reserves)),
@@ -360,7 +390,7 @@ impl StrategyEvaluator {
 
         // Build market data from price info, the token snapshot and the configured size
         let market_data = strategy_market_data(
-            crate::tokens::get_cached_token(chain, token_mint).as_ref(),
+            token_snapshot(chain, token_mint).await.as_ref(),
             usable_liquidity(price_info.native_reserves),
             liquidity_pool(chain, price_info),
             Some(crate::trader::config::get_trade_size_native()),
@@ -500,7 +530,7 @@ impl StrategyEvaluator {
         // liquidity-drain exit (LiquidityLevel) needs it: without a value the condition
         // errors and aborts the whole exit strategy.
         let market_data = strategy_market_data(
-            crate::tokens::get_cached_token(chain, &position.mint).as_ref(),
+            token_snapshot(chain, &position.mint).await.as_ref(),
             live_pool
                 .as_ref()
                 .and_then(|price| usable_liquidity(price.native_reserves)),
@@ -718,5 +748,46 @@ mod tests {
         assert!(!is_data_unavailable(&broken_rule));
         assert!(!is_data_unavailable(&missing_parameter));
         assert!(!is_data_unavailable(&engine_down));
+    }
+
+    #[tokio::test]
+    async fn a_strategy_context_reads_the_stored_snapshot_when_none_is_cached() {
+        const MINT: &str = "SnapshotToken111111111111111111111111111111";
+        let directory = tempfile::tempdir().expect("temp dir");
+        crate::config::utils::install_default_config();
+        let db = std::sync::Arc::new(
+            crate::tokens::database::TokenDatabase::new(
+                &directory.path().join("tokens.db").to_string_lossy(),
+                ChainId::Solana,
+            )
+            .expect("tokens store"),
+        );
+        crate::tokens::install_database(db);
+        let now = Utc::now().timestamp();
+        let conn = rusqlite::Connection::open(directory.path().join("tokens.db")).expect("open");
+        conn.execute(
+            "INSERT INTO tokens (chain_id, mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at)
+             VALUES ('solana', ?1, 'TKN', 'Token', 6, ?2, ?2, ?2)",
+            rusqlite::params![MINT, now],
+        )
+        .expect("insert token");
+        conn.execute(
+            "INSERT INTO market_dexscreener (chain_id, mint, price_usd, txns_1h_buys, txns_1h_sells, market_data_last_fetched_at, market_data_first_fetched_at)
+             VALUES ('solana', ?1, 1.0, 120, 80, ?2, ?2)",
+            rusqlite::params![MINT, now],
+        )
+        .expect("insert market row");
+        assert!(
+            crate::tokens::get_cached_token(ChainId::Solana, MINT).is_none(),
+            "no market refresh cached this token"
+        );
+
+        let token = token_snapshot(ChainId::Solana, MINT).await;
+        let market = strategy_market_data(token.as_ref(), None, None, None);
+        let h1 = market
+            .transactions
+            .and_then(|counts| counts.h1)
+            .expect("the hour's counts come from the stored snapshot");
+        assert_eq!((h1.buys, h1.sells), (120, 80));
     }
 }

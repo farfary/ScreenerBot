@@ -3862,6 +3862,7 @@ fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity) {
         OhlcvError::ApiError(_) => ("api_error", Severity::Error),
         OhlcvError::RateLimitExceeded => ("rate_limit", Severity::Warn),
         OhlcvError::PoolNotFound(_) => ("pool_not_found", Severity::Warn),
+        OhlcvError::BundleBuildInProgress(_) => ("bundle_build_in_progress", Severity::Debug),
         OhlcvError::InvalidTimeframe(_) => ("invalid_timeframe", Severity::Error),
         OhlcvError::DataGap { .. } => ("data_gap", Severity::Warn),
         OhlcvError::CacheError(_) => ("cache_error", Severity::Error),

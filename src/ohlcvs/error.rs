@@ -21,6 +21,10 @@ pub enum OhlcvError {
     RateLimitExceeded,
     #[error("Pool not found: {0}")]
     PoolNotFound(String),
+    /// Another task is building this mint's strategy bundle; its result lands in the
+    /// bundle cache, so the caller reads the cache on its next cycle instead.
+    #[error("Bundle build already in progress for {0}")]
+    BundleBuildInProgress(String),
     #[error("Invalid timeframe: {0}")]
     InvalidTimeframe(String),
     #[error("Data gap detected: {start} to {end}")]

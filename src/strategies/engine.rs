@@ -276,14 +276,18 @@ impl StrategyEngine {
             Ok(Ok(Truth::True)) => true,
             Ok(Ok(Truth::False)) => false,
             // An undecided root is no signal, reported as the first data error it reached.
+            // Missing data is an expected state the caller logs at debug; any other error
+            // is a fault of the strategy itself.
             Ok(Ok(Truth::Unknown(e))) | Ok(Err(e)) => {
-                logger::error(
-                    LogTag::System,
-                    &format!(
-                        "Strategy evaluation failed: strategy_id={}, error={}",
-                        strategy.id, e
-                    ),
-                );
+                if !e.is_data_unavailable() {
+                    logger::error(
+                        LogTag::System,
+                        &format!(
+                            "Strategy evaluation failed: strategy_id={}, error={}",
+                            strategy.id, e
+                        ),
+                    );
+                }
                 return Err(e);
             }
             Err(_) => {

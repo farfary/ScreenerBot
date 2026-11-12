@@ -21,7 +21,7 @@ use crate::ohlcvs::types::{
 };
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, OnceCell, RwLock};
 use tokio::task::JoinHandle;
@@ -58,7 +58,51 @@ pub(super) struct OhlcvServiceImpl {
     bundle_cache: Arc<RwLock<HashMap<String, (TimeframeBundle, Instant)>>>,
 
     // Track in-flight builds to prevent duplicate concurrent builds
-    build_in_progress: Arc<RwLock<HashSet<String>>>,
+    build_in_progress: Arc<BuildsInProgress>,
+}
+
+/// The mints whose bundle a task is building now. A mint is marked only through a
+/// [`BuildMark`], which removes it when dropped, so a build that returns early (no series
+/// pool yet, a store or join error) never leaves its mint marked for the life of the app.
+#[derive(Default)]
+struct BuildsInProgress(std::sync::Mutex<HashSet<String>>);
+
+impl BuildsInProgress {
+    fn contains(&self, mint: &str) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(mint)
+    }
+
+    /// Mark `mint` as building, or `None` when another task holds its mark.
+    fn mark(self: &Arc<Self>, mint: &str) -> Option<BuildMark> {
+        let inserted = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(mint.to_string());
+        inserted.then(|| BuildMark {
+            builds: Arc::clone(self),
+            mint: mint.to_string(),
+        })
+    }
+}
+
+/// One task's claim on building a mint's bundle, released when it drops.
+struct BuildMark {
+    builds: Arc<BuildsInProgress>,
+    mint: String,
+}
+
+impl Drop for BuildMark {
+    fn drop(&mut self) {
+        self.builds
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&self.mint);
+    }
 }
 
 impl OhlcvServiceImpl {
@@ -89,7 +133,7 @@ impl OhlcvServiceImpl {
         ));
 
         let bundle_cache = Arc::new(RwLock::new(HashMap::new()));
-        let build_in_progress = Arc::new(RwLock::new(HashSet::new()));
+        let build_in_progress = Arc::new(BuildsInProgress::default());
 
         Self {
             db,
@@ -600,13 +644,11 @@ impl OhlcvServiceImpl {
     pub(super) async fn build_timeframe_bundle(&self, mint: &str) -> OhlcvResult<TimeframeBundle> {
         // Check if another task is already building this bundle
         {
-            let in_progress = self.build_in_progress.read().await;
-            if in_progress.contains(mint) {
+            if self.build_in_progress.contains(mint) {
                 logger::debug(
                     LogTag::Ohlcv,
                     &format!("BUNDLE_BUILD_WAIT: Another task already building bundle for {mint}, waiting..."),
                 );
-                drop(in_progress);
 
                 // Wait for the other build to complete (poll cache with exponential backoff)
                 let mut wait_ms = 50u64;
@@ -614,10 +656,7 @@ impl OhlcvServiceImpl {
                     tokio::time::sleep(Duration::from_millis(wait_ms)).await;
 
                     // Check if build completed (no longer in progress)
-                    let still_building = {
-                        let in_progress = self.build_in_progress.read().await;
-                        in_progress.contains(mint)
-                    };
+                    let still_building = self.build_in_progress.contains(mint);
 
                     if !still_building {
                         // Check cache for the result
@@ -644,19 +683,11 @@ impl OhlcvServiceImpl {
             }
         }
 
-        // Mark as building (atomic check-and-set)
-        {
-            let mut in_progress = self.build_in_progress.write().await;
-            if !in_progress.insert(mint.to_string()) {
-                // Race condition: another task started building while we were waiting
-                // Just return error to avoid duplicate work
-                drop(in_progress);
-                return Err(OhlcvError::NotFound(format!(
-                    "Bundle build already in progress for {}",
-                    mint
-                )));
-            }
-        }
+        // Mark as building (atomic check-and-set); the mark is released on every return.
+        let Some(_mark) = self.build_in_progress.mark(mint) else {
+            // Another task started building while we were waiting: avoid duplicate work.
+            return Err(OhlcvError::BundleBuildInProgress(mint.to_string()));
+        };
 
         let start = Instant::now();
 
@@ -762,12 +793,6 @@ impl OhlcvServiceImpl {
                     mint, elapsed_ms
                 ),
             );
-        }
-
-        // Remove from in-progress tracking
-        {
-            let mut in_progress = self.build_in_progress.write().await;
-            in_progress.remove(mint);
         }
 
         Ok(TimeframeBundle {
@@ -1239,5 +1264,39 @@ mod tests {
             .await
             .unwrap();
         assert!(unknown.pool.is_none() && unknown.candles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_bundle_build_that_finds_no_series_pool_leaves_the_mint_free_to_build_later() {
+        let h = Harness::open("bundle-mark");
+        for _ in 0..2 {
+            let missing = h.service.build_timeframe_bundle("fresh").await;
+            assert!(
+                matches!(missing, Err(OhlcvError::PoolNotFound(_))),
+                "a mint without a series pool answers PoolNotFound every time, never an in-progress build: {missing:?}"
+            );
+        }
+        assert!(!h.service.build_in_progress.contains("fresh"));
+
+        h.service
+            .db
+            .write_series_pools("fresh", |_| {
+                Some(SeriesPoolPlan {
+                    pools: vec![PoolConfig::new(
+                        "fresh-pool".to_string(),
+                        "dex".to_string(),
+                        1.0,
+                    )],
+                    series: "fresh-pool".to_string(),
+                })
+            })
+            .unwrap();
+        let bundle = h
+            .service
+            .build_timeframe_bundle("fresh")
+            .await
+            .expect("the mint builds once its series pool is known");
+        assert_eq!(bundle.pool_address, "fresh-pool");
+        assert!(!h.service.build_in_progress.contains("fresh"));
     }
 }

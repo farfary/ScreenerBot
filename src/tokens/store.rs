@@ -293,8 +293,11 @@ pub async fn refresh_token_snapshot(chain: ChainId, mint: &str) -> TokenResult<O
     Ok(token)
 }
 
-/// Get a full token, using cache if available or rebuilding from database
-pub async fn get_full_token_async(chain: ChainId, mint: &str) -> TokenResult<Option<Token>> {
+/// The token's snapshot: the cached one while it is fresh, otherwise rebuilt from the
+/// database and cached. Readers that run every cycle (strategy contexts) use this rather
+/// than [`get_cached_token`], which is empty whenever no market refresh touched the token
+/// within the snapshot TTL.
+pub async fn get_token_snapshot_async(chain: ChainId, mint: &str) -> TokenResult<Option<Token>> {
     if let Some(token) = get_cached_token(chain, mint) {
         return Ok(Some(token));
     }
