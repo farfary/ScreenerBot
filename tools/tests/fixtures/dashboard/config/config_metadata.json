@@ -1556,7 +1556,7 @@
           "rugged_check_enabled": true,
           "block_rugged_tokens": true,
           "graph_insiders_enabled": true,
-          "max_graph_insiders": 3,
+          "max_graph_insiders_pct": 5,
           "insider_holder_checks_enabled": true,
           "max_insider_holders_in_top_10": 2,
           "max_insider_total_pct": 20,
@@ -1670,15 +1670,15 @@
             "step": 5,
             "default": 10
           },
-          "max_graph_insiders": {
-            "type": "integer",
-            "key": "config-filtering-rugcheck-max-graph-insiders",
+          "max_graph_insiders_pct": {
+            "type": "number",
+            "key": "config-filtering-rugcheck-max-graph-insiders-pct",
             "impact": "high",
             "category": "insider-detection",
             "min": 0,
-            "max": 20,
-            "step": 1,
-            "default": 3
+            "max": 100,
+            "step": 0.5,
+            "default": 5
           },
           "max_insider_holders_in_top_10": {
             "type": "integer",

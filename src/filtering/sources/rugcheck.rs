@@ -140,8 +140,8 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
     }
 
     if config.graph_insiders_enabled {
-        if let Some(count) = token.graph_insiders_detected {
-            if count as i32 > config.max_graph_insiders {
+        if let Some(share_pct) = graph_insider_share_pct(token) {
+            if share_pct > config.max_graph_insiders_pct {
                 return Err(FilterRejectionReason::RugcheckGraphInsidersTooHigh);
             }
         }
@@ -361,4 +361,13 @@ fn infer_percentage_from_keywords(text: &str) -> Option<f64> {
     }
 
     None
+}
+
+/// The insider-network wallets Rugcheck found, as a percentage of the token's holders.
+/// Unknown without both counts, and without a positive holder count; the holder checks own
+/// a token whose holders are unknown.
+pub fn graph_insider_share_pct(token: &Token) -> Option<f64> {
+    let insiders = token.graph_insiders_detected?;
+    let holders = token.total_holders.filter(|holders| *holders > 0)?;
+    Some(100.0 * insiders.max(0) as f64 / holders as f64)
 }

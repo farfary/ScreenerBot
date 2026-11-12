@@ -91,7 +91,7 @@
       "rugged_check_enabled": true,
       "block_rugged_tokens": true,
       "graph_insiders_enabled": true,
-      "max_graph_insiders": 3,
+      "max_graph_insiders_pct": 5.0,
       "insider_holder_checks_enabled": true,
       "max_insider_holders_in_top_10": 2,
       "max_insider_total_pct": 20,

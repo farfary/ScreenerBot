@@ -1470,20 +1470,35 @@ fn rugcheck_insider_count_looks_at_ten_holders_but_the_percentage_looks_at_all()
 #[test]
 fn rugcheck_graph_insider_and_creator_balance_bounds() {
     let config = RugCheckFilters {
-        max_graph_insiders: 3,
+        max_graph_insiders_pct: 5.0,
         max_creator_balance_pct: 10.0,
         ..Default::default()
     };
 
+    // The share of holders decides, not the count: 51 of 1,000 holders is over 5%.
     let mut token = dex_token();
-    token.graph_insiders_detected = Some(4);
+    token.total_holders = Some(1_000);
+    token.graph_insiders_detected = Some(51);
     assert_eq!(
         rejection(rugcheck::evaluate(&token, &config)),
         FilterRejectionReason::RugcheckGraphInsidersTooHigh
     );
 
-    token.graph_insiders_detected = Some(3);
+    token.graph_insiders_detected = Some(50);
     assert!(rugcheck::evaluate(&token, &config).is_ok());
+
+    // A large token with thousands of insiders passes when they are a small share.
+    token.total_holders = Some(813_579);
+    token.graph_insiders_detected = Some(6_755);
+    assert!(rugcheck::evaluate(&token, &config).is_ok());
+
+    // Without a holder count the share is unknown: the holder check owns that case, so the
+    // rejection names the missing count, never the insider rule.
+    token.total_holders = None;
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckHolderCountUnknown
+    );
 
     let mut token = dex_token();
     token.creator_balance_pct = Some(10.1);

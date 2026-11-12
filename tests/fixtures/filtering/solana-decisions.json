@@ -211,11 +211,11 @@
       "source": "core"
     },
     "147ciqrjz6iDjVb7bJZmKaLTUqZKjiCvwR6KAG8ubqVp": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "14AMKaE3WZmpyXj31nnHHArWH8fGXq9MygDDbKBUVFqs": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "14Lnja2ph1s4pRuv3NGxHNsnDDmDDf5fooC1vz475YCF": {
@@ -331,7 +331,7 @@
       "source": "onchain"
     },
     "38ikibsGJVhTNck5L7Zcff3B9GE6AiSfUBJsAsZTT3X3": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "3GJLhuKArp4HnpiQWGXgJEvsBNVuwaFcSCKcsuDmH1Ys": {
@@ -350,10 +350,7 @@
       "reason": "onchain_empty_symbol",
       "source": "onchain"
     },
-    "3enawzWZDczxznq5XGAJbaf7nx9QJqyrNnorCKaRDsfu": {
-      "reason": "rug_graph_insiders",
-      "source": "rugcheck"
-    },
+    "3enawzWZDczxznq5XGAJbaf7nx9QJqyrNnorCKaRDsfu": "pass",
     "3jZwWJLTC4yzN5WNY2L2vAdQLiTGEmUwwzgi965bJz3k": {
       "reason": "dex_mcap_high",
       "source": "dexscreener"
@@ -395,7 +392,7 @@
       "source": "onchain"
     },
     "4fwuR5mGXpkNwu9oZSgporGgXpcBExFhb6LEAaJw2GFn": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "4ySPPrAYw365d5dkbfvcBGy5vZGGqc9XsfpH7RDU6usr": {
@@ -455,7 +452,7 @@
       "source": "dexscreener"
     },
     "82RAYYLAwf92KWGEZTbvpL4bC57DxaWL4ca59MUmGS3E": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "8JwJLKCsUWwJ7DT5aJzj3xKHqM3zPb9Yx6YW8DckzS3b": {
@@ -516,11 +513,11 @@
       "source": "rugcheck"
     },
     "BfzvS19rJnJmgU2h3eQZVFWBvTC6iEYXYreKFYRgLJmi": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "Bj8HabfnpY4nVU3Qe3eku1D6Zr5rTM61xJaVnmBdTJLT": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "BrGax93rjRFSqwdnrqc3KZmBgRandAQ2xDC7XEes6j3T": {
@@ -552,7 +549,7 @@
       "source": "onchain"
     },
     "J7ik6BwFpsaPtpmGXPo2XeSwnDD98LUwHcCvPG4ZSE82": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "So11111111111111111111111111111111111111112": {
@@ -658,11 +655,11 @@
       "source": "core"
     },
     "147ciqrjz6iDjVb7bJZmKaLTUqZKjiCvwR6KAG8ubqVp": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "14AMKaE3WZmpyXj31nnHHArWH8fGXq9MygDDbKBUVFqs": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "14Lnja2ph1s4pRuv3NGxHNsnDDmDDf5fooC1vz475YCF": {
@@ -778,7 +775,7 @@
       "source": "onchain"
     },
     "38ikibsGJVhTNck5L7Zcff3B9GE6AiSfUBJsAsZTT3X3": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "3GJLhuKArp4HnpiQWGXgJEvsBNVuwaFcSCKcsuDmH1Ys": {
@@ -797,10 +794,7 @@
       "reason": "onchain_empty_symbol",
       "source": "onchain"
     },
-    "3enawzWZDczxznq5XGAJbaf7nx9QJqyrNnorCKaRDsfu": {
-      "reason": "rug_graph_insiders",
-      "source": "rugcheck"
-    },
+    "3enawzWZDczxznq5XGAJbaf7nx9QJqyrNnorCKaRDsfu": "pass",
     "3jZwWJLTC4yzN5WNY2L2vAdQLiTGEmUwwzgi965bJz3k": {
       "reason": "dex_mcap_high",
       "source": "dexscreener"
@@ -842,7 +836,7 @@
       "source": "onchain"
     },
     "4fwuR5mGXpkNwu9oZSgporGgXpcBExFhb6LEAaJw2GFn": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "4ySPPrAYw365d5dkbfvcBGy5vZGGqc9XsfpH7RDU6usr": {
@@ -902,7 +896,7 @@
       "source": "dexscreener"
     },
     "82RAYYLAwf92KWGEZTbvpL4bC57DxaWL4ca59MUmGS3E": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "8JwJLKCsUWwJ7DT5aJzj3xKHqM3zPb9Yx6YW8DckzS3b": {
@@ -963,11 +957,11 @@
       "source": "rugcheck"
     },
     "BfzvS19rJnJmgU2h3eQZVFWBvTC6iEYXYreKFYRgLJmi": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "Bj8HabfnpY4nVU3Qe3eku1D6Zr5rTM61xJaVnmBdTJLT": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "BrGax93rjRFSqwdnrqc3KZmBgRandAQ2xDC7XEes6j3T": {
@@ -999,7 +993,7 @@
       "source": "onchain"
     },
     "J7ik6BwFpsaPtpmGXPo2XeSwnDD98LUwHcCvPG4ZSE82": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "So11111111111111111111111111111111111111112": {
@@ -1105,11 +1099,11 @@
       "source": "core"
     },
     "147ciqrjz6iDjVb7bJZmKaLTUqZKjiCvwR6KAG8ubqVp": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "14AMKaE3WZmpyXj31nnHHArWH8fGXq9MygDDbKBUVFqs": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "14Lnja2ph1s4pRuv3NGxHNsnDDmDDf5fooC1vz475YCF": {
@@ -1225,7 +1219,7 @@
       "source": "onchain"
     },
     "38ikibsGJVhTNck5L7Zcff3B9GE6AiSfUBJsAsZTT3X3": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "3GJLhuKArp4HnpiQWGXgJEvsBNVuwaFcSCKcsuDmH1Ys": {
@@ -1244,10 +1238,7 @@
       "reason": "onchain_empty_symbol",
       "source": "onchain"
     },
-    "3enawzWZDczxznq5XGAJbaf7nx9QJqyrNnorCKaRDsfu": {
-      "reason": "rug_graph_insiders",
-      "source": "rugcheck"
-    },
+    "3enawzWZDczxznq5XGAJbaf7nx9QJqyrNnorCKaRDsfu": "pass",
     "3jZwWJLTC4yzN5WNY2L2vAdQLiTGEmUwwzgi965bJz3k": {
       "reason": "dex_mcap_high",
       "source": "dexscreener"
@@ -1289,7 +1280,7 @@
       "source": "onchain"
     },
     "4fwuR5mGXpkNwu9oZSgporGgXpcBExFhb6LEAaJw2GFn": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "4ySPPrAYw365d5dkbfvcBGy5vZGGqc9XsfpH7RDU6usr": {
@@ -1349,7 +1340,7 @@
       "source": "dexscreener"
     },
     "82RAYYLAwf92KWGEZTbvpL4bC57DxaWL4ca59MUmGS3E": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "8JwJLKCsUWwJ7DT5aJzj3xKHqM3zPb9Yx6YW8DckzS3b": {
@@ -1410,11 +1401,11 @@
       "source": "rugcheck"
     },
     "BfzvS19rJnJmgU2h3eQZVFWBvTC6iEYXYreKFYRgLJmi": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "Bj8HabfnpY4nVU3Qe3eku1D6Zr5rTM61xJaVnmBdTJLT": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "BrGax93rjRFSqwdnrqc3KZmBgRandAQ2xDC7XEes6j3T": {
@@ -1446,7 +1437,7 @@
       "source": "onchain"
     },
     "J7ik6BwFpsaPtpmGXPo2XeSwnDD98LUwHcCvPG4ZSE82": {
-      "reason": "rug_graph_insiders",
+      "reason": "rug_lp_providers_low",
       "source": "rugcheck"
     },
     "So11111111111111111111111111111111111111112": {

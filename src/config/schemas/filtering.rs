@@ -567,14 +567,16 @@ config_struct! {
             category: ConfigCategory::InsiderDetection,
         })]
         graph_insiders_enabled: bool = true,
+        // Rugcheck counts insider-network wallets in absolute numbers, which grow with the
+        // holder count; the rule judges their share of all holders instead.
         #[metadata(field_metadata! {
             min: 0,
-            max: 20,
-            step: 1,
+            max: 100,
+            step: 0.5,
             impact: ConfigImpact::High,
             category: ConfigCategory::InsiderDetection,
         })]
-        max_graph_insiders: i32 = 3,
+        max_graph_insiders_pct: f64 = 5.0,
 
         #[metadata(field_metadata! {
             impact: ConfigImpact::High,
