@@ -10,6 +10,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
+/// How long an idle pooled connection is kept for reuse. The discovery and list feeds call
+/// every 60 s, and a connection left idle that long was found dead by the OS on the next
+/// write (`connection error: Operation timed out (os error 60)`), so the first request of
+/// every pass failed. Below the feed cadence, each pass opens a fresh connection instead.
+const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Rate limiter for API clients
 pub struct RateLimiter {
     semaphore: Arc<Semaphore>,
@@ -96,6 +102,7 @@ impl HttpClient {
     pub fn new(timeout_secs: u64) -> Result<Self, Error> {
         let client = crate::net::apply_proxy(Client::builder())
             .timeout(Duration::from_secs(timeout_secs))
+            .pool_idle_timeout(POOL_IDLE_TIMEOUT)
             .build()
             .map_err(|e| NetworkError::RequestFailed {
                 endpoint: "http client build".to_owned(),

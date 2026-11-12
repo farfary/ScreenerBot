@@ -12,6 +12,8 @@
 //! 4. /tokens/v2/toptrending/{interval} - Top trending tokens
 
 pub mod sources;
+#[cfg(test)]
+mod tests;
 pub mod throttle;
 pub mod types;
 
@@ -19,7 +21,7 @@ use self::types::JupiterToken;
 use crate::apis::client::HttpClient;
 use crate::apis::stats::ApiStatsTracker;
 use crate::apis::Error;
-use crate::errors::{DataError, NetworkError};
+use crate::errors::{source_chain, DataError, NetworkError};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -67,261 +69,105 @@ impl JupiterClient {
 
     /// Fetch recent tokens from /tokens/v2/recent
     pub async fn fetch_recent_tokens(&self) -> Result<Vec<JupiterToken>, Error> {
-        if !self.enabled {
-            return Err(Error::Disabled {
-                provider: "Jupiter".to_owned(),
-            });
-        }
-
-        let start = Instant::now();
-        let url = format!("{JUPITER_BASE_URL}/recent");
-
-        crate::chains::solana::apis::jupiter::throttle::acquire_background().await;
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| {
-                let error: Error = NetworkError::RequestFailed {
-                    endpoint: url.clone(),
-                    detail: e.to_string(),
-                }
-                .into();
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(
-                NetworkError::http_status(url.clone(), response.status().as_u16(), None).into(),
-            );
-        }
-
-        let tokens: Vec<JupiterToken> = match response.json().await {
-            Ok(parsed) => parsed,
-            Err(e) => {
-                self.stats.record_request(false, elapsed).await;
-                return Err(DataError::ParseError {
-                    data_type: url.clone(),
-                    error: e.to_string(),
-                }
-                .into());
-            }
-        };
-
-        self.stats.record_request(true, elapsed).await;
-
-        Ok(tokens)
+        self.fetch_list(format!("{JUPITER_BASE_URL}/recent")).await
     }
 
-    /// Fetch top organic score tokens for given interval
-    ///
-    /// # Arguments
-    /// * `interval` - Time interval: "5m", "1h", "6h", "24h"
-    /// * `limit` - Number of results (default: 100)
+    /// Fetch top organic score tokens for `interval` ("5m", "1h", "6h", "24h"),
+    /// `limit` results (default 100)
     pub async fn fetch_top_organic_score(
         &self,
         interval: &str,
         limit: Option<usize>,
     ) -> Result<Vec<JupiterToken>, Error> {
-        if !self.enabled {
-            return Err(Error::Disabled {
-                provider: "Jupiter".to_owned(),
-            });
-        }
-
-        let start = Instant::now();
         let limit = limit.unwrap_or(DEFAULT_LIMIT);
-        let url = format!(
-            "{}/toporganicscore/{}?limit={}",
-            JUPITER_BASE_URL, interval, limit
-        );
-
-        crate::chains::solana::apis::jupiter::throttle::acquire_background().await;
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| {
-                let error: Error = NetworkError::RequestFailed {
-                    endpoint: url.clone(),
-                    detail: e.to_string(),
-                }
-                .into();
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(
-                NetworkError::http_status(url.clone(), response.status().as_u16(), None).into(),
-            );
-        }
-
-        let tokens: Vec<JupiterToken> = match response.json().await {
-            Ok(parsed) => parsed,
-            Err(e) => {
-                self.stats.record_request(false, elapsed).await;
-                return Err(DataError::ParseError {
-                    data_type: url.clone(),
-                    error: e.to_string(),
-                }
-                .into());
-            }
-        };
-
-        self.stats.record_request(true, elapsed).await;
-
-        Ok(tokens)
+        self.fetch_list(format!(
+            "{JUPITER_BASE_URL}/toporganicscore/{interval}?limit={limit}"
+        ))
+        .await
     }
 
-    /// Fetch top traded tokens for given interval
-    ///
-    /// # Arguments
-    /// * `interval` - Time interval: "5m", "1h", "6h", "24h"
-    /// * `limit` - Number of results (default: 100)
+    /// Fetch top traded tokens for `interval` ("5m", "1h", "6h", "24h"),
+    /// `limit` results (default 100)
     pub async fn fetch_top_traded(
         &self,
         interval: &str,
         limit: Option<usize>,
     ) -> Result<Vec<JupiterToken>, Error> {
-        if !self.enabled {
-            return Err(Error::Disabled {
-                provider: "Jupiter".to_owned(),
-            });
-        }
-
-        let start = Instant::now();
         let limit = limit.unwrap_or(DEFAULT_LIMIT);
-        let url = format!(
-            "{}/toptraded/{}?limit={}",
-            JUPITER_BASE_URL, interval, limit
-        );
-
-        crate::chains::solana::apis::jupiter::throttle::acquire_background().await;
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| {
-                let error: Error = NetworkError::RequestFailed {
-                    endpoint: url.clone(),
-                    detail: e.to_string(),
-                }
-                .into();
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(
-                NetworkError::http_status(url.clone(), response.status().as_u16(), None).into(),
-            );
-        }
-
-        let tokens: Vec<JupiterToken> = match response.json().await {
-            Ok(parsed) => parsed,
-            Err(e) => {
-                self.stats.record_request(false, elapsed).await;
-                return Err(DataError::ParseError {
-                    data_type: url.clone(),
-                    error: e.to_string(),
-                }
-                .into());
-            }
-        };
-
-        self.stats.record_request(true, elapsed).await;
-
-        Ok(tokens)
+        self.fetch_list(format!(
+            "{JUPITER_BASE_URL}/toptraded/{interval}?limit={limit}"
+        ))
+        .await
     }
 
-    /// Fetch top trending tokens for given interval
-    ///
-    /// # Arguments
-    /// * `interval` - Time interval: "5m", "1h", "6h", "24h"
-    /// * `limit` - Number of results (default: 100)
+    /// Fetch top trending tokens for `interval` ("5m", "1h", "6h", "24h"),
+    /// `limit` results (default 100)
     pub async fn fetch_top_trending(
         &self,
         interval: &str,
         limit: Option<usize>,
     ) -> Result<Vec<JupiterToken>, Error> {
+        let limit = limit.unwrap_or(DEFAULT_LIMIT);
+        self.fetch_list(format!(
+            "{JUPITER_BASE_URL}/toptrending/{interval}?limit={limit}"
+        ))
+        .await
+    }
+
+    /// One token-list request behind the background throttle. A transport failure carries
+    /// its whole cause chain: reqwest's own message ("error sending request") names only the
+    /// URL, never whether the connect, the TLS handshake, the body or the timeout failed.
+    async fn fetch_list(&self, url: String) -> Result<Vec<JupiterToken>, Error> {
         if !self.enabled {
             return Err(Error::Disabled {
                 provider: "Jupiter".to_owned(),
             });
         }
 
-        let start = Instant::now();
-        let limit = limit.unwrap_or(DEFAULT_LIMIT);
-        let url = format!(
-            "{}/toptrending/{}?limit={}",
-            JUPITER_BASE_URL, interval, limit
-        );
-
         crate::chains::solana::apis::jupiter::throttle::acquire_background().await;
+        let start = Instant::now();
 
-        let response = self
+        let response = match self
             .http_client
             .client()
             .get(&url)
             .header("Accept", "application/json")
             .send()
             .await
-            .map_err(|e| {
-                let error: Error = NetworkError::RequestFailed {
-                    endpoint: url.clone(),
-                    detail: e.to_string(),
-                }
-                .into();
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(
-                NetworkError::http_status(url.clone(), response.status().as_u16(), None).into(),
-            );
-        }
-
-        let tokens: Vec<JupiterToken> = match response.json().await {
-            Ok(parsed) => parsed,
+        {
+            Ok(response) => response,
             Err(e) => {
-                self.stats.record_request(false, elapsed).await;
-                return Err(DataError::ParseError {
-                    data_type: url.clone(),
-                    error: e.to_string(),
+                self.stats
+                    .record_request(false, start.elapsed().as_millis() as f64)
+                    .await;
+                return Err(NetworkError::RequestFailed {
+                    endpoint: url,
+                    detail: source_chain(&e).join(": "),
                 }
                 .into());
             }
         };
 
-        self.stats.record_request(true, elapsed).await;
+        let elapsed = start.elapsed().as_millis() as f64;
 
-        Ok(tokens)
+        if !response.status().is_success() {
+            self.stats.record_request(false, elapsed).await;
+            return Err(NetworkError::http_status(url, response.status().as_u16(), None).into());
+        }
+
+        match response.json::<Vec<JupiterToken>>().await {
+            Ok(tokens) => {
+                self.stats.record_request(true, elapsed).await;
+                Ok(tokens)
+            }
+            Err(e) => {
+                self.stats.record_request(false, elapsed).await;
+                Err(DataError::ParseError {
+                    data_type: url,
+                    error: source_chain(&e).join(": "),
+                }
+                .into())
+            }
+        }
     }
 }
