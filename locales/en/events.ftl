@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = Aggregate fetch started
 events-subtype-fetch-aggregate-complete = Aggregate fetch complete
 events-subtype-fetch-aggregate-error = Aggregate fetch error
 events-subtype-fetch-aggregate-deferred = Aggregate fetch deferred
+events-subtype-fetch-aggregate-blocked = Aggregate fetch blocked by provider
 events-subtype-fetch-attempt = Fetch started
 events-subtype-fetch-complete = Fetch complete
 events-subtype-fetch-success = Fetch succeeded

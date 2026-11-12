@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = 集約取得開始
 events-subtype-fetch-aggregate-complete = 集約取得完了
 events-subtype-fetch-aggregate-error = 集約取得エラー
 events-subtype-fetch-aggregate-deferred = 集約取得を延期
+events-subtype-fetch-aggregate-blocked = 集約取得がプロバイダーにブロックされました
 events-subtype-fetch-attempt = 取得開始
 events-subtype-fetch-complete = 取得完了
 events-subtype-fetch-success = 取得成功

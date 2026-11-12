@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = Зведене завантаження
 events-subtype-fetch-aggregate-complete = Зведене завантаження завершено
 events-subtype-fetch-aggregate-error = Помилка зведеного завантаження
 events-subtype-fetch-aggregate-deferred = Зведене завантаження відкладено
+events-subtype-fetch-aggregate-blocked = Зведене завантаження заблоковано постачальником
 events-subtype-fetch-attempt = Завантаження запущено
 events-subtype-fetch-complete = Завантаження завершено
 events-subtype-fetch-success = Завантаження успішне

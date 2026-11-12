@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = Busca agregada iniciada
 events-subtype-fetch-aggregate-complete = Busca agregada concluída
 events-subtype-fetch-aggregate-error = Erro na busca agregada
 events-subtype-fetch-aggregate-deferred = Busca agregada adiada
+events-subtype-fetch-aggregate-blocked = Busca agregada bloqueada pelo provedor
 events-subtype-fetch-attempt = Busca iniciada
 events-subtype-fetch-complete = Busca concluída
 events-subtype-fetch-success = Busca bem-sucedida

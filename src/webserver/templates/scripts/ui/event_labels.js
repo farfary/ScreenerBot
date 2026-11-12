@@ -165,6 +165,7 @@ export const EVENT_SUBTYPE_LABELS = Object.freeze({
   fetch_aggregate_complete: "events-subtype-fetch-aggregate-complete",
   fetch_aggregate_error: "events-subtype-fetch-aggregate-error",
   fetch_aggregate_deferred: "events-subtype-fetch-aggregate-deferred",
+  fetch_aggregate_blocked: "events-subtype-fetch-aggregate-blocked",
   fetch_attempt: "events-subtype-fetch-attempt",
   fetch_complete: "events-subtype-fetch-complete",
   fetch_success: "events-subtype-fetch-success",

@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = 집계 조회 시작
 events-subtype-fetch-aggregate-complete = 집계 조회 완료
 events-subtype-fetch-aggregate-error = 집계 조회 오류
 events-subtype-fetch-aggregate-deferred = 집계 조회 연기
+events-subtype-fetch-aggregate-blocked = 공급자가 집계 조회를 차단함
 events-subtype-fetch-attempt = 조회 시작
 events-subtype-fetch-complete = 조회 완료
 events-subtype-fetch-success = 조회 성공

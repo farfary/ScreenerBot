@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = دریافت تجمیعی شروع شد
 events-subtype-fetch-aggregate-complete = دریافت تجمیعی کامل شد
 events-subtype-fetch-aggregate-error = خطای دریافت تجمیعی
 events-subtype-fetch-aggregate-deferred = دریافت تجمیعی به تعویق افتاد
+events-subtype-fetch-aggregate-blocked = دریافت تجمیعی توسط ارائه‌دهنده مسدود شد
 events-subtype-fetch-attempt = دریافت شروع شد
 events-subtype-fetch-complete = دریافت کامل شد
 events-subtype-fetch-success = دریافت موفق بود

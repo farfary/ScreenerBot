@@ -126,6 +126,7 @@ events-subtype-fetch-aggregate-attempt = Toplu getirme başladı
 events-subtype-fetch-aggregate-complete = Toplu getirme tamamlandı
 events-subtype-fetch-aggregate-error = Toplu getirme hatası
 events-subtype-fetch-aggregate-deferred = Toplu getirme ertelendi
+events-subtype-fetch-aggregate-blocked = Toplu getirme sağlayıcı tarafından engellendi
 events-subtype-fetch-attempt = Getirme başladı
 events-subtype-fetch-complete = Getirme tamamlandı
 events-subtype-fetch-success = Getirme başarılı

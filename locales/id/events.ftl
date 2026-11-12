@@ -129,6 +129,7 @@ events-subtype-fetch-aggregate-attempt = Pengambilan gabungan dimulai
 events-subtype-fetch-aggregate-complete = Pengambilan gabungan selesai
 events-subtype-fetch-aggregate-error = Kesalahan pengambilan gabungan
 events-subtype-fetch-aggregate-deferred = Pengambilan gabungan ditunda
+events-subtype-fetch-aggregate-blocked = Pengambilan gabungan diblokir penyedia
 events-subtype-fetch-attempt = Pengambilan dimulai
 events-subtype-fetch-complete = Pengambilan selesai
 events-subtype-fetch-success = Pengambilan berhasil

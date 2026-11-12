@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = بدأ الجلب المجمّع
 events-subtype-fetch-aggregate-complete = اكتمل الجلب المجمّع
 events-subtype-fetch-aggregate-error = خطأ في الجلب المجمّع
 events-subtype-fetch-aggregate-deferred = تأجّل الجلب المجمّع
+events-subtype-fetch-aggregate-blocked = حظر المزوّد الجلب المجمّع
 events-subtype-fetch-attempt = بدأ الجلب
 events-subtype-fetch-complete = اكتمل الجلب
 events-subtype-fetch-success = نجح الجلب

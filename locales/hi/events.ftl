@@ -126,6 +126,7 @@ events-subtype-fetch-aggregate-attempt = समेकित लाना शु�
 events-subtype-fetch-aggregate-complete = समेकित लाना पूरा हुआ
 events-subtype-fetch-aggregate-error = समेकित लाने में त्रुटि
 events-subtype-fetch-aggregate-deferred = समेकित लाना स्थगित
+events-subtype-fetch-aggregate-blocked = प्रदाता ने समेकित लाना रोका
 events-subtype-fetch-attempt = लाना शुरू हुआ
 events-subtype-fetch-complete = लाना पूरा हुआ
 events-subtype-fetch-success = लाना सफल

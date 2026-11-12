@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = Consulta agregada iniciada
 events-subtype-fetch-aggregate-complete = Consulta agregada completada
 events-subtype-fetch-aggregate-error = Error en la consulta agregada
 events-subtype-fetch-aggregate-deferred = Consulta agregada aplazada
+events-subtype-fetch-aggregate-blocked = Consulta agregada bloqueada por el proveedor
 events-subtype-fetch-attempt = Consulta iniciada
 events-subtype-fetch-complete = Consulta completada
 events-subtype-fetch-success = Consulta correcta

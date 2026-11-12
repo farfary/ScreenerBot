@@ -126,6 +126,7 @@ events-subtype-fetch-aggregate-attempt = Récupération groupée démarrée
 events-subtype-fetch-aggregate-complete = Récupération groupée terminée
 events-subtype-fetch-aggregate-error = Erreur de récupération groupée
 events-subtype-fetch-aggregate-deferred = Récupération groupée différée
+events-subtype-fetch-aggregate-blocked = Récupération groupée bloquée par le fournisseur
 events-subtype-fetch-attempt = Récupération démarrée
 events-subtype-fetch-complete = Récupération terminée
 events-subtype-fetch-success = Récupération réussie

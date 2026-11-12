@@ -126,6 +126,7 @@ events-subtype-fetch-aggregate-attempt = Đã bắt đầu lấy gộp
 events-subtype-fetch-aggregate-complete = Đã hoàn tất lấy gộp
 events-subtype-fetch-aggregate-error = Lỗi lấy gộp
 events-subtype-fetch-aggregate-deferred = Đã hoãn lấy gộp
+events-subtype-fetch-aggregate-blocked = Lấy gộp bị nhà cung cấp chặn
 events-subtype-fetch-attempt = Đã bắt đầu lấy dữ liệu
 events-subtype-fetch-complete = Đã hoàn tất lấy dữ liệu
 events-subtype-fetch-success = Lấy dữ liệu thành công

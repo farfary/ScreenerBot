@@ -132,6 +132,7 @@ events-subtype-fetch-aggregate-attempt = 聚合获取已开始
 events-subtype-fetch-aggregate-complete = 聚合获取已完成
 events-subtype-fetch-aggregate-error = 聚合获取出错
 events-subtype-fetch-aggregate-deferred = 聚合获取已推迟
+events-subtype-fetch-aggregate-blocked = 聚合获取被提供方阻止
 events-subtype-fetch-attempt = 获取已开始
 events-subtype-fetch-complete = 获取已完成
 events-subtype-fetch-success = 获取成功

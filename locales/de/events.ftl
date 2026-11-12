@@ -127,6 +127,7 @@ events-subtype-fetch-aggregate-attempt = Sammelabruf gestartet
 events-subtype-fetch-aggregate-complete = Sammelabruf abgeschlossen
 events-subtype-fetch-aggregate-error = Fehler beim Sammelabruf
 events-subtype-fetch-aggregate-deferred = Sammelabruf zurückgestellt
+events-subtype-fetch-aggregate-blocked = Sammelabruf vom Anbieter blockiert
 events-subtype-fetch-attempt = Abruf gestartet
 events-subtype-fetch-complete = Abruf abgeschlossen
 events-subtype-fetch-success = Abruf erfolgreich

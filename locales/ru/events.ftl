@@ -126,6 +126,7 @@ events-subtype-fetch-aggregate-attempt = Сводная загрузка зап�
 events-subtype-fetch-aggregate-complete = Сводная загрузка завершена
 events-subtype-fetch-aggregate-error = Ошибка сводной загрузки
 events-subtype-fetch-aggregate-deferred = Сводная загрузка отложена
+events-subtype-fetch-aggregate-blocked = Сводная загрузка заблокирована поставщиком
 events-subtype-fetch-attempt = Загрузка запущена
 events-subtype-fetch-complete = Загрузка завершена
 events-subtype-fetch-success = Загрузка успешна
