@@ -792,7 +792,9 @@ impl OhlcvMonitor {
         if let Some(pool) = PoolConfig::series_pool(&pools) {
             self.spawn_backfill(&mint, &pool.address, priority);
         } else {
-            logger::warning(
+            // Expected for a token added before its pools are known: the discovery spawned
+            // above registers them and the monitor loop starts the deferred backfill.
+            logger::debug(
                 LogTag::Ohlcv,
                 &format!(
                     "No pool available for mint={}, backfill deferred until pool discovered",
@@ -2720,7 +2722,9 @@ impl OhlcvMonitor {
                             ),
                         );
                     } else if newest.is_none() {
-                        logger::warning(
+                        // A young token or a quiet coarse timeframe has no candle yet; the
+                        // timeframe stays incomplete and the next pass retries it.
+                        logger::debug(
                             LogTag::Ohlcv,
                             &format!(
                                 "Backfill produced no candles for mint={} timeframe={}; leaving incomplete",
