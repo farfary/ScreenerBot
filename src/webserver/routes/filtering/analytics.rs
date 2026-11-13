@@ -500,6 +500,16 @@ mod tests {
     /// rejected count, every source has a share and the recent list is full.
     #[tokio::test]
     async fn promo_analytics_breakdowns_add_up_to_the_headline() {
+        let config = crate::config::CONFIG
+            .get_or_init(|| std::sync::RwLock::new(crate::config::Config::default()));
+        // This case covers every source; the shipped defaults disable GeckoTerminal.
+        {
+            let mut config = config
+                .write()
+                .expect("configure all-source analytics fixture");
+            config.filtering.geckoterminal.enabled = true;
+            config.filtering.geckoterminal.liquidity_enabled = true;
+        }
         let query = AnalyticsQuery {
             start_time: None,
             end_time: None,

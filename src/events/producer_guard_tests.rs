@@ -24,7 +24,7 @@ const ALLOWED: &[&str] = &[
     // Reader tests for the events route response shape.
     "webserver/routes/events/types.rs",
     // JSON-RPC error fixtures.
-    "chains/solana/rpc/subscriptions/client.rs",
+    "chains/solana/rpc/subscriptions/frames.rs",
     "rpc/gateway.rs",
 ];
 

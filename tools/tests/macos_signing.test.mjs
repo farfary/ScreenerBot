@@ -138,6 +138,8 @@ test("the macOS release gate verifies the actual package and architecture", () =
     workflow.indexOf("  package-linux:")
   );
   assert.match(packaging, /os: macos-\d+-intel\s+arch: x64/);
+  assert.match(packaging, /os: macos-15\s+arch: arm64/);
+  assert.doesNotMatch(workflow, /os: macos-14\b/, "retired runners cannot build a release");
 });
 
 test("the packaged loader refuses a non-native runner before spawning Electron", () => {
