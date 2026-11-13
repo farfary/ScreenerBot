@@ -75,12 +75,12 @@ fn the_filter_override_is_patchable_and_inherits_when_null() {
     assert_eq!(merged.require_filter_pass, None);
 }
 
-/// A task stored with a trailing distance of 12% and no activation of its own: over
-/// the default global activation (10%) the merged trail could never sell at a profit,
+/// A task stored with a trailing distance of 30% and no activation of its own: over
+/// the default global activation (25%) the merged trail could never sell at a profit,
 /// as happens to a stored task when the global activation is lowered under it.
 fn stored_with_stale_trail() -> CopyTask {
     let mut task = stored();
-    task.exit_policy_overrides.trailing.distance_pct = Some(12.0);
+    task.exit_policy_overrides.trailing.distance_pct = Some(30.0);
     task
 }
 
@@ -113,7 +113,7 @@ fn a_patch_that_changes_the_overrides_is_checked_on_the_merged_policy() {
         &original,
         serde_json::json!({
             "enabled": false,
-            "exit_policy_overrides": { "trailing": { "distance_pct": 15.0 } }
+            "exit_policy_overrides": { "trailing": { "distance_pct": 35.0 } }
         }),
         global_policy(),
     );
@@ -126,21 +126,21 @@ fn a_patch_that_changes_the_overrides_is_checked_on_the_merged_policy() {
     let fixed = super::tasks::patched_task(
         &original,
         serde_json::json!({
-            "exit_policy_overrides": { "trailing": { "activation_pct": 30.0, "distance_pct": 12.0 } }
+            "exit_policy_overrides": { "trailing": { "activation_pct": 40.0, "distance_pct": 30.0 } }
         }),
         global_policy(),
     )
     .expect("a distance below the task's own activation");
     assert_eq!(
         fixed.exit_policy_overrides.trailing.activation_pct,
-        Some(30.0)
+        Some(40.0)
     );
 }
 
 #[test]
 fn a_task_whose_overrides_no_longer_fit_is_flagged_with_the_rule_they_break() {
     let issue = super::books::exit_policy_issue(&stored_with_stale_trail(), global_policy())
-        .expect("a 12% distance over the 10% global activation is flagged");
+        .expect("a 30% distance over the 25% global activation is flagged");
     assert_eq!(issue.id, "copy-exit-issue-warning");
     let crate::i18n::UiArg::Nested(reason) = &issue.args["reason"] else {
         panic!("the reason is the broken rule's own text");

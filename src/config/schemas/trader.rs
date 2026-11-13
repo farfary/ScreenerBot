@@ -427,7 +427,7 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::TakeProfit,
         })]
-        take_profit_levels_pct: Vec<f64> = vec![20.0],
+        take_profit_levels_pct: Vec<f64> = vec![30.0, 60.0],
         /// Share of the position as opened that each step sells; the shares add up to
         /// at most 100, and what they leave is the runner.
         #[metadata(field_metadata! {
@@ -438,7 +438,7 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::TakeProfit,
         })]
-        take_profit_sell_pct: Vec<f64> = vec![100.0],
+        take_profit_sell_pct: Vec<f64> = vec![50.0, 50.0],
 
         // ==================== TIME OVERRIDE CONFIGURATION ====================
         #[metadata(field_metadata! {
@@ -504,7 +504,7 @@ config_struct! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::StopLoss,
         })]
-        stop_loss_threshold_pct: f64 = 50.0,
+        stop_loss_threshold_pct: f64 = 25.0,
         #[metadata(field_metadata! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::StopLoss,
@@ -534,7 +534,7 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::TrailingStop,
         })]
-        trailing_stop_enabled: bool = false,
+        trailing_stop_enabled: bool = true,
         #[metadata(field_metadata! {
             min: 0.1,
             max: 100,
@@ -542,7 +542,7 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::TrailingStop,
         })]
-        trailing_stop_activation_pct: f64 = 10.0,
+        trailing_stop_activation_pct: f64 = 25.0,
         #[metadata(field_metadata! {
             min: 1,
             max: 50,
@@ -550,7 +550,7 @@ config_struct! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::TrailingStop,
         })]
-        trailing_stop_distance_pct: f64 = 5.0,
+        trailing_stop_distance_pct: f64 = 12.0,
         /// Basis-peak profit from the average entry at which each band's distance takes
         /// over, ascending and above the activation; read together with
         /// `trailing_stop_band_distance_pct` through `trailing_stop_bands`. Empty trails
@@ -1115,17 +1115,36 @@ mod tests {
     }
 
     #[test]
-    fn the_default_ladder_is_one_full_step_at_twenty_percent() {
+    fn the_default_ladder_is_two_half_steps_at_thirty_and_sixty_percent() {
         let config = TraderConfig::default();
         assert!(config.take_profit_enabled);
         assert_eq!(
             config.take_profit_levels(),
-            vec![TakeProfitLevel {
-                profit_pct: 20.0,
-                sell_pct: 100.0,
-            }]
+            vec![
+                TakeProfitLevel {
+                    profit_pct: 30.0,
+                    sell_pct: 50.0,
+                },
+                TakeProfitLevel {
+                    profit_pct: 60.0,
+                    sell_pct: 50.0,
+                },
+            ]
         );
         config.validate().expect("the default ladder is valid");
+    }
+
+    #[test]
+    fn the_default_stop_and_trailing_exits_are_the_tested_set_and_valid() {
+        let config = TraderConfig::default();
+        assert!(config.stop_loss_enabled);
+        assert_eq!(config.stop_loss_threshold_pct, 25.0);
+        assert!(config.trailing_stop_enabled);
+        assert_eq!(config.trailing_stop_activation_pct, 25.0);
+        assert_eq!(config.trailing_stop_distance_pct, 12.0);
+        config
+            .validate()
+            .expect("the default stop and trailing exits are valid");
     }
 
     #[test]

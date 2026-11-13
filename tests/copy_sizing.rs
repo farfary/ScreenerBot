@@ -271,10 +271,9 @@ fn task_exit_overrides_are_checked_on_the_merged_policy() {
         input.into_task(ChainId::Solana, Utc::now(), default_exit_policy())
     };
 
-    // Global activation 10%: a task trailing 12% below the peak could never sell in profit,
-    // even though the trailing stop it would switch on is inherited as off.
+    // Global activation 25%: a task trailing 30% below the peak could never sell in profit.
     assert_eq!(
-        with_overrides(&|input| input.exit_policy_overrides.trailing.distance_pct = Some(12.0)),
+        with_overrides(&|input| input.exit_policy_overrides.trailing.distance_pct = Some(30.0)),
         Err(CopySkip::InvalidExitPolicy)
     );
     // A positive loss threshold would close a winning position.
@@ -293,8 +292,8 @@ fn task_exit_overrides_are_checked_on_the_merged_policy() {
     // Raising the activation with the distance keeps the trail in profit.
     assert!(with_overrides(&|input| {
         input.exit_policy_overrides.trailing.enabled = Some(true);
-        input.exit_policy_overrides.trailing.activation_pct = Some(30.0);
-        input.exit_policy_overrides.trailing.distance_pct = Some(12.0);
+        input.exit_policy_overrides.trailing.activation_pct = Some(40.0);
+        input.exit_policy_overrides.trailing.distance_pct = Some(30.0);
     })
     .is_ok());
     assert!(with_overrides(&|input| {

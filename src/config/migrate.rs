@@ -2102,10 +2102,10 @@ urls = ["https://canonical.fixture.invalid/"]
     // ------------------------------------------------------------------
 
     #[test]
-    fn a_new_config_starts_with_the_stop_loss_on_at_half_the_entry() {
+    fn a_new_config_starts_with_the_stop_loss_on_at_a_quarter_of_the_entry() {
         let trader = Config::default().trader;
         assert!(trader.stop_loss_enabled);
-        assert_eq!(trader.stop_loss_threshold_pct, 50.0);
+        assert_eq!(trader.stop_loss_threshold_pct, 25.0);
     }
 
     #[test]
@@ -2126,7 +2126,7 @@ urls = ["https://canonical.fixture.invalid/"]
             let parsed = parse(raw);
             assert!(parsed.migrated, "{raw:?} is written back with the switch");
             assert!(!parsed.config.trader.stop_loss_enabled, "{raw:?}");
-            assert_eq!(parsed.config.trader.stop_loss_threshold_pct, 50.0);
+            assert_eq!(parsed.config.trader.stop_loss_threshold_pct, 25.0);
 
             let written = toml::to_string(&parsed.config).expect("serialize");
             assert!(has_key(

@@ -37,7 +37,7 @@ fn stop_loss_policy_carries_exactly_its_five_config_fields() {
     let _cfg = config_guard();
     common::set_config(|cfg| {
         cfg.trader.stop_loss_enabled = false; // default: true
-        cfg.trader.stop_loss_threshold_pct = 33.0; // default: 50.0
+        cfg.trader.stop_loss_threshold_pct = 33.0; // default: 25.0
         cfg.trader.stop_loss_min_hold_seconds = 120; // default: 0
         cfg.trader.stop_loss_allow_partial = true; // default: false
         cfg.trader.stop_loss_partial_pct = 17.5; // default: 50.0
@@ -61,9 +61,9 @@ fn stop_loss_policy_carries_exactly_its_five_config_fields() {
 fn trailing_policy_carries_exactly_its_three_config_fields() {
     let _cfg = config_guard();
     common::set_config(|cfg| {
-        cfg.trader.trailing_stop_enabled = true; // default: false
-        cfg.trader.trailing_stop_activation_pct = 22.0; // default: 10.0
-        cfg.trader.trailing_stop_distance_pct = 8.0; // default: 5.0
+        cfg.trader.trailing_stop_enabled = false; // default: true
+        cfg.trader.trailing_stop_activation_pct = 22.0; // default: 25.0
+        cfg.trader.trailing_stop_distance_pct = 8.0; // default: 12.0
     });
 
     let policy = ExitPolicy::from_config();
@@ -71,7 +71,7 @@ fn trailing_policy_carries_exactly_its_three_config_fields() {
     assert_eq!(
         policy.trailing,
         TrailingPolicy {
-            enabled: true,
+            enabled: false,
             activation_pct: 22.0,
             distance_pct: 8.0,
             bands: Vec::new(),
@@ -84,8 +84,8 @@ fn take_profit_policy_carries_exactly_its_three_config_fields() {
     let _cfg = config_guard();
     common::set_config(|cfg| {
         cfg.trader.take_profit_enabled = false; // default: true
-        cfg.trader.take_profit_levels_pct = vec![15.0, 77.0]; // default: [20.0]
-        cfg.trader.take_profit_sell_pct = vec![40.0, 35.0]; // default: [100.0]
+        cfg.trader.take_profit_levels_pct = vec![15.0, 77.0]; // default: [30.0, 60.0]
+        cfg.trader.take_profit_sell_pct = vec![40.0, 35.0]; // default: [50.0, 50.0]
     });
 
     let policy = ExitPolicy::from_config();
@@ -480,15 +480,15 @@ fn task_overrides_are_validated_on_the_policy_they_make() {
     let mut overrides = ExitPolicyOverrides::default();
     assert!(overrides.validate_over(base()).is_ok());
 
-    // Global activation 10%: a 12% distance could never sell at a profit.
-    overrides.trailing.distance_pct = Some(12.0);
+    // Global activation 25%: a 30% distance could never sell at a profit.
+    overrides.trailing.distance_pct = Some(30.0);
     assert!(overrides.validate_over(base()).is_err());
-    overrides.trailing.activation_pct = Some(30.0);
+    overrides.trailing.activation_pct = Some(40.0);
     let merged = overrides
         .validate_over(base())
         .expect("a distance below the task's own activation");
-    assert_eq!(merged.trailing.activation_pct, 30.0);
-    assert_eq!(merged.trailing.distance_pct, 12.0);
+    assert_eq!(merged.trailing.activation_pct, 40.0);
+    assert_eq!(merged.trailing.distance_pct, 30.0);
 
     let mut positive_loss = ExitPolicyOverrides::default();
     positive_loss.time.loss_threshold_pct = Some(5.0);

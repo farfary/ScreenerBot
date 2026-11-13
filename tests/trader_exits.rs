@@ -565,21 +565,28 @@ fn take_profit_never_fires_on_an_unusable_price() {
 }
 
 #[test]
-fn the_default_ladder_sells_everything_past_twenty_percent() {
-    // The shipped ladder is one step that sells the whole position at +20%, the
-    // single profit target it replaces. (1.25 is exactly representable; 1.20 computes
-    // to 19.999999999999996% and would test rounding, not the rule.)
+fn the_default_ladder_sells_half_at_thirty_percent_and_the_rest_at_sixty() {
+    // The shipped ladder is two steps of half the position: +30% sells the first half,
+    // +60% sells what is left. (1.25, 1.5 and 1.75 are exactly representable; 1.30 and
+    // 1.60 compute a rounding off the level and would test rounding, not the rule.)
     let _cfg = config_guard();
     set_config(|cfg| cfg.trader.take_profit_enabled = true);
 
-    let position = test_position(1.0, 1.0);
-    assert!(sell(&position, 1.19, FIRST_STEP).is_none());
-    let decision = sell(&position, 1.25, FIRST_STEP).expect("+25% passes the default step");
+    let mut position = test_position(1.0, 1.0);
+    assert!(sell(&position, 1.25, FIRST_STEP).is_none());
+    let first = sell(&position, 1.5, FIRST_STEP).expect("+50% passes the first default step");
+    assert_eq!(first.take_profit_level, Some(1));
+    assert!((first.exit_percentage.expect("a partial step") - 50.0).abs() < 1e-9);
+
+    position.take_profit_level = 1;
+    let second_step = ExitRule::TakeProfit { level: 2 };
+    assert!(sell(&position, 1.5, second_step).is_none());
+    let second = sell(&position, 1.75, second_step).expect("+75% passes the second default step");
+    assert_eq!(second.take_profit_level, Some(2));
     assert!(
-        decision.exit_percentage.is_none(),
-        "the default step sells it all"
+        second.exit_percentage.is_none(),
+        "the last default step sells what is left"
     );
-    assert_eq!(decision.take_profit_level, Some(1));
 }
 
 #[test]
