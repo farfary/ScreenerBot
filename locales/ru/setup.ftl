@@ -123,6 +123,7 @@ setup-wizard-rpc-input =
     .placeholder = Один HTTPS-адрес на строку
 setup-wizard-rpc-guidance = Используйте надёжного провайдера mainnet; публичные эндпоинты не поддерживаются.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = рекомендуется

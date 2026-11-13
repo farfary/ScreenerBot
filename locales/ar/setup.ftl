@@ -157,6 +157,7 @@ setup-wizard-rpc-input =
     .placeholder = رابط HTTPS واحد في كل سطر
 setup-wizard-rpc-guidance = استخدم مزوّد RPC موثوقًا للشبكة الرئيسية؛ النقاط العامة غير مدعومة.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = موصى به

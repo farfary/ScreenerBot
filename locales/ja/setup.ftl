@@ -142,6 +142,7 @@ setup-wizard-rpc-input =
     .placeholder = 1行に HTTPS URL を1つ
 setup-wizard-rpc-guidance = 信頼できるメインネットのプロバイダーを使ってください。公開エンドポイントには対応していません。
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = 推奨

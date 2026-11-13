@@ -142,6 +142,7 @@ setup-wizard-rpc-input =
     .placeholder = 한 줄에 HTTPS URL 하나
 setup-wizard-rpc-guidance = 안정적인 메인넷 제공업체를 사용하세요. 공개 엔드포인트는 지원되지 않습니다.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = 권장

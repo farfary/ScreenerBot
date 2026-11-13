@@ -145,6 +145,7 @@ setup-wizard-rpc-input =
     .placeholder = هر خط یک نشانی HTTPS
 setup-wizard-rpc-guidance = از یک ارائه‌دهندهٔ قابل اعتماد mainnet استفاده کنید؛ نقاط پایانی عمومی پشتیبانی نمی‌شوند.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = پیشنهادی

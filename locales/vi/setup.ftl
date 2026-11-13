@@ -114,6 +114,7 @@ setup-wizard-rpc-input =
     .placeholder = Mỗi dòng một URL HTTPS
 setup-wizard-rpc-guidance = Hãy dùng nhà cung cấp mainnet ổn định; endpoint công khai không được hỗ trợ.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = nên dùng

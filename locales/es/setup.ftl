@@ -148,6 +148,7 @@ setup-wizard-rpc-input =
     .placeholder = Una URL HTTPS por línea
 setup-wizard-rpc-guidance = Usa un proveedor fiable de mainnet; los endpoints públicos no son compatibles.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = recomendado

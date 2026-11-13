@@ -116,6 +116,7 @@ setup-wizard-rpc-input =
     .placeholder = Satu URL HTTPS per baris
 setup-wizard-rpc-guidance = Gunakan penyedia mainnet yang andal; endpoint publik tidak didukung.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = disarankan

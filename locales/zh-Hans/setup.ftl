@@ -142,6 +142,7 @@ setup-wizard-rpc-input =
     .placeholder = 每行一个 HTTPS URL
 setup-wizard-rpc-guidance = 请使用可靠的主网服务商；不支持公共端点。
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = 推荐

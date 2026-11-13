@@ -117,6 +117,7 @@ setup-wizard-rpc-input =
     .placeholder = Satır başına bir HTTPS URL'si
 setup-wizard-rpc-guidance = Güvenilir bir mainnet sağlayıcısı kullanın; herkese açık uç noktalar desteklenmez.
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = önerilen

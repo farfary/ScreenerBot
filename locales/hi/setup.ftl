@@ -117,6 +117,7 @@ setup-wizard-rpc-input =
     .placeholder = हर लाइन में एक HTTPS URL
 setup-wizard-rpc-guidance = भरोसेमंद मेननेट प्रोवाइडर इस्तेमाल करें; सार्वजनिक एंडपॉइंट समर्थित नहीं हैं।
 setup-provider-helius = { -helius }
+setup-provider-drpc = { -drpc }
 setup-provider-quicknode = { -quicknode }
 setup-provider-alchemy = { -alchemy }
 setup-wizard-provider-recommended = अनुशंसित
