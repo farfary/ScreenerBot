@@ -749,3 +749,17 @@ strategies-mode-readiness-failed = Die Bereitschaft der Strategie konnte nicht g
 strategies-mode-toast-armed = { $name } handelt jetzt live
 strategies-mode-toast-paper = { $name } handelt jetzt auf Paper
 strategies-mode-toast-failed = Der Handelsmodus konnte nicht geändert werden
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = Trend-Rücksetzer
+    .description = Kauft einen Rücksetzer im Aufwärtstrend: Preis über seinem 15m-Durchschnitt, 5m-RSI unter 40 abgekühlt, Käufer über die Stunde weiter vorn.
+strategies-starter-oversold-bounce = Überverkauft-Erholung
+    .description = Kauft, wenn der Kurs unter das untere 15m-Bollinger-Band fällt und der RSI unter 32 steht, nach einem Rücksetzer von 15-50 % vom 8-Stunden-Hoch.
+strategies-starter-trend-dip = Trend-Dip
+    .description = Kauft einen Rücksetzer von 10-25 % vom 8-Stunden-Hoch, solange der Preis über seinem 25-Stunden-Durchschnitt bleibt und der 15m-RSI unter 40 liegt.
+strategies-starter-overbought-take = Überkauft-Gewinnmitnahme
+    .description = Verkauft eine Gewinnposition (+10 % oder mehr), wenn der 5m-RSI über 78 steigt.
+strategies-starter-trend-break = Trendbruch
+    .description = Verkauft eine Position, die länger als 3 Stunden gehalten wird und im Minus liegt, wenn der Preis 3 % unter seinem 15m-Durchschnitt notiert.

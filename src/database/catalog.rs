@@ -431,6 +431,7 @@ pub const STRATEGIES: StoreSpec = shared(
         keep("strategy_backtests", Ledger),
         bounded("strategy_performance"),
         keep("strategy_evaluation_totals", Aggregate),
+        keep("strategy_starters_pending", Schema),
         keep("schema_version", Schema),
     ],
 );

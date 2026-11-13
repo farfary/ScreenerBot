@@ -49,6 +49,16 @@ pub async fn delete_strategy_async(strategy_id: &str) -> crate::Result<()> {
     on_blocking_pool(move || super::delete_strategy(&strategy_id)).await
 }
 
+/// [`super::starters_pending`] on the blocking pool.
+pub async fn starters_pending_async() -> crate::Result<bool> {
+    on_blocking_pool(super::starters_pending).await
+}
+
+/// [`super::seed_starters`] on the blocking pool.
+pub async fn seed_starters_async(starters: Vec<Strategy>) -> crate::Result<bool> {
+    on_blocking_pool(move || super::seed_starters(&starters)).await
+}
+
 /// [`super::get_strategy`] on the blocking pool.
 pub async fn get_strategy_async(strategy_id: &str) -> crate::Result<Option<Strategy>> {
     let strategy_id = strategy_id.to_owned();

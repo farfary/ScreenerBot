@@ -807,3 +807,17 @@ strategies-mode-readiness-failed = تعذّرت قراءة جاهزية الاس
 strategies-mode-toast-armed = «{ $name }» يتداول الآن حيًا
 strategies-mode-toast-paper = «{ $name }» يتداول الآن تجريبيًا
 strategies-mode-toast-failed = تعذّر تغيير وضع التداول
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = تراجع ضمن الاتجاه
+    .description = تشتري تراجعًا داخل اتجاه صاعد: السعر فوق متوسطه على 15m، ومؤشر RSI على 5m هدأ إلى ما دون 40، والمشترون ما زالوا في المقدمة خلال الساعة.
+strategies-starter-oversold-bounce = ارتداد من ذروة البيع
+    .description = تشتري عندما ينخفض السعر تحت نطاق بولينجر السفلي على 15m ومؤشر RSI تحت 32، بعد تراجع بنسبة 15-50% من قمة 8 ساعات.
+strategies-starter-trend-dip = انخفاض ضمن الاتجاه
+    .description = تشتري تراجعًا بنسبة 10-25% من قمة 8 ساعات ما دام السعر فوق متوسطه على 25 ساعة ومؤشر RSI على 15m تحت 40.
+strategies-starter-overbought-take = جني أرباح عند ذروة الشراء
+    .description = تبيع مركزًا رابحًا بنسبة 10% أو أكثر عندما يتجاوز مؤشر RSI على 5m مستوى 78.
+strategies-starter-trend-break = كسر الاتجاه
+    .description = تبيع مركزًا محتفظًا به أكثر من 3 ساعات وهو خاسر عندما يكون السعر أقل من متوسطه على 15m بنسبة 3%.

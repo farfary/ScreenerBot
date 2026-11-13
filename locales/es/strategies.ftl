@@ -774,3 +774,17 @@ strategies-mode-readiness-failed = No se pudo leer la preparación de la estrate
 strategies-mode-toast-armed = { $name } ahora opera en vivo
 strategies-mode-toast-paper = { $name } ahora opera en simulación
 strategies-mode-toast-failed = No se pudo cambiar el modo de trading
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = Retroceso en tendencia
+    .description = Compra una caída dentro de una tendencia alcista: precio por encima de su media de 15m, RSI de 5m enfriado por debajo de 40 y compradores aún por delante durante la hora.
+strategies-starter-oversold-bounce = Rebote por sobreventa
+    .description = Compra cuando el precio cae por debajo de la banda de Bollinger inferior de 15m con el RSI por debajo de 32, tras un retroceso del 15-50% desde el máximo de 8 horas.
+strategies-starter-trend-dip = Corrección en tendencia
+    .description = Compra un retroceso del 10-25% desde el máximo de 8 horas mientras el precio sigue por encima de su media de 25 horas y el RSI de 15m está por debajo de 40.
+strategies-starter-overbought-take = Toma de beneficios por sobrecompra
+    .description = Vende una posición con beneficios (+10% o más) cuando el RSI de 5m supera 78.
+strategies-starter-trend-break = Ruptura de tendencia
+    .description = Vende una posición mantenida más de 3 horas que está en pérdida mientras el precio está un 3% por debajo de su media de 15m.

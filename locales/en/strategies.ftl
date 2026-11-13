@@ -774,3 +774,17 @@ strategies-mode-readiness-failed = Could not read the strategy's readiness
 strategies-mode-toast-armed = { $name } now trades live
 strategies-mode-toast-paper = { $name } now trades on paper
 strategies-mode-toast-failed = Could not change the trading mode
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = Trend Pullback
+    .description = Buy a dip inside an uptrend: price above its 15m average, 5m RSI cooled below 40, buyers still ahead over the hour.
+strategies-starter-oversold-bounce = Oversold Bounce
+    .description = Buy when price falls below the lower 15m Bollinger band with RSI under 32, after a 15-50% pullback from the 8-hour high.
+strategies-starter-trend-dip = Trend Dip
+    .description = Buy a 10-25% pullback from the 8-hour high while price still holds above its 25-hour average, 15m RSI under 40.
+strategies-starter-overbought-take = Overbought Take
+    .description = Sell a winning position (+10% or more) when 5m RSI passes 78.
+strategies-starter-trend-break = Trend Break
+    .description = Sell a position held over 3 hours that is losing while price sits 3% under its 15m average.

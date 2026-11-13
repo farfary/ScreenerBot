@@ -753,3 +753,17 @@ strategies-mode-readiness-failed = 전략의 준비 상태를 읽지 못했습�
 strategies-mode-toast-armed = { $name } 전략이 이제 실거래로 거래합니다
 strategies-mode-toast-paper = { $name } 전략이 이제 모의로 거래합니다
 strategies-mode-toast-failed = 거래 모드를 변경하지 못했습니다
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = 추세 눌림목
+    .description = 상승 추세 안에서 눌림목을 매수합니다. 가격이 15m 이동평균 위에 있고, 5m RSI가 40 아래로 식었으며, 최근 1시간 동안 매수세가 여전히 앞서야 합니다.
+strategies-starter-oversold-bounce = 과매도 반등
+    .description = 8시간 고점에서 15-50% 되돌린 뒤 가격이 15m 볼린저 밴드 하단 아래로 내려가고 RSI가 32 아래일 때 매수합니다.
+strategies-starter-trend-dip = 추세 딥
+    .description = 가격이 25시간 이동평균 위를 유지하고 15m RSI가 40 아래인 동안, 8시간 고점에서 10-25% 되돌린 구간을 매수합니다.
+strategies-starter-overbought-take = 과매수 익절
+    .description = 5m RSI가 78을 넘으면 수익 중인 포지션(+10% 이상)을 매도합니다.
+strategies-starter-trend-break = 추세 이탈
+    .description = 3시간 넘게 보유했고 손실 중인 포지션을, 가격이 15m 이동평균보다 3% 아래에 있을 때 매도합니다.

@@ -56,8 +56,8 @@ pub use vwap::VwapCondition;
 
 use crate::ohlcvs::{Candle, Timeframe};
 use crate::strategies::types::{
-    Condition, ConditionData, EvaluationContext, RuleTree, StrategyType, TransactionCounts,
-    WindowCounts,
+    Condition, ConditionData, EvaluationContext, Parameter, RuleTree, StrategyType,
+    TransactionCounts, WindowCounts,
 };
 use crate::strategies::{Error, Result};
 use async_trait::async_trait;
@@ -310,6 +310,32 @@ impl ConditionRegistry {
     /// Get an evaluator by condition type
     pub fn get(&self, condition_type: &str) -> Option<&Box<dyn ConditionEvaluator>> {
         self.evaluators.get(condition_type)
+    }
+
+    /// A `condition_type` condition with every parameter at its schema default, as the editor
+    /// adds one; `None` for a type the registry does not know.
+    pub fn condition_at_defaults(&self, condition_type: &str) -> Option<Condition> {
+        let schema = self.get(condition_type)?.parameter_schema();
+        let parameters = schema["parameters"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(name, spec)| {
+                let default = spec["default"].clone();
+                (
+                    name.clone(),
+                    Parameter {
+                        value: default.clone(),
+                        default,
+                        constraints: None,
+                    },
+                )
+            })
+            .collect();
+        Some(Condition {
+            condition_type: condition_type.to_owned(),
+            parameters,
+        })
     }
 
     /// List all registered condition types

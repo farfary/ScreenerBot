@@ -13,6 +13,7 @@ pub mod engine;
 pub mod overview;
 pub mod readiness;
 pub(crate) mod recorder;
+pub(crate) mod starters;
 pub mod types;
 
 pub use error::{Error, Result};

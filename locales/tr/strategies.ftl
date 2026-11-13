@@ -727,3 +727,17 @@ strategies-mode-readiness-failed = Stratejinin hazırlık durumu okunamadı
 strategies-mode-toast-armed = { $name } artık canlı işlem yapıyor
 strategies-mode-toast-paper = { $name } artık sanal işlem yapıyor
 strategies-mode-toast-failed = İşlem modu değiştirilemedi
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = Trendde geri çekilme
+    .description = Yükseliş trendi içindeki bir geri çekilmeyi alır: fiyat 15m ortalamasının üstünde, 5m RSI 40'ın altına soğumuş, alıcılar saat boyunca hâlâ önde.
+strategies-starter-oversold-bounce = Aşırı satım tepkisi
+    .description = 8 saatlik zirveden %15-50 geri çekilmenin ardından, fiyat 15m alt Bollinger bandının altına indiğinde ve RSI 32'nin altındayken alır.
+strategies-starter-trend-dip = Trendde düşüş
+    .description = Fiyat 25 saatlik ortalamasının üstünde kalırken ve 15m RSI 40'ın altındayken, 8 saatlik zirveden %10-25 geri çekilmeyi alır.
+strategies-starter-overbought-take = Aşırı alımda kâr al
+    .description = 5m RSI 78'i geçtiğinde kârdaki bir pozisyonu (%10 veya daha fazla) satar.
+strategies-starter-trend-break = Trend kırılması
+    .description = 3 saatten uzun süredir tutulan ve zararda olan bir pozisyonu, fiyat 15m ortalamasının %3 altındayken satar.

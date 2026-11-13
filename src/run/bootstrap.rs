@@ -90,6 +90,21 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
     Ok(())
 }
 
+/// Create the starter strategies of a strategies store that was created empty.
+///
+/// Runs once the boot has reached Explore or full mode, never during first-run setup: a
+/// starter's name and description are written in the dashboard language, which a first
+/// run chooses during setup. A failure never stops startup; the store keeps its mark and
+/// the next start tries again.
+pub(super) async fn create_starter_strategies() {
+    if let Err(e) = crate::strategies::starters::seed_pending().await {
+        logger::warning(
+            LogTag::System,
+            &format!("Failed to create the starter strategies: {e} - the next start tries again"),
+        );
+    }
+}
+
 /// Initialize model-backed execution when configured.
 ///
 /// LLM providers, analysis, and Assistant chat do not require a wallet or

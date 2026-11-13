@@ -16,7 +16,7 @@ use crate::strategies::overview::{
 };
 use crate::strategies::readiness::readiness_of;
 use crate::strategies::types::{
-    Condition, EvaluationTotals, LogicalOperator, Parameter, RuleTree, Strategy, StrategyType,
+    EvaluationTotals, LogicalOperator, RuleTree, Strategy, StrategyType,
 };
 use crate::trader::paper::readiness::Readiness;
 use crate::trader::paper::TradingMode;
@@ -249,7 +249,7 @@ fn promo_strategy(
             promo
                 .conditions
                 .iter()
-                .filter_map(|condition_type| schema_default(registry, condition_type))
+                .filter_map(|condition_type| registry.condition_at_defaults(condition_type))
                 .map(RuleTree::leaf)
                 .collect(),
         ),
@@ -262,32 +262,6 @@ fn promo_strategy(
         mode: promo.mode,
         rules_changed_at: created_at,
     }
-}
-
-/// A `condition_type` condition with every parameter at its schema default, as the editor
-/// adds one; `None` for a type the registry does not know.
-fn schema_default(registry: &ConditionRegistry, condition_type: &str) -> Option<Condition> {
-    let schema = registry.get(condition_type)?.parameter_schema();
-    let parameters = schema["parameters"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(name, spec)| {
-            let default = spec["default"].clone();
-            (
-                name.clone(),
-                Parameter {
-                    value: default.clone(),
-                    default,
-                    constraints: None,
-                },
-            )
-        })
-        .collect();
-    Some(Condition {
-        condition_type: condition_type.to_owned(),
-        parameters,
-    })
 }
 
 /// The last evaluation and the last signal of each strategy. An enabled strategy was

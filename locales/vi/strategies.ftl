@@ -709,3 +709,17 @@ strategies-mode-readiness-failed = Không thể đọc mức sẵn sàng của c
 strategies-mode-toast-armed = { $name } hiện giao dịch live
 strategies-mode-toast-paper = { $name } hiện giao dịch thử nghiệm
 strategies-mode-toast-failed = Không thể đổi chế độ giao dịch
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = Điều chỉnh theo xu hướng
+    .description = Mua nhịp điều chỉnh trong xu hướng tăng: giá trên đường trung bình 15m, RSI 5m nguội xuống dưới 40, bên mua vẫn dẫn trước trong giờ qua.
+strategies-starter-oversold-bounce = Bật lại từ quá bán
+    .description = Mua khi giá giảm xuống dưới dải Bollinger dưới của 15m với RSI dưới 32, sau nhịp điều chỉnh 15-50% từ đỉnh 8 giờ.
+strategies-starter-trend-dip = Dip theo xu hướng
+    .description = Mua nhịp giảm 10-25% từ đỉnh 8 giờ khi giá vẫn trên đường trung bình 25 giờ và RSI 15m dưới 40.
+strategies-starter-overbought-take = Chốt lời khi quá mua
+    .description = Bán vị thế đang lãi (+10% trở lên) khi RSI 5m vượt 78.
+strategies-starter-trend-break = Gãy xu hướng
+    .description = Bán vị thế đã nắm giữ hơn 3 giờ và đang lỗ khi giá thấp hơn đường trung bình 15m là 3%.

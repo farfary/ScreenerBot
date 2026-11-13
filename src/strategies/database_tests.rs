@@ -4,7 +4,8 @@
 //! Tests of the strategies store: the paper or live mode a store gains, the rules clock a
 //! v4 store gains and keeps in line with edits by an older core, the versions that read
 //! the store, the evaluation totals a batch adds to in one transaction, the one order
-//! every strategy listing reads, and the enabled counts of each mode.
+//! every strategy listing reads, the enabled counts of each mode, and the mark that has a
+//! store created empty receive its starter strategies exactly once.
 
 use rusqlite::{params, Connection};
 
@@ -12,6 +13,7 @@ use super::*;
 use crate::chains::ChainId;
 use crate::database::schema::ledger::{self, Assessment};
 use crate::database::{catalog, open};
+use crate::strategies::starters::starters;
 use crate::strategies::types::EvaluationTotals;
 
 /// Opens `path` as the strategies store, as the storage phase does.
@@ -116,9 +118,10 @@ fn a_version_3_store_gains_the_live_mode_and_survives_a_second_open() {
 }
 
 /// The mode changes how a strategy trades, so a core without it must refuse the store;
-/// version 5 changes the meaning of no existing column, so a version 4 core still opens it.
+/// versions 5 and 6 change the meaning of no existing column, so a version 4 core still opens
+/// the store.
 #[test]
-fn a_v4_core_opens_the_v5_store_and_a_v3_core_does_not() {
+fn a_v4_core_opens_the_current_store_and_a_v3_core_does_not() {
     assert_eq!(MIN_READER_VERSION, 4);
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("strategies.db");
@@ -126,7 +129,7 @@ fn a_v4_core_opens_the_v5_store_and_a_v3_core_does_not() {
     let row = ledger::read(&Connection::open(&path).unwrap())
         .unwrap()
         .unwrap();
-    assert_eq!((row.version, row.min_reader_version), (5, 4));
+    assert_eq!((row.version, row.min_reader_version), (6, 4));
     let core = |version| StoreSchema { version, ..SCHEMA };
     assert_eq!(
         ledger::assess(Some(&row), &core(4)),
@@ -263,7 +266,7 @@ fn a_version_4_store_upgrades_without_restarting_readiness() {
         assert_eq!(fingerprint, Some(strategy.rules_fingerprint()), "{id}");
     }
     let row = ledger::read(&conn).unwrap().unwrap();
-    assert_eq!((row.version, row.min_reader_version), (5, 4));
+    assert_eq!((row.version, row.min_reader_version), (6, 4));
 
     let upgraded = clock_columns(&conn);
     drop(conn);
@@ -747,4 +750,144 @@ fn enabled_strategy_counts_split_entry_strategies_by_mode() {
             paper_entry: 0,
         }
     );
+}
+
+/// The five starter strategies with their English text.
+fn english_starters() -> Vec<Strategy> {
+    let english: crate::i18n::LanguageIdentifier = "en".parse().unwrap();
+    starters(&english, Utc::now()).unwrap()
+}
+
+fn strategy_ids(conn: &Connection) -> Vec<String> {
+    conn.prepare("SELECT id FROM strategies ORDER BY id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+/// A store created empty carries the mark; seeding writes every starter, switched off and
+/// in paper mode, and removes the mark in the same transaction.
+#[test]
+fn a_new_store_is_marked_and_seeding_writes_every_starter_and_removes_the_mark() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    let mut conn = Connection::open(&path).unwrap();
+    assert!(starters_pending_in(&conn).unwrap());
+    assert!(strategy_ids(&conn).is_empty());
+
+    let starters = english_starters();
+    assert!(seed_starters_in(&mut conn, &starters).unwrap());
+
+    assert_eq!(
+        strategy_ids(&conn),
+        [
+            "overbought-take",
+            "oversold-bounce",
+            "trend-break",
+            "trend-dip",
+            "trend-pullback"
+        ]
+    );
+    assert!(!starters_pending_in(&conn).unwrap());
+    for starter in &starters {
+        let read = stored(&conn, &starter.id);
+        assert!(!read.enabled, "{} is stored switched off", starter.id);
+        assert_eq!(read.mode, TradingMode::Paper, "{}", starter.id);
+        assert_eq!(read.name, starter.name);
+        assert_eq!(read.rules_fingerprint(), starter.rules_fingerprint());
+    }
+}
+
+/// The mark is consumed with the write, so a starter the user deletes never returns, on
+/// the same connection or after the store is opened again.
+#[test]
+fn a_deleted_starter_does_not_return() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    let mut conn = Connection::open(&path).unwrap();
+    let starters = english_starters();
+    assert!(seed_starters_in(&mut conn, &starters).unwrap());
+    conn.execute("DELETE FROM strategies WHERE id = 'trend-dip'", [])
+        .unwrap();
+
+    assert!(!seed_starters_in(&mut conn, &starters).unwrap());
+    open_store(&path);
+    assert!(!starters_pending_in(&conn).unwrap());
+    assert!(!seed_starters_in(&mut conn, &starters).unwrap());
+    assert_eq!(strategy_ids(&conn).len(), 4);
+    assert!(!strategy_ids(&conn).contains(&"trend-dip".to_owned()));
+}
+
+/// A store that existed before the mark was introduced, whatever it holds, gets nothing.
+#[test]
+fn a_store_that_existed_before_the_mark_gets_no_starters() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    Connection::open(&path)
+        .unwrap()
+        .execute_batch(
+            "DROP TABLE strategy_starters_pending;
+             UPDATE store_schema SET version = 5, min_reader_version = 4 WHERE id = 1;",
+        )
+        .unwrap();
+
+    open_store(&path);
+
+    let mut conn = Connection::open(&path).unwrap();
+    assert!(!starters_pending_in(&conn).unwrap());
+    assert!(!seed_starters_in(&mut conn, &english_starters()).unwrap());
+    assert!(strategy_ids(&conn).is_empty());
+}
+
+/// Either every starter is written and the mark is gone, or nothing changes and the next
+/// start tries again.
+#[test]
+fn a_failed_seeding_writes_nothing_and_keeps_the_mark() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    let mut conn = Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "CREATE TRIGGER refuse_trend_dip BEFORE INSERT ON strategies WHEN NEW.id = 'trend-dip'
+         BEGIN SELECT RAISE(ABORT, 'refused'); END;",
+    )
+    .unwrap();
+    let starters = english_starters();
+
+    assert!(seed_starters_in(&mut conn, &starters).is_err());
+    assert!(strategy_ids(&conn).is_empty());
+    assert!(starters_pending_in(&conn).unwrap());
+
+    conn.execute_batch("DROP TRIGGER refuse_trend_dip").unwrap();
+    assert!(seed_starters_in(&mut conn, &starters).unwrap());
+    assert_eq!(strategy_ids(&conn).len(), 5);
+    assert!(!starters_pending_in(&conn).unwrap());
+}
+
+/// A strategy already stored under a starter's id stays as it is and the others are written.
+#[test]
+fn a_starter_whose_id_is_taken_is_skipped() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("strategies.db");
+    open_store(&path);
+    let mut conn = Connection::open(&path).unwrap();
+    insert_row(&conn, "trend-dip", "EXIT", true);
+
+    assert!(seed_starters_in(&mut conn, &english_starters()).unwrap());
+
+    assert_eq!(strategy_ids(&conn).len(), 5);
+    let (kind, enabled): (String, bool) = conn
+        .query_row(
+            "SELECT type, enabled FROM strategies WHERE id = 'trend-dip'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((kind.as_str(), enabled), ("EXIT", true));
+    assert!(!starters_pending_in(&conn).unwrap());
 }

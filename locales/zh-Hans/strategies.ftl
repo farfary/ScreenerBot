@@ -753,3 +753,17 @@ strategies-mode-readiness-failed = 无法读取策略的就绪情况
 strategies-mode-toast-armed = { $name } 现已实盘交易
 strategies-mode-toast-paper = { $name } 现已模拟交易
 strategies-mode-toast-failed = 无法更改交易模式
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = 趋势回调
+    .description = 在上升趋势中买入回调：价格高于 15m 移动平均线，5m RSI 已降温至 40 以下，买方在过去一小时仍占优。
+strategies-starter-oversold-bounce = 超卖反弹
+    .description = 自 8 小时高点回撤 15-50% 后，当价格跌破 15m 布林带下轨且 RSI 低于 32 时买入。
+strategies-starter-trend-dip = 趋势低吸
+    .description = 当价格仍高于 25 小时移动平均线、15m RSI 低于 40 时，买入自 8 小时高点回撤 10-25% 的回调。
+strategies-starter-overbought-take = 超买止盈
+    .description = 当 5m RSI 升破 78 时，卖出盈利达 10% 或以上的仓位。
+strategies-starter-trend-break = 趋势破位
+    .description = 卖出持有超过 3 小时且处于亏损的仓位，条件是价格低于 15m 移动平均线 3%。

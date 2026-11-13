@@ -789,3 +789,17 @@ strategies-mode-readiness-failed = Не вдалося отримати гото
 strategies-mode-toast-armed = { $name } тепер торгує реально
 strategies-mode-toast-paper = { $name } тепер торгує віртуально
 strategies-mode-toast-failed = Не вдалося змінити режим торгівлі
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = Відкат у тренді
+    .description = Купує відкат усередині висхідного тренду: ціна вище ковзної середньої на 15m, RSI на 5m охолов нижче 40, покупці й далі попереду протягом години.
+strategies-starter-oversold-bounce = Відскок від перепроданості
+    .description = Купує, коли ціна опускається нижче нижньої смуги Боллінджера 15m, а RSI нижче 32, після відкату на 15-50% від максимуму за 8 годин.
+strategies-starter-trend-dip = Просадка в тренді
+    .description = Купує відкат на 10-25% від максимуму за 8 годин, поки ціна лишається вище своєї ковзної середньої за 25 годин, а RSI на 15m нижче 40.
+strategies-starter-overbought-take = Фіксація при перекупленості
+    .description = Продає прибуткову позицію (+10% і більше), коли RSI на 5m перевищує 78.
+strategies-starter-trend-break = Злам тренду
+    .description = Продає позицію, яку утримують понад 3 години і яка в збитку, коли ціна на 3% нижча за ковзну середню на 15m.

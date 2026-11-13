@@ -711,3 +711,17 @@ strategies-mode-readiness-failed = Kesiapan strategi tidak dapat dibaca
 strategies-mode-toast-armed = { $name } sekarang trading live
 strategies-mode-toast-paper = { $name } sekarang trading di Paper
 strategies-mode-toast-failed = Mode trading tidak dapat diubah
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = Koreksi Searah Tren
+    .description = Beli koreksi di dalam tren naik: harga di atas rata-rata 15m, RSI 5m mendingin di bawah 40, pembeli masih unggul selama sejam terakhir.
+strategies-starter-oversold-bounce = Pantulan Oversold
+    .description = Beli saat harga turun di bawah band Bollinger bawah 15m dengan RSI di bawah 32, setelah koreksi 15-50% dari harga tertinggi 8 jam.
+strategies-starter-trend-dip = Dip Searah Tren
+    .description = Beli koreksi 10-25% dari harga tertinggi 8 jam selama harga masih di atas rata-rata 25 jam dan RSI 15m di bawah 40.
+strategies-starter-overbought-take = Ambil Untung Overbought
+    .description = Jual posisi yang sedang profit (+10% atau lebih) saat RSI 5m melewati 78.
+strategies-starter-trend-break = Tren Patah
+    .description = Jual posisi yang di-hold lebih dari 3 jam dan sedang rugi saat harga berada 3% di bawah rata-rata 15m.

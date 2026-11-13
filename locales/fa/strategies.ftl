@@ -771,3 +771,17 @@ strategies-mode-readiness-failed = خواندن آمادگی استراتژی م
 strategies-mode-toast-armed = «{ $name }» اکنون زنده معامله می‌کند
 strategies-mode-toast-paper = «{ $name }» اکنون آزمایشی معامله می‌کند
 strategies-mode-toast-failed = تغییر حالت معامله ممکن نشد
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = اصلاح در روند
+    .description = خرید یک اصلاح در دل روند صعودی: قیمت بالای میانگین 15m، RSI بازه 5m زیر 40 خنک شده و خریداران در ساعت اخیر همچنان جلوترند.
+strategies-starter-oversold-bounce = جهش از اشباع فروش
+    .description = خرید وقتی قیمت زیر باند پایین بولینگر 15m برود و RSI زیر 32 باشد، پس از اصلاح 15-50% از سقف 8 ساعته.
+strategies-starter-trend-dip = دیپ در روند
+    .description = خرید اصلاح 10-25% از سقف 8 ساعته، تا وقتی قیمت بالای میانگین 25 ساعته می‌ماند و RSI بازه 15m زیر 40 است.
+strategies-starter-overbought-take = برداشت سود در اشباع خرید
+    .description = فروش پوزیشن سودده (10% یا بیشتر) وقتی RSI بازه 5m از 78 بالاتر برود.
+strategies-starter-trend-break = شکست روند
+    .description = فروش پوزیشنی که بیش از 3 ساعت نگه داشته شده و در زیان است، وقتی قیمت 3% زیر میانگین 15m باشد.

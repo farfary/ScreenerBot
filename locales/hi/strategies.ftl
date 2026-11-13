@@ -727,3 +727,17 @@ strategies-mode-readiness-failed = स्ट्रैटेजी की रे�
 strategies-mode-toast-armed = { $name } अब लाइव ट्रेड करती है
 strategies-mode-toast-paper = { $name } अब पेपर पर ट्रेड करती है
 strategies-mode-toast-failed = ट्रेडिंग मोड नहीं बदला जा सका
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = ट्रेंड पुलबैक
+    .description = अपट्रेंड के भीतर आई गिरावट पर खरीदती है: कीमत अपने 15m औसत से ऊपर, 5m RSI 40 से नीचे ठंडा हुआ, और खरीदार पिछले घंटे में अब भी आगे।
+strategies-starter-oversold-bounce = ओवरसोल्ड बाउंस
+    .description = 8 घंटे के हाई से 15-50% की गिरावट के बाद, जब कीमत 15m के निचले बोलिंजर बैंड से नीचे जाए और RSI 32 से नीचे हो, तब खरीदती है।
+strategies-starter-trend-dip = ट्रेंड डिप
+    .description = जब कीमत अपने 25 घंटे के औसत से ऊपर बनी हो और 15m RSI 40 से नीचे हो, तब 8 घंटे के हाई से 10-25% की गिरावट पर खरीदती है।
+strategies-starter-overbought-take = ओवरबॉट पर मुनाफ़ा
+    .description = जब 5m RSI 78 पार कर जाए, तब मुनाफ़े वाली पोज़िशन (+10% या अधिक) बेचती है।
+strategies-starter-trend-break = ट्रेंड ब्रेक
+    .description = 3 घंटे से अधिक समय से होल्ड की गई और घाटे वाली पोज़िशन को तब बेचती है, जब कीमत अपने 15m औसत से 3% नीचे हो।

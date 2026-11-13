@@ -753,3 +753,17 @@ strategies-mode-readiness-failed = ストラテジーの準備状況を読み込
 strategies-mode-toast-armed = { $name } はライブで取引中です
 strategies-mode-toast-paper = { $name } はペーパーで取引中です
 strategies-mode-toast-failed = 取引モードを変更できませんでした
+
+## Starter strategies: the five strategies a fresh install creates (src/strategies/starters.rs). The value is the name,
+## `.description` the description; both are resolved in the dashboard language when the strategies are created.
+
+strategies-starter-trend-pullback = トレンド押し目
+    .description = 上昇トレンド中の押し目を買います。価格が 15m の移動平均より上にあり、5m の RSI が40未満まで冷え、直近1時間は買い手が優勢であることが条件です。
+strategies-starter-oversold-bounce = 売られすぎ反発
+    .description = 8時間高値から15-50%押した後に、価格が 15m のボリンジャーバンドの下限を下回り、RSI が32未満のときに買います。
+strategies-starter-trend-dip = トレンドディップ
+    .description = 価格が25時間の移動平均より上を保ち、15m の RSI が40未満の間に、8時間高値から10-25%の押し目を買います。
+strategies-starter-overbought-take = 買われすぎ利確
+    .description = 5m の RSI が78を上回ったとき、含み益のポジション（+10%以上）を売ります。
+strategies-starter-trend-break = トレンド割れ
+    .description = 3時間を超えて保有していて含み損のポジションを、価格が 15m の移動平均より3%下にあるときに売ります。

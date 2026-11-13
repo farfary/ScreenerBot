@@ -32,7 +32,9 @@ const STRATEGIES_SCHEMA_VERSION: u32 = 1;
 /// rules clock, and the `strategy_evaluation_totals` table; evaluations are counted in
 /// the totals, and the per-evaluation rows of `strategy_performance` are folded into
 /// them at every open.
-const STORE_VERSION: i64 = 5;
+/// Version 6 adds `strategy_starters_pending`, the mark of a store created empty that
+/// still awaits its starter strategies; it is a table no older core reads.
+const STORE_VERSION: i64 = 6;
 
 /// The oldest core that reads the store. The v4 mode is breaking: a core that ignores
 /// it would trade a paper strategy live, so an older core must refuse the store. Version
@@ -150,6 +152,14 @@ const DROP_RETIRED_TABLES: &str = r#"
 DROP TABLE IF EXISTS strategy_assignments;
 "#;
 
+/// At most one row, written when the store is created empty and removed in the transaction
+/// that writes the starter strategies. A store that existed before the table has none.
+const SCHEMA_STRATEGY_STARTERS_PENDING: &str = r#"
+CREATE TABLE IF NOT EXISTS strategy_starters_pending (
+    id INTEGER PRIMARY KEY CHECK (id = 1)
+);
+"#;
+
 const SCHEMA_VERSION_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
@@ -186,7 +196,13 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
         .optional()
         .map_err(|e| DatabaseError::classify_sqlite_failure("read strategies schema version", e))?;
 
-    if current_version.unwrap_or(0) < STRATEGIES_SCHEMA_VERSION {
+    let created_now = current_version.unwrap_or(0) < STRATEGIES_SCHEMA_VERSION;
+    ddl::run_batch(
+        tx,
+        "create strategy_starters_pending table",
+        SCHEMA_STRATEGY_STARTERS_PENDING,
+    )?;
+    if created_now {
         for (operation, sql) in [
             ("create strategies table", SCHEMA_STRATEGIES),
             (
@@ -205,6 +221,11 @@ fn create_schema(tx: &Transaction<'_>, _: &SchemaContext) -> Result<(), Database
         .map_err(|e| {
             DatabaseError::classify_sqlite_failure("record strategies schema version", e)
         })?;
+        ddl::run(
+            tx,
+            "mark the new strategies store for its starter strategies",
+            "INSERT INTO strategy_starters_pending (id) VALUES (1)",
+        )?;
     }
 
     // Chain scope: `strategy_performance` gains a chain column, checked whatever the
@@ -733,6 +754,52 @@ pub fn delete_strategy(strategy_id: &str) -> crate::Result<()> {
     );
 
     Ok(())
+}
+
+/// Whether the store was created empty and still awaits its starter strategies.
+pub fn starters_pending() -> crate::Result<bool> {
+    let conn = get_connection()?;
+    starters_pending_in(&conn)
+}
+
+fn starters_pending_in(conn: &rusqlite::Connection) -> crate::Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM strategy_starters_pending)",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+/// Write the starter strategies of a store created empty and remove its mark, in one
+/// transaction: either every starter is written and the mark is gone, or nothing changes
+/// and the next start tries again. A starter whose id a strategy already holds is skipped.
+/// Returns whether the store carried the mark; without it nothing is written, so a store
+/// that existed before the starters gets none and a deleted starter never returns.
+pub fn seed_starters(starters: &[Strategy]) -> crate::Result<bool> {
+    let mut conn = get_connection()?;
+    let seeded = seed_starters_in(&mut conn, starters)?;
+    if seeded {
+        logger::info(
+            LogTag::System,
+            &format!("Created {} starter strategies", starters.len()),
+        );
+    }
+    Ok(seeded)
+}
+
+fn seed_starters_in(conn: &mut rusqlite::Connection, starters: &[Strategy]) -> crate::Result<bool> {
+    let tx = conn.write_tx()?;
+    if !starters_pending_in(&tx)? {
+        return Ok(false);
+    }
+    for starter in starters {
+        if stored_rules_fingerprint(&tx, &starter.id)?.is_none() {
+            insert_strategy_in(&tx, starter)?;
+        }
+    }
+    tx.execute("DELETE FROM strategy_starters_pending", [])?;
+    tx.commit()?;
+    Ok(true)
 }
 
 /// Get a strategy by ID

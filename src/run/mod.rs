@@ -230,6 +230,13 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
         } // end normal (full) mode
     }
 
+    // Every boot path reaches Explore or full mode here, after first-run setup has set the
+    // dashboard language the starter strategies are written in. A restart requested during
+    // setup reaches it without a mode and creates nothing.
+    if global::is_explore_or_full() {
+        bootstrap::create_starter_strategies().await;
+    }
+
     // 15. Wait for shutdown signal
     shutdown::wait_for_shutdown_signal().await?;
 

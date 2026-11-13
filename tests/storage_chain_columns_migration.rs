@@ -65,6 +65,7 @@ const TABLES_WITHOUT_CHAIN_SCOPE: &[(&str, &[&str])] = &[
             "strategies",
             "strategy_backtests",
             "strategy_evaluation_totals",
+            "strategy_starters_pending",
             "strategy_templates",
         ],
     ),
@@ -247,8 +248,9 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
     // `strategy_assignments`, which nothing read or wrote, is dropped from the v0.2.13
     // store; version 3 only adds a column. Version 4 adds the paper or live mode, which
     // a core that ignores it would trade live, so version 4 is the oldest reader.
-    // Version 5 adds the rules clock and the evaluation totals, which a version 4 core
-    // reads past, so the oldest reader stays 4.
+    // Version 5 adds the rules clock and the evaluation totals, and version 6 the mark of
+    // a store awaiting its starter strategies; a version 4 core reads past them, so the
+    // oldest reader stays 4.
     let strategies = open_database(fixture_dir.path(), "strategies.db");
     let retired: i64 = strategies
         .query_row(
@@ -268,7 +270,7 @@ fn v0_2_13_fixtures_gain_chain_scope_and_survive_a_second_boot() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("read the strategies store ledger");
-    assert_eq!(ledger, (5, 4), "strategies.db: store ledger");
+    assert_eq!(ledger, (6, 4), "strategies.db: store ledger");
 
     // The sentinel evaluation is folded into its strategy's totals, its time in the
     // totals' fixed form.
