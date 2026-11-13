@@ -209,7 +209,9 @@ test("a close is pending at once, refuses a duplicate and reports the recorded f
   const button = closeButton(page);
   assert.equal(plain(await button.innerText()), "Close pending");
   assert.ok(await button.isDisabled(), "the row stays and cannot be closed twice");
-  await button.click({ force: true });
+  // Deliver even to the disabled button so this also exercises the close guard.
+  // A forced pointer click can race the workspace reload's replacement row.
+  await button.dispatchEvent("click");
   assert.equal(await page.locator(".confirmation-dialog--visible").count(), 0);
   assert.equal(closes.length, 1, "no second request is sent");
   assert.equal(await page.locator("#copy-ws-panel .copy-table tbody tr").count(), 3);
