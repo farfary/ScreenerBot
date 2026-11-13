@@ -676,7 +676,7 @@ fn stored_columns(id: i64) -> Vec<(String, Value)> {
     let mut stmt = conn
         .prepare("SELECT * FROM positions WHERE id = ?1")
         .expect("prepare row read");
-    let names: Vec<String> = stmt.column_names().iter().map(|n| n.to_string()).collect();
+    let names: Vec<String> = stmt.column_names().map(|n| n.to_string()).collect();
     stmt.query_row([id], |row| {
         names
             .iter()

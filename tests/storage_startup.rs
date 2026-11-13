@@ -68,6 +68,47 @@ fn store_files<'a>(
 }
 
 #[test]
+fn sqlite_unsigned_integers_round_trip_and_reject_out_of_range_values() {
+    let conn = Connection::open_in_memory().expect("open isolated integer fixture");
+    conn.execute_batch("CREATE TABLE integers (value INTEGER NOT NULL)")
+        .expect("create integer fixture");
+
+    for value in [0_u64, 1, u32::MAX as u64, i64::MAX as u64] {
+        conn.execute("INSERT INTO integers VALUES (?1)", [value])
+            .expect("store representable unsigned integer");
+        let stored: (u64, String) = conn
+            .query_row(
+                "SELECT value, typeof(value) FROM integers ORDER BY rowid DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read unsigned integer");
+        assert_eq!(stored, (value, "integer".to_owned()));
+    }
+    let size =
+        usize::try_from(u32::MAX).expect("supported platforms have at least 32-bit pointers");
+    let stored: usize = conn
+        .query_row("SELECT ?1", [size], |row| row.get(0))
+        .expect("round trip pointer-sized unsigned integer");
+    assert_eq!(stored, size);
+
+    for value in [i64::MAX as u64 + 1, u64::MAX] {
+        assert!(matches!(
+            conn.execute("INSERT INTO integers VALUES (?1)", [value]),
+            Err(rusqlite::Error::ToSqlConversionFailure(_))
+        ));
+    }
+    assert!(matches!(
+        conn.query_row("SELECT -1", [], |row| row.get::<_, u64>(0)),
+        Err(rusqlite::Error::IntegralValueOutOfRange(_, -1))
+    ));
+    let count: u64 = conn
+        .query_row("SELECT count(*) FROM integers", [], |row| row.get(0))
+        .expect("count stored values");
+    assert_eq!(count, 4, "refused writes must not change stored rows");
+}
+
+#[test]
 fn database_filename_inventory_matches_production_paths() {
     let mut production = database_filenames(include_str!("../src/paths/database.rs"));
     production.extend(database_filenames(include_str!(

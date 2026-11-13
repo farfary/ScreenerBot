@@ -105,9 +105,10 @@ rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", 
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 
 # Database with bundled sqlite for faster builds
-rusqlite = { version = "0.37", features = ["backup", "bundled", "hooks", "unlock_notify"] }
+rusqlite = { version = "0.41", features = ["backup", "bundled", "fallible_uint", "hooks", "unlock_notify"] }
 r2d2 = "0.8"
-r2d2_sqlite = "0.31"
+# Preserve the prior pool checkout check; 0.36's default adds SELECT 1 on every checkout.
+r2d2_sqlite = { version = "0.36", default-features = false }
 
 # Localization
 fluent-bundle = "0.16"
@@ -284,7 +285,7 @@ tempfile = "3"
 # decrypts it through the library's secure_storage. Integration test crates see
 # only dev-dependencies; these mirror the lib's versions and compile once. `hooks`
 # lets the storage recovery tests interrupt a store's upgrade at any statement.
-rusqlite = { version = "0.37", features = ["backup", "bundled", "hooks", "unlock_notify"] }
+rusqlite = { version = "0.41", features = ["backup", "bundled", "fallible_uint", "hooks", "unlock_notify"] }
 bs58 = "0.5"
 dirs = "7.0.0"
 # Route-level launch tests drive the real Axum router in-process (tower's oneshot)

@@ -7,7 +7,7 @@ use crate::common;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
@@ -440,22 +440,40 @@ fn upgrade_once(
         .expect("foreign keys off");
     let calls = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&calls);
+    let active = Arc::new(AtomicBool::new(false));
+    let handler_active = Arc::clone(&active);
+    // Hooks require a mutable connection; install before borrowing it for the
+    // transaction and count only the upgrade, excluding begin/commit/rollback.
+    connection
+        .progress_handler(
+            period,
+            Some(move || {
+                if !handler_active.load(Ordering::SeqCst) {
+                    return false;
+                }
+                let call = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                interrupt_at.is_some_and(|at| call >= at)
+            }),
+        )
+        .expect("install upgrade interruption handler");
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .expect("begin upgrade");
-    transaction.progress_handler(
-        period,
-        Some(move || {
-            let call = counter.fetch_add(1, Ordering::SeqCst) + 1;
-            interrupt_at.is_some_and(|at| call >= at)
-        }),
-    );
+    active.store(true, Ordering::SeqCst);
     let context = SchemaContext {
         chains: vec![ChainId::Solana],
     };
     let upgraded = upgrade::apply(&transaction, spec, path, &context).is_ok();
-    transaction.progress_handler(period, None::<fn() -> bool>);
-    let committed = upgraded && transaction.commit().is_ok();
+    active.store(false, Ordering::SeqCst);
+    let committed = if upgraded {
+        transaction.commit().is_ok()
+    } else {
+        drop(transaction);
+        false
+    };
+    connection
+        .progress_handler(period, None::<fn() -> bool>)
+        .expect("remove upgrade interruption handler");
     (committed, calls.load(Ordering::SeqCst))
 }
 
