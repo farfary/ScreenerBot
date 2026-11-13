@@ -272,6 +272,8 @@
               <a href="https://www.helius.dev/solana-rpc-nodes" target="_blank"
                 rel="noopener noreferrer"><span data-l10n-id="setup-provider-helius"></span>
                 <strong data-l10n-id="setup-wizard-provider-recommended"></strong></a>
+              <a href="https://drpc.org/docs/solana-api" target="_blank" rel="noopener noreferrer"
+                data-l10n-id="setup-provider-drpc"></a>
               <a href="https://www.quicknode.com" target="_blank" rel="noopener noreferrer"
                 data-l10n-id="setup-provider-quicknode"></a>
               <a href="https://www.alchemy.com" target="_blank" rel="noopener noreferrer"
