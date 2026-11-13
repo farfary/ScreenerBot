@@ -14,6 +14,7 @@ use axum::{
 use std::sync::Arc;
 
 use crate::transactions::{get_transaction_database, Subject};
+use crate::webserver::promo;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::success_response;
 
@@ -24,6 +25,9 @@ pub(super) async fn list_transactions(
     State(_state): State<Arc<AppState>>,
     Json(request): Json<ListTransactionsRequest>,
 ) -> Response {
+    if promo::are_promo_fixtures_enabled() {
+        return success_response(promo::get_promo_transactions(&request));
+    }
     let subject = match resolve_subject(request.subject.as_deref()).await {
         Ok(subject) => subject,
         Err(response) => return response,
@@ -76,6 +80,12 @@ pub(super) async fn get_transaction_detail(
     Path(signature): Path<String>,
     Query(query): Query<TransactionSubjectQuery>,
 ) -> Response {
+    if promo::are_promo_fixtures_enabled() {
+        return success_response(promo::get_promo_transaction_detail(
+            query.subject.as_deref(),
+            &signature,
+        ));
+    }
     let subject = match resolve_subject(query.subject.as_deref()).await {
         Ok(subject) => subject,
         Err(response) => return response,
@@ -94,6 +104,11 @@ pub(super) async fn get_summary(
     State(_state): State<Arc<AppState>>,
     Query(query): Query<TransactionSubjectQuery>,
 ) -> Response {
+    if promo::are_promo_fixtures_enabled() {
+        return success_response(promo::get_promo_transaction_summary(
+            query.subject.as_deref(),
+        ));
+    }
     let subject = match resolve_subject(query.subject.as_deref()).await {
         Ok(subject) => subject,
         Err(response) => return response,
@@ -224,6 +239,9 @@ pub(super) async fn get_summary(
 /// POST /api/transactions/history/older - Load the page of own-wallet history that precedes
 /// the stored history
 pub(super) async fn load_older_history(State(_state): State<Arc<AppState>>) -> Response {
+    if promo::are_promo_fixtures_enabled() {
+        return promo::promo_write_refused();
+    }
     match crate::transactions::service::load_older_history().await {
         Ok(page) => success_response(page),
         Err(crate::transactions::Error::HistoryLoadInProgress) => ApiError::new(
@@ -277,5 +295,90 @@ async fn resolve_subject(requested: Option<&str>) -> Result<Subject, Response> {
         )
         .details(e.to_string())
         .into_response()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use serde_json::{json, Value};
+    use tower::ServiceExt;
+
+    async fn body(response: Response) -> Value {
+        serde_json::from_slice(
+            &axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("response body"),
+        )
+        .expect("response JSON")
+    }
+
+    #[tokio::test]
+    async fn promo_routes_answer_without_a_wallet_or_database_and_refuse_history_writes() {
+        promo::enable_promo_fixtures();
+        let router = super::super::routes().with_state(Arc::new(AppState::new()));
+        let list_request = |subject: Option<&str>| {
+            Request::post("/list")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"subject": subject}).to_string()))
+                .expect("list request")
+        };
+        let response = router
+            .clone()
+            .oneshot(list_request(None))
+            .await
+            .expect("sample list");
+        assert_eq!(response.status(), StatusCode::OK);
+        let list = body(response).await;
+        let signature = list["items"][0]["signature"]
+            .as_str()
+            .expect("sample signature");
+        assert!(signature.starts_with("promo_"));
+        let detail = router
+            .clone()
+            .oneshot(
+                Request::get(format!("/{signature}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(detail.status(), StatusCode::OK);
+        assert_eq!(body(detail).await["signature"], signature);
+        let summary = router
+            .clone()
+            .oneshot(Request::post("/summary").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(summary.status(), StatusCode::OK);
+        assert_eq!(body(summary).await["total"], list["total_estimate"]);
+        let foreign = router
+            .clone()
+            .oneshot(list_request(Some("unrelated-address")))
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::OK);
+        assert_eq!(body(foreign).await["total_estimate"], 0);
+        let unknown = router
+            .clone()
+            .oneshot(
+                Request::get("/not-a-sample-signature")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(body(unknown).await.is_null());
+        let write = router
+            .oneshot(Request::post("/history/older").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(write.status(), StatusCode::FORBIDDEN);
+        assert!(get_transaction_database().await.is_none());
+        assert!(!crate::config::is_config_initialized());
     }
 }

@@ -21,6 +21,8 @@
 //! - /api/copy-trading reads: overview, status, tasks, task, stats, workspace,
 //!   activity, insights, comparison, wallet profile
 //! - /api/events/head
+//! - /api/transactions/list, /api/transactions/summary, /api/transactions/{signature}
+//!   (history loading is refused)
 //! - /api/filtering/stats, /api/filtering/rejection-stats, /api/filtering/analytics,
 //!   /api/filtering/rejected-tokens, /api/filtering/export-rejected-tokens,
 //!   /api/filtering/refresh (moves the snapshot time; the fixture corpus is fixed)
@@ -59,6 +61,7 @@ mod status;
 mod strategies;
 mod tokens;
 mod trader;
+mod transactions;
 mod wallet;
 mod wallets;
 
@@ -95,6 +98,9 @@ pub use tokens::{get_promo_favorites, get_promo_tokens_list, get_promo_tokens_st
 pub use trader::{
     apply_promo_trader_config, get_promo_loss_limit_status, get_promo_monitors_status,
     get_promo_open_positions, get_promo_trader_stats, get_promo_trader_status,
+};
+pub use transactions::{
+    get_promo_transaction_detail, get_promo_transaction_summary, get_promo_transactions,
 };
 pub use wallet::{get_promo_wallet_address, get_promo_wallet_current, get_promo_wallet_tokens};
 pub use wallets::{get_promo_wallets, get_promo_watch_status, get_promo_watch_targets};
