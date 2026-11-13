@@ -333,11 +333,17 @@ fn dexscreener_optional_logo_and_website_requirements() {
         FilterRejectionReason::DexScreenerEmptyWebsiteUrl
     );
 
-    // Both requirements are off by default.
+    // By default the logo is required and the website is not.
+    let defaults = DexScreenerFilters::default();
     let mut token = dex_token();
     token.image_url = None;
+    assert_eq!(
+        rejection(dexscreener::evaluate(&token, &defaults)),
+        FilterRejectionReason::DexScreenerEmptyLogoUrl
+    );
+    let mut token = dex_token();
     token.websites.clear();
-    assert!(dexscreener::evaluate(&token, &DexScreenerFilters::default()).is_ok());
+    assert!(dexscreener::evaluate(&token, &defaults).is_ok());
 }
 
 #[test]
@@ -571,7 +577,8 @@ fn dexscreener_market_cap_and_fdv_bounds() {
 fn dexscreener_volume_threshold_of_zero_disables_that_window() {
     let config = DexScreenerFilters {
         volume_enabled: true,
-        ..Default::default() // every min_volume_* is 0.0
+        min_volume_1h: 0.0,
+        ..Default::default() // every other min_volume_* is 0.0
     };
     let mut token = dex_token();
     token.volume_m5 = None;
@@ -650,8 +657,8 @@ fn dexscreener_volume_windows_reject_low_and_missing_values() {
 fn dexscreener_price_change_ignores_windows_it_has_no_reading_for() {
     // A price change is a range check, so an absent window passes — enabling the checks
     // must not throw out every token whose provider omitted one window. This used to
-    // reject even under the DEFAULT (-100%, +10000%) band, which accepts every value that
-    // can physically occur.
+    // reject even under a (-100%, +10000%) band, which accepts every value that can
+    // physically occur.
     let config = DexScreenerFilters {
         price_change_enabled: true,
         ..Default::default()
@@ -816,7 +823,7 @@ fn dexscreener_treats_a_non_finite_reading_as_no_reading_at_all() {
 #[test]
 fn rugcheck_non_finite_percentages_cannot_pass_a_ceiling() {
     // Same class of defect on the security side, where the stakes are higher: a NaN holder
-    // percentage used to clear "top holder under 40%" and, summed, turned the insider total
+    // percentage used to clear the top-holder ceiling and, summed, turned the insider total
     // into NaN — which cleared its own ceiling too.
     let config = RugCheckFilters::default();
 
@@ -928,6 +935,8 @@ fn geckoterminal_disabled_skips_every_check() {
 #[test]
 fn geckoterminal_ignores_tokens_from_another_source() {
     let config = GeckoTerminalFilters {
+        enabled: true,
+        liquidity_enabled: true,
         min_liquidity_usd: 1_000_000_000.0,
         ..Default::default()
     };
@@ -946,6 +955,8 @@ fn geckoterminal_answers_missing_data_the_same_way_dexscreener_does() {
     // that DexScreener let through, which made a token's fate depend on which provider
     // happened to answer first during discovery.
     let config = GeckoTerminalFilters {
+        enabled: true,
+        liquidity_enabled: true,
         market_cap_enabled: true,
         ..Default::default()
     };
@@ -967,6 +978,8 @@ fn geckoterminal_answers_missing_data_the_same_way_dexscreener_does() {
 #[test]
 fn geckoterminal_zero_maximum_means_no_upper_bound() {
     let config = GeckoTerminalFilters {
+        enabled: true,
+        liquidity_enabled: true,
         max_liquidity_usd: 0.0,
         market_cap_enabled: true,
         max_market_cap_usd: 0.0,
@@ -985,6 +998,8 @@ fn geckoterminal_zero_maximum_means_no_upper_bound() {
 #[test]
 fn geckoterminal_liquidity_and_market_cap_bounds() {
     let config = GeckoTerminalFilters {
+        enabled: true,
+        liquidity_enabled: true,
         min_liquidity_usd: 1_000.0,
         max_liquidity_usd: 100_000.0,
         market_cap_enabled: true,
@@ -1025,6 +1040,7 @@ fn geckoterminal_liquidity_and_market_cap_bounds() {
 #[test]
 fn geckoterminal_volume_and_price_change_windows() {
     let config = GeckoTerminalFilters {
+        enabled: true,
         volume_enabled: true,
         min_volume_5m: 100.0,
         min_volume_1h: 1_000.0,
@@ -1075,6 +1091,7 @@ fn geckoterminal_volume_and_price_change_windows() {
 #[test]
 fn geckoterminal_pool_metrics_zero_thresholds_are_inert() {
     let config = GeckoTerminalFilters {
+        enabled: true,
         pool_metrics_enabled: true,
         min_pool_count: 0,
         max_pool_count: 0,
@@ -1091,6 +1108,7 @@ fn geckoterminal_pool_metrics_zero_thresholds_are_inert() {
 #[test]
 fn geckoterminal_pool_metrics_bounds() {
     let config = GeckoTerminalFilters {
+        enabled: true,
         pool_metrics_enabled: true,
         min_pool_count: 2,
         max_pool_count: 10,
@@ -1572,6 +1590,7 @@ fn rugcheck_transfer_fee_present_and_too_high() {
 #[test]
 fn rugcheck_lp_provider_rules() {
     let config = RugCheckFilters {
+        lp_providers_enabled: true,
         min_lp_providers: 3,
         ..Default::default()
     };

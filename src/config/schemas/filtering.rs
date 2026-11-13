@@ -35,7 +35,7 @@ config_struct! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::TokenInfo,
         })]
-        require_logo_url: bool = false,
+        require_logo_url: bool = true,
         #[metadata(field_metadata! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::TokenInfo,
@@ -55,7 +55,7 @@ config_struct! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::Liquidity,
         })]
-        min_liquidity_usd: f64 = 1.0,
+        min_liquidity_usd: f64 = 15_000.0,
         #[metadata(field_metadata! {
             min: 100,
             max: 1000000000,
@@ -63,7 +63,7 @@ config_struct! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::Liquidity,
         })]
-        max_liquidity_usd: f64 = 100_000_000.0,
+        max_liquidity_usd: f64 = 500_000_000.0,
 
         // Market cap checks
         #[metadata(field_metadata! {
@@ -78,15 +78,15 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::MarketCap,
         })]
-        min_market_cap_usd: f64 = 1000.0,
+        min_market_cap_usd: f64 = 50_000.0,
         #[metadata(field_metadata! {
             min: 1000,
-            max: 1000000000,
+            max: 10000000000.0,
             step: 100000,
             impact: ConfigImpact::High,
             category: ConfigCategory::MarketCap,
         })]
-        max_market_cap_usd: f64 = 100_000_000.0,
+        max_market_cap_usd: f64 = 5_000_000_000.0,
 
         #[metadata(field_metadata! {
             impact: ConfigImpact::Medium,
@@ -123,8 +123,7 @@ config_struct! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::Activity,
         })]
-        // Default 0: Don't require immediate activity - new tokens may have quiet periods
-        min_transactions_5min: i64 = 0,
+        min_transactions_5min: i64 = 2,
         #[metadata(field_metadata! {
             min: 0,
             max: 10000,
@@ -132,15 +131,14 @@ config_struct! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::Activity,
         })]
-        // Default 1: Just need some activity, not heavy trading
-        min_transactions_1h: i64 = 1,
+        min_transactions_1h: i64 = 40,
 
         // Volume checks (new feature)
         #[metadata(field_metadata! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::Volume,
         })]
-        volume_enabled: bool = false,
+        volume_enabled: bool = true,
         #[metadata(field_metadata! {
             min: 0,
             max: 1000000,
@@ -156,7 +154,7 @@ config_struct! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::Volume,
         })]
-        min_volume_1h: f64 = 0.0,
+        min_volume_1h: f64 = 3000.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 10000000,
@@ -179,7 +177,7 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        price_change_enabled: bool = false,
+        price_change_enabled: bool = true,
         #[metadata(field_metadata! {
             min: -100,
             max: 10000,
@@ -187,15 +185,15 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        min_price_change_m5: f64 = -100.0,
+        min_price_change_m5: f64 = -15.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 100000,
-            step: 50,
+            step: 5,
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        max_price_change_m5: f64 = 10000.0,
+        max_price_change_m5: f64 = 30.0,
         #[metadata(field_metadata! {
             min: -100,
             max: 10000,
@@ -203,7 +201,7 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        min_price_change_h1: f64 = -100.0,
+        min_price_change_h1: f64 = -25.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 100000,
@@ -211,7 +209,7 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        max_price_change_h1: f64 = 10000.0,
+        max_price_change_h1: f64 = 100.0,
         #[metadata(field_metadata! {
             min: -100,
             max: 10000,
@@ -219,7 +217,7 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        min_price_change_h6: f64 = -100.0,
+        min_price_change_h6: f64 = -40.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 100000,
@@ -227,7 +225,7 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        max_price_change_h6: f64 = 10000.0,
+        max_price_change_h6: f64 = 400.0,
         #[metadata(field_metadata! {
             min: -100,
             max: 10000,
@@ -235,7 +233,7 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        min_price_change_h24: f64 = -100.0,
+        min_price_change_h24: f64 = -60.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 100000,
@@ -243,7 +241,7 @@ config_struct! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::PriceChange,
         })]
-        max_price_change_h24: f64 = 10000.0,
+        max_price_change_h24: f64 = 5000.0,
     }
 }
 
@@ -258,14 +256,14 @@ config_struct! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::SourceControl,
         })]
-        enabled: bool = true,
+        enabled: bool = false,
 
         // Liquidity checks
         #[metadata(field_metadata! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::Liquidity,
         })]
-        liquidity_enabled: bool = true,
+        liquidity_enabled: bool = false,
         #[metadata(field_metadata! {
             min: 0,
             max: 10000000,
@@ -505,8 +503,7 @@ config_struct! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::HolderDistribution,
         })]
-        // Default 40%: Most new tokens have concentrated ownership initially
-        max_top_holder_pct: f64 = 40.0,
+        max_top_holder_pct: f64 = 30.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 100,
@@ -514,8 +511,7 @@ config_struct! {
             impact: ConfigImpact::High,
             category: ConfigCategory::HolderDistribution,
         })]
-        // Default 60%: Allow reasonable concentration for newer tokens
-        max_top_3_holders_pct: f64 = 60.0,
+        max_top_3_holders_pct: f64 = 50.0,
         #[metadata(field_metadata! {
             min: 0,
             max: 1000000,
@@ -523,8 +519,7 @@ config_struct! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::HolderDistribution,
         })]
-        // Default 50: Filters very new tokens but allows most established ones to pass
-        min_unique_holders: u32 = 50,
+        min_unique_holders: u32 = 150,
 
         // LP lock checks
         #[metadata(field_metadata! {
@@ -620,7 +615,7 @@ config_struct! {
             impact: ConfigImpact::Medium,
             category: ConfigCategory::LpProviders,
         })]
-        lp_providers_enabled: bool = true,
+        lp_providers_enabled: bool = false,
         #[metadata(field_metadata! {
             min: 0,
             max: 100,
@@ -746,7 +741,7 @@ config_struct! {
             impact: ConfigImpact::Critical,
             category: ConfigCategory::Age,
         })]
-        min_token_age_minutes: i64 = 60,
+        min_token_age_minutes: i64 = 180,
 
         // Source-specific configs (nested)
         #[metadata(field_metadata! {
@@ -772,5 +767,83 @@ config_struct! {
             category: ConfigCategory::DataSources,
         })]
         rugcheck: RugCheckFilters = RugCheckFilters::default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FilteringConfig;
+    use crate::config::{validate_config, Config};
+
+    #[test]
+    fn the_default_market_rules_are_the_tested_set() {
+        let config = FilteringConfig::default();
+        assert_eq!(config.min_token_age_minutes, 180);
+
+        let dex = &config.dexscreener;
+        assert!(dex.enabled && dex.liquidity_enabled && dex.market_cap_enabled);
+        assert_eq!(dex.min_liquidity_usd, 15_000.0);
+        assert_eq!(dex.max_liquidity_usd, 500_000_000.0);
+        assert_eq!(dex.min_market_cap_usd, 50_000.0);
+        assert_eq!(dex.max_market_cap_usd, 5_000_000_000.0);
+        assert_eq!(dex.min_transactions_5min, 2);
+        assert_eq!(dex.min_transactions_1h, 40);
+        assert!(dex.volume_enabled);
+        assert_eq!(dex.min_volume_1h, 3_000.0);
+        assert!(dex.require_logo_url);
+        assert!(!dex.require_website_url);
+        assert!(dex.price_change_enabled);
+        for (name, min, max, expected_min, expected_max) in [
+            (
+                "5m",
+                dex.min_price_change_m5,
+                dex.max_price_change_m5,
+                -15.0,
+                30.0,
+            ),
+            (
+                "1h",
+                dex.min_price_change_h1,
+                dex.max_price_change_h1,
+                -25.0,
+                100.0,
+            ),
+            (
+                "6h",
+                dex.min_price_change_h6,
+                dex.max_price_change_h6,
+                -40.0,
+                400.0,
+            ),
+            (
+                "24h",
+                dex.min_price_change_h24,
+                dex.max_price_change_h24,
+                -60.0,
+                5_000.0,
+            ),
+        ] {
+            assert_eq!((min, max), (expected_min, expected_max), "{name} band");
+        }
+    }
+
+    #[test]
+    fn the_default_sources_are_dexscreener_and_rugcheck_without_geckoterminal() {
+        let config = FilteringConfig::default();
+        assert!(config.dexscreener.enabled && config.rugcheck.enabled);
+        assert!(!config.geckoterminal.enabled);
+        assert!(!config.geckoterminal.liquidity_enabled);
+
+        let rugcheck = &config.rugcheck;
+        assert_eq!(rugcheck.max_top_holder_pct, 30.0);
+        assert_eq!(rugcheck.max_top_3_holders_pct, 50.0);
+        assert_eq!(rugcheck.min_unique_holders, 150);
+        assert!(rugcheck.holder_distribution_enabled);
+        assert!(!rugcheck.lp_providers_enabled);
+    }
+
+    #[test]
+    fn the_shipped_defaults_pass_config_validation() {
+        validate_config(&Config::default()).expect("a new install starts from a valid config");
     }
 }

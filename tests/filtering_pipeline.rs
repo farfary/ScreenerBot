@@ -37,14 +37,40 @@ fn rejection(result: Result<(), FilterRejectionReason>) -> FilterRejectionReason
 // ============================================================================
 
 #[tokio::test]
-async fn pipeline_default_config_accepts_a_healthy_token_from_either_source() {
-    // THE headline regression. DexScreener and GeckoTerminal are two providers of the same
-    // market data and a token carries exactly one `data_source`, so gating each source on
-    // its own `data_source` made the shipped defaults — both sources enabled —
-    // unsatisfiable: whichever gate did not match reported "data missing" and the pipeline
-    // passed NOTHING. Measured against the production database at the time: 0 of 40,000.
+async fn pipeline_default_config_judges_market_data_by_dexscreener_alone() {
+    // The shipped defaults enable DexScreener and leave GeckoTerminal off, so a healthy
+    // DexScreener token passes and a token only GeckoTerminal covers waits for DexScreener
+    // data.
     let _cfg = config_guard();
     let config = FilteringConfig::default();
+    assert!(config.dexscreener.enabled && !config.geckoterminal.enabled);
+
+    let token = seeded_token();
+    assert!(
+        evaluate_token(&solana_filter_profile(), &token, &config)
+            .await
+            .is_ok(),
+        "a healthy DexScreener token must pass the shipped defaults"
+    );
+
+    let mut gecko = seeded_token();
+    gecko.data_source = DataSource::GeckoTerminal;
+    assert_eq!(
+        rejection(evaluate_token(&solana_filter_profile(), &gecko, &config).await),
+        FilterRejectionReason::DexScreenerDataMissing
+    );
+}
+
+#[tokio::test]
+async fn pipeline_accepts_a_healthy_token_from_either_source_when_both_are_enabled() {
+    // THE headline regression. DexScreener and GeckoTerminal are two providers of the same
+    // market data and a token carries exactly one `data_source`, so gating each source on
+    // its own `data_source` made a configuration with both sources enabled unsatisfiable:
+    // whichever gate did not match reported "data missing" and the pipeline passed
+    // NOTHING. Measured against the production database at the time: 0 of 40,000.
+    let _cfg = config_guard();
+    let mut config = FilteringConfig::default();
+    config.geckoterminal.enabled = true;
 
     for source in [DataSource::DexScreener, DataSource::GeckoTerminal] {
         let mut token = seeded_token();
@@ -53,7 +79,7 @@ async fn pipeline_default_config_accepts_a_healthy_token_from_either_source() {
             evaluate_token(&solana_filter_profile(), &token, &config)
                 .await
                 .is_ok(),
-            "a healthy {source:?} token must pass the shipped defaults"
+            "a healthy {source:?} token must pass with both sources enabled"
         );
     }
 }
@@ -65,6 +91,8 @@ async fn pipeline_still_applies_the_source_that_matches_the_token() {
     let _cfg = config_guard();
     let mut config = FilteringConfig::default();
     config.dexscreener.min_liquidity_usd = 10_000_000.0;
+    config.geckoterminal.enabled = true;
+    config.geckoterminal.liquidity_enabled = true;
     config.geckoterminal.min_liquidity_usd = 10_000_000.0;
 
     let mut dex = seeded_token();
@@ -521,6 +549,7 @@ async fn pipeline_geckoterminal_gate_mirrors_the_dexscreener_one() {
     let _cfg = config_guard();
     let mut config = FilteringConfig::default();
     config.dexscreener.enabled = false;
+    config.geckoterminal.enabled = true;
 
     let mut token = seeded_token();
     token.data_source = DataSource::GeckoTerminal;

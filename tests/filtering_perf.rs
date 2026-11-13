@@ -45,7 +45,7 @@ fn corpus(size: usize) -> Vec<Token> {
             // Vary the numbers so no branch predictor or cache trick makes this
             // unrealistically uniform.
             token.symbol = format!("PERF{i}");
-            token.liquidity_usd = Some(10_000.0 + (i % 1_000) as f64);
+            token.liquidity_usd = Some(50_000.0 + (i % 1_000) as f64);
             token.market_cap = Some(250_000.0 + (i % 5_000) as f64);
             token.volume_h24 = Some(50_000.0 + (i % 900) as f64);
             token

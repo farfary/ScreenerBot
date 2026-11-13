@@ -950,15 +950,12 @@ pub fn anchor_ts() -> i64 {
 
 // ==================== FILTERING ====================
 
-/// A token that passes EVERY enabled filter in the default config **except** the
-/// GeckoTerminal source gate.
+/// A token that passes EVERY enabled filter in the default config.
 ///
-/// The engine demands `data_source == GeckoTerminal` when `geckoterminal.enabled` is on
-/// and `data_source == DexScreener` when `dexscreener.enabled` is on, and a token has
-/// exactly ONE `data_source` — so no token can satisfy both at once. This fixture is
-/// DexScreener-sourced (that is what ~all real market rows are); pipeline tests that
-/// want a full pass turn the GeckoTerminal source off, and
-/// `pipeline_default_config_rejects_every_token` pins the contradiction itself.
+/// A token has exactly ONE `data_source`, and a market source judges only the tokens it
+/// covers. This fixture is DexScreener-sourced (that is what ~all real market rows are),
+/// the one market source the default config enables; tests of the GeckoTerminal rules
+/// switch that source on and give the token its source.
 ///
 /// Every field that any filter reads is populated with a comfortably passing value, so a
 /// test can flip exactly ONE of them and know that field caused the rejection.
@@ -974,7 +971,7 @@ pub fn filter_token(mint: &str) -> Token {
         header_image_url: None,
         supply: Some("1000000000".to_owned()),
         data_source: DataSource::DexScreener,
-        // Old enough for the default 60-minute age floor.
+        // Old enough for the default 180-minute age floor.
         first_discovered_at: now - Duration::hours(6),
         blockchain_created_at: Some(now - Duration::hours(8)),
         pool_created_at: None,
@@ -1084,12 +1081,9 @@ pub fn filters_all_disabled() -> screenerbot::config::FilteringConfig {
     config
 }
 
-/// Default filters with GeckoTerminal switched off, so a DexScreener-sourced token is
-/// judged by the DexScreener rules and nothing else can account for the verdict.
-///
-/// This is for ISOLATING one market source, not for making the defaults satisfiable — the
-/// shipped defaults enable both sources and a token from either one passes them. See
-/// [`filter_token`].
+/// Default filters with GeckoTerminal switched off explicitly, so a DexScreener-sourced
+/// token is judged by the DexScreener rules and nothing else can account for the verdict,
+/// whatever the shipped default for GeckoTerminal is. See [`filter_token`].
 pub fn filters_default_dex_only() -> screenerbot::config::FilteringConfig {
     let mut config = screenerbot::config::FilteringConfig::default();
     config.geckoterminal.enabled = false;

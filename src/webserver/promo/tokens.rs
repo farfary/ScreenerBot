@@ -984,8 +984,12 @@ mod tests {
             .collect();
         assert_eq!(
             sources.len(),
-            5,
-            "the shipped rules leave a source silent: {sources:?}"
+            4,
+            "the shipped rules leave a source other than GeckoTerminal silent: {sources:?}"
+        );
+        assert!(
+            !sources.contains(&FilterSource::GeckoTerminal),
+            "GeckoTerminal is off by default"
         );
 
         let mut config = FilteringConfig::default();

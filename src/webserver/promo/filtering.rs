@@ -199,15 +199,13 @@ mod tests {
             .iter()
             .map(|(_, source, _)| source.as_str())
             .collect();
-        for expected in [
-            "core",
-            "onchain",
-            "dexscreener",
-            "geckoterminal",
-            "rugcheck",
-        ] {
+        for expected in ["core", "onchain", "dexscreener", "rugcheck"] {
             assert!(sources.contains(expected), "no rejection from {expected}");
         }
+        assert!(
+            !sources.contains("geckoterminal"),
+            "GeckoTerminal is off by default"
+        );
     }
 
     /// The recent list is newest first and reads like a live session: several

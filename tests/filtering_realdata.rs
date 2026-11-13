@@ -214,7 +214,7 @@ async fn realdata_batch_load_carries_the_fields_the_rules_read() {
         reported.len()
     );
 
-    // Every one of these drives a rule that is ON by default. None may be universally
+    // Every one of these is read by a filtering rule. None may be universally
     // absent — that is the signature of a column the query forgot.
     for (name, populated) in [
         ("top_holders", holders),
@@ -239,7 +239,7 @@ async fn realdata_batch_load_carries_the_fields_the_rules_read() {
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
 async fn realdata_default_config_passes_real_tokens() {
     // The end-to-end proof that the shipped configuration works on the owner's real data.
-    // It used to pass 0 of 40,000: both market sources are enabled by default and each was
+    // It used to pass 0 of 40,000: with both market sources enabled each was
     // gated on the token's single `data_source`, so every token failed whichever gate did
     // not match. On top of that the Rugcheck stage rejected the whole corpus on its own,
     // 46% of it for not proving the absence of a transfer fee.
